@@ -1,0 +1,79 @@
+/* DevExtreme 위젯을 사緣 톤에 맞추는 전역 보정 (테마 자체는 dx.sayeon.css) */
+
+/* ── 신청서 폼 ─────────────────────── */
+.sa-form .dx-form-group-with-caption > .dx-form-group-content {
+  border-top: 0;
+  padding-top: 4px;
+}
+.sa-form .dx-form-group-caption {
+  font-family: var(--f-display);
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--c-indigo);
+  padding-bottom: 6px;
+}
+.sa-form .sec + .sec,
+.sa-form .dx-item + .dx-item > .sec {
+  margin-top: 8px;
+}
+.sa-form .dx-form-group-with-caption {
+  padding-top: 18px;
+  border-top: 1px solid var(--c-line);
+}
+.sa-form > .dx-layout-manager > .dx-responsivebox > .dx-box-flex > .dx-box-item:first-child .dx-form-group-with-caption {
+  border-top: 0;
+  padding-top: 0;
+}
+.sa-form .dx-field-item-label-text {
+  font-weight: 600;
+  color: var(--c-ink-2);
+}
+.sa-form .dx-field-item-help-text {
+  color: var(--c-mute);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.sa-form .dx-field-item-required-mark {
+  color: var(--c-crimson);
+}
+.sa-form .dx-field-item-optional-mark {
+  color: var(--c-mute);
+  font-weight: 400;
+}
+.sa-form .dx-radiogroup-horizontal {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.sa-form .dx-tag-content {
+  border-radius: 999px;
+  background: var(--c-blush);
+  color: var(--c-crimson-deep);
+}
+.sa-form .dx-checkbox-text {
+  white-space: normal;
+}
+.sa-form .dx-rangeslider {
+  margin-top: 6px;
+}
+
+/* 읽기 전용(관리자 상세)일 때는 편집기 테두리를 걷어 서류처럼 보이게 */
+.sa-form.dx-state-readonly .dx-texteditor.dx-editor-outlined,
+.sa-form .dx-state-readonly.dx-texteditor.dx-editor-outlined {
+  background: var(--c-paper);
+  border-color: transparent;
+}
+
+/* ── 팝업 공통 ─────────────────────── */
+.sa-popup .dx-overlay-content {
+  border-radius: var(--r-lg);
+}
+
+/* ── 데이터그리드 ───────────────────── */
+.sa-grid .dx-datagrid-headers .dx-header-row > td {
+  font-weight: 600;
+  color: var(--c-ink-2);
+}
+.sa-grid .mono-cell {
+  font-family: var(--f-mono);
+  font-size: 13px;
+}

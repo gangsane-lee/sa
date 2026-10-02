@@ -1,0 +1,49 @@
+/*
+ * 사緣 디자인 토큰
+ * 모티프: 월하노인(月下老人)이 달빛 아래에서 붉은 실(紅絲)로 인연을 묶는다는 이야기.
+ *  - 월하 남색: 밤하늘. 히어로·관리자 사이드바·제목
+ *  - 홍실: 인연의 붉은 실. 주요 버튼·강조 (DevExtreme 테마 accent와 동일)
+ *  - 달빛: 관리자 모드 경고 띠, 달
+ *  - 한지: 차가운 흰 종이. 페이지 바탕
+ */
+:root {
+  --c-indigo: #22244a;
+  --c-indigo-2: #2e3160;
+  --c-indigo-3: #3b3f7a;
+  --c-on-indigo: #e9e9f6;
+  --c-on-indigo-mute: #a9abd0;
+
+  --c-crimson: #c8243f;
+  --c-crimson-deep: #a11a32;
+  --c-thread-on-dark: #f2607a;
+  --c-blush: #f6dce2;
+  --c-blush-soft: #fbf0f3;
+
+  --c-moon: #efe3c2;
+  --c-moon-ink: #6b4e00;
+
+  --c-paper: #f5f4f8;
+  --c-surface: #ffffff;
+  --c-ink: #1b1b24;
+  --c-ink-2: #3f3f52;
+  --c-mute: #66667a;
+  --c-line: #e3e2ec;
+  --c-line-strong: #cfcde0;
+
+  --c-ok: #1f7a52;
+  --c-ok-bg: #e3f2ea;
+
+  --f-display: 'Gowun Batang', 'Batang', serif;
+  --f-body: 'IBM Plex Sans KR', 'Malgun Gothic', sans-serif;
+  --f-mono: 'IBM Plex Mono', 'D2Coding', 'Consolas', monospace;
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 18px;
+  --shadow-1: 0 1px 2px rgba(27, 27, 36, 0.05), 0 6px 20px rgba(34, 36, 74, 0.07);
+  --shadow-2: 0 2px 6px rgba(27, 27, 36, 0.08), 0 18px 48px rgba(34, 36, 74, 0.16);
+
+  --gutter: clamp(16px, 4vw, 40px);
+  --maxw: 1160px;
+  --header-h: 64px;
+}
