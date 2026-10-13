@@ -1,0 +1,218 @@
+/*
+ * 오피스 모드 (html.office) — 스프레드시트처럼 보이게 바꾼다. 기능은 그대로, 겉모습만 바꾼다.
+ * 원칙: 색은 회색·초록, 모서리·그림자 없음, 글꼴 맑은 고딕 12px, 배경은 셀 격자, 그림·애니메이션 숨김
+ */
+html.office {
+  --c-indigo: #262626;
+  --c-indigo-2: #3a3a3a;
+  --c-indigo-3: #217346;
+  --c-on-indigo: #262626;
+  --c-on-indigo-mute: #595959;
+  --c-crimson: #217346;
+  --c-crimson-deep: #185c37;
+  --c-thread-on-dark: #217346;
+  --c-blush: #e2efda;
+  --c-blush-soft: #f2f8ee;
+  --c-moon: #fff2cc;
+  --c-moon-ink: #7f6000;
+  --c-paper: #ffffff;
+  --c-surface: #ffffff;
+  --c-ink: #000000;
+  --c-ink-2: #262626;
+  --c-mute: #595959;
+  --c-line: #d4d4d4;
+  --c-line-strong: #bfbfbf;
+  --c-ok: #217346;
+  --c-ok-bg: #e2efda;
+  --f-display: 'Malgun Gothic', '맑은 고딕', 'Segoe UI', sans-serif;
+  --f-body: 'Malgun Gothic', '맑은 고딕', 'Segoe UI', sans-serif;
+  --r-sm: 0;
+  --r-md: 0;
+  --r-lg: 0;
+  --shadow-1: none;
+  --shadow-2: none;
+  --header-h: 0px;
+}
+html.office body {
+  font-size: 12px;
+  background-color: #fff;
+  background-image: linear-gradient(#e6e6e6 1px, transparent 1px), linear-gradient(90deg, #e6e6e6 1px, transparent 1px);
+  background-size: 72px 20px;
+  background-position: 36px 134px;
+}
+html.office #app {
+  padding: 134px 0 56px 36px;
+}
+html.office *,
+html.office *::before,
+html.office *::after {
+  animation: none !important;
+  transition: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+/* 원래 머리·바닥·장식은 숨긴다 (메뉴는 아래 시트 탭) */
+html.office .top,
+html.office .foot,
+html.office .tband,
+html.office .band,
+html.office .side,
+html.office .hero__art,
+html.office .saju__art,
+html.office .story__art,
+html.office .vow__seal,
+html.office .done__seal,
+html.office .sheet__seal,
+html.office .sent__seal,
+html.office .celebrate__seal,
+html.office .gp__hearts,
+html.office .fly,
+html.office .deck__pending-heart,
+html.office .cta__big-heart,
+html.office .head__stamp,
+html.office .hero__stamp {
+  display: none !important;
+}
+/* 어두운 배경 영역 → 흰 셀 */
+html.office .hero,
+html.office .intro,
+html.office .today,
+html.office .gh,
+html.office .login,
+html.office .story,
+html.office .saju,
+html.office .how,
+html.office .vow,
+html.office .admin,
+html.office .pc,
+html.office .cta__big,
+html.office .nudge {
+  background: transparent !important;
+  color: #000 !important;
+}
+html.office .hero *,
+html.office .intro *,
+html.office .today *,
+html.office .gh *,
+html.office .story *,
+html.office .cta__big * {
+  color: #262626 !important;
+}
+html.office .gh,
+html.office .today,
+html.office .cta__big,
+html.office .nudge {
+  border: 1px solid #bfbfbf !important;
+}
+html.office .body {
+  grid-template-columns: 1fr !important;
+}
+html.office .main {
+  padding: 8px 12px !important;
+}
+/* 제목은 굵은 셀 글씨 크기로 */
+html.office h1,
+html.office .display {
+  font-family: var(--f-body) !important;
+  letter-spacing: 0 !important;
+}
+html.office h1 {
+  font-size: 16px !important;
+  line-height: 1.5 !important;
+}
+html.office h2 {
+  font-size: 14px !important;
+}
+html.office h3 {
+  font-size: 13px !important;
+}
+html.office .hero__title,
+html.office .intro__title,
+html.office .saju__title,
+html.office .vow__title,
+html.office .closing__line,
+html.office .cta__line,
+html.office .story__title,
+html.office .pick__head h2,
+html.office .gh__score b,
+html.office .today__score b,
+html.office .pillar__char,
+html.office .boostpop__pct {
+  font-size: 15px !important;
+  line-height: 1.5 !important;
+  font-weight: 700 !important;
+}
+html.office section,
+html.office .panel,
+html.office .sheet,
+html.office .status,
+html.office .block,
+html.office .kpi,
+html.office .progress__card,
+html.office .ticket,
+html.office .card {
+  border-color: #bfbfbf !important;
+}
+html.office .container {
+  max-width: none !important;
+  padding: 0 12px !important;
+}
+html.office .hero,
+html.office .intro,
+html.office .saju,
+html.office .vow,
+html.office .how,
+html.office .closing,
+html.office .me,
+html.office .apply,
+html.office .voc,
+html.office .msgs,
+html.office .privacy {
+  padding-top: 12px !important;
+  padding-bottom: 12px !important;
+}
+/* 아바타·궁합 링 → 작은 회색 칸 */
+html.office .fi {
+  background: #f3f3f3 !important;
+  color: #595959 !important;
+}
+html.office .gh__ring {
+  display: none;
+}
+html.office .gh__top {
+  height: auto !important;
+  width: auto !important;
+}
+html.office .gh__score {
+  position: static !important;
+  padding: 0 !important;
+}
+/* DevExtreme 버튼·입력 */
+html.office .dx-button-mode-contained.dx-button-default {
+  background-color: #217346 !important;
+  border-color: #217346 !important;
+}
+html.office .dx-button-mode-contained.dx-button-default .dx-button-text,
+html.office .dx-button-mode-contained.dx-button-default .dx-icon {
+  color: #fff !important;
+}
+html.office .dx-button {
+  height: auto !important;
+  min-height: 24px;
+}
+html.office .dx-button-text {
+  font-size: 12px !important;
+  font-weight: 400 !important;
+}
+html.office .dx-widget,
+html.office .dx-texteditor-input,
+html.office .dx-field-item-label-text,
+html.office .dx-datagrid {
+  font-family: var(--f-body) !important;
+  font-size: 12px !important;
+}
+html.office .dx-popup-content,
+html.office .dx-overlay-content {
+  font-family: var(--f-body) !important;
+}

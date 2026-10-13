@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 5173,
-      // VITE_API_MODE=server 로 개발할 때 /api 요청을 Node.js 서버로 넘긴다
+      // 운영 모드가 open(public/sayeon.config.js)일 때 /api 요청을 Node.js 서버로 넘긴다
       proxy: {
         '/api': { target: env.DEV_API_PROXY || 'http://localhost:3000', changeOrigin: true },
       },

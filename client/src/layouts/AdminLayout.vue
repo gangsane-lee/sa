@@ -13,6 +13,7 @@ import { session, exitAdmin } from '@/stores/session';
 import { ADMIN_IDLE_MINUTES } from '@/constants/policy';
 import { fmtRemain } from '@/utils/format';
 import SaLogo from '@/components/SaLogo.vue';
+import { setOffice } from '@/stores/office';
 
 const route = useRoute();
 const router = useRouter();
@@ -23,6 +24,11 @@ const NAV = [
   { name: 'admin-dashboard', text: '대시보드', icon: 'chart' },
   { name: 'admin-applicants', text: '신청자 관리', icon: 'group' },
   { name: 'admin-matching', text: '매칭 관리', icon: 'link' },
+  { name: 'admin-messages', text: '쪽지', icon: 'email' },
+  { name: 'admin-reviews', text: '후기·제재', icon: 'like' },
+  { name: 'admin-voc', text: '개선의 소리', icon: 'message' },
+  { name: 'admin-codes', text: '기준정보', icon: 'detailslayout' },
+  { name: 'admin-settings', text: '설정', icon: 'preferences' },
   { name: 'admin-audit', text: '열람 기록', icon: 'clock' },
 ];
 
@@ -42,11 +48,11 @@ onBeforeUnmount(() => {
   clearInterval(timer);
 });
 
-// 서버가 권한 만료를 알려오면(403) 즉시 사용자 화면으로
+// 관리자 모드가 끝나면(종료·만료·서버 403) 관리자 로그인 화면으로
 watch(
   () => session.adminExpiresAt,
   (v) => {
-    if (!v) router.replace({ name: 'home' });
+    if (!v) router.replace({ name: 'admin-login' });
   },
 );
 
@@ -64,7 +70,7 @@ async function resetMock() {
   const ok = await confirm('가짜 데이터를 처음 상태로 되돌리고 로그아웃할까요?', '개발 모드');
   if (!ok) return;
   api.dev.reset();
-  window.location.assign('/login');
+  router.replace({ name: 'admin-login' }).then(() => window.location.reload());
 }
 </script>
 
@@ -78,6 +84,7 @@ async function resetMock() {
       <span class="band__timer mono" :class="{ 'is-urgent': urgent }" :title="`마지막 작업 후 ${ADMIN_IDLE_MINUTES}분이 지나면 자동 종료돼요`">
         자동 종료까지 {{ remain }}
       </span>
+      <DxButton class="band__office" icon="exportxlsx" text="엑셀 모드" styling-mode="text" hint="Ctrl+Shift+E" @click="setOffice(true)" />
       <DxButton class="band__exit" text="관리자 모드 종료" styling-mode="outlined" @click="leave" />
     </div>
 
@@ -101,8 +108,8 @@ async function resetMock() {
         </nav>
         <div class="side__foot">
           <p class="side__me">
-            {{ session.user.name }} · {{ session.user.dept }}<br />
-            <span class="mono">{{ session.user.empNo }}</span>
+            {{ session.user?.name }} · {{ session.user?.team }}<br />
+            <span class="mono">{{ session.user?.empNo }}</span>
           </p>
           <button v-if="isMock" type="button" class="side__reset" @click="resetMock">가짜 데이터 초기화</button>
         </div>

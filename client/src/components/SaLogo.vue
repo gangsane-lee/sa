@@ -44,7 +44,7 @@ const yeonTransform = (cx, cy) => `translate(${cx} ${cy}) scale(0.66) translate(
     role="img"
     aria-label="사緣"
   >
-    <path :d="GLYPH_SA.d" :fill="tone === 'light' ? '#F2F1FA' : '#22244A'" transform="translate(2 95)" />
+    <path :d="GLYPH_SA.d" :fill="tone === 'light' ? '#F2F1FA' : '#1428A0'" transform="translate(2 95)" />
     <g transform="rotate(-4 158 52)">
       <rect x="110" y="4" width="96" height="96" rx="13" :fill="SEAL" />
       <rect x="117" y="11" width="82" height="82" rx="8" fill="none" :stroke="PAPER" stroke-width="3" />

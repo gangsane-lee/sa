@@ -17,6 +17,8 @@ import './styles/dx.sayeon.css';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/dx-overrides.css';
+import './styles/office.css';
+import { initOffice } from './stores/office';
 
 import App from './App.vue';
 import router from './router';
@@ -25,4 +27,5 @@ config({ editorStylingMode: 'outlined' });
 loadMessages(koMessages);
 locale('ko');
 
+initOffice();
 createApp(App).use(router).mount('#app');

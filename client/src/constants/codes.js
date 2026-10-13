@@ -1,7 +1,7 @@
 /**
- * 공통 코드 — 화면 선택지, mock 데이터, 서버 유효성 검사가 모두 이 목록을 기준으로 한다.
- * 삼성전자 DS부문 기준. 조직 개편 시 이 파일만 고치면 된다.
- * (DB에는 value 코드만 저장되므로 text는 자유롭게 바꿔도 된다. value를 바꿀 때는 DB 데이터도 함께 이관)
+ * 고정 코드 — 시스템 동작과 묶여 있어 관리자가 바꾸면 안 되는 값만 둔다.
+ * 사업부·캠퍼스·MBTI·얼굴상 같은 선택 목록은 '기준정보'(DB, 관리자 화면에서 수정)로 옮겼다.
+ *   → 기본값: constants/defaultCodes.js, 화면에서 쓰는 법: stores/codes.js
  */
 
 const byValue = (list) => Object.fromEntries(list.map((c) => [c.value, c]));
@@ -12,130 +12,99 @@ export const GENDERS = [
   { value: 'F', text: '여성' },
 ];
 
-/** 사업부 — DX부문(MX·VD·DA 등)까지 대상으로 넓히려면 여기에 추가 */
-export const DIVISIONS = [
-  { value: 'MEMORY', text: '메모리사업부' },
-  { value: 'LSI', text: 'System LSI사업부' },
-  { value: 'FOUNDRY', text: '파운드리사업부' },
-  { value: 'COMMON', text: 'DS부문 공통' },
+/**
+ * 기준정보 그룹 — 관리자 '기준정보' 탭의 왼쪽 목록
+ *  - parent: 상위 그룹(건물 → 캠퍼스)
+ *  - attrLabel: 보조 값 칸 이름(없으면 칸을 숨김)
+ */
+export const CODE_GROUPS = [
+  { value: 'DIVISION', text: '사업부' },
+  { value: 'CAMPUS', text: '캠퍼스', attrLabel: '권역(같으면 가까운 캠퍼스)' },
+  { value: 'HEIGHT', text: '키 구간', note: '순서(order)대로 범위를 비교해요. 낮은 키부터 차례로 두세요.' },
+  { value: 'FACE', text: '얼굴상' },
+  { value: 'BODY', text: '체형' },
+  { value: 'LOOKS', text: '외모' },
+  { value: 'MBTI', text: 'MBTI' },
+  { value: 'HOBBY', text: '취미' },
+  { value: 'DRINKING', text: '음주' },
+  { value: 'SMOKING', text: '흡연' },
+  { value: 'RELIGION', text: '종교', note: '민감정보 — 별도 동의한 신청자만 저장해요.' },
+];
+export const CODE_GROUP_MAP = byValue(CODE_GROUPS);
+
+/** 연상·연하·동갑 선호 (출생연도 기준) */
+export const AGE_GAP = [
+  { value: 'OLDER', text: '연상' },
+  { value: 'SAME', text: '동갑' },
+  { value: 'YOUNGER', text: '연하' },
 ];
 
-/** 직급 (Career Level) */
-export const CAREER_LEVELS = [
-  { value: 'CL1', text: 'CL1' },
-  { value: 'CL2', text: 'CL2' },
-  { value: 'CL3', text: 'CL3' },
-  { value: 'CL4', text: 'CL4' },
+/** 진지한 만남 여부 (필수) — 서로 같으면 추천 점수를 더하고, 다르면 뺀다 */
+export const SERIOUSNESS = [
+  { value: 'Y', text: '네, 진지한 만남을 원해요', short: '진지한 만남' },
+  { value: 'N', text: '아니요, 가볍게 알아가고 싶어요', short: '가볍게 시작' },
 ];
 
-/** 근무지 — region이 같으면 '가까운 근무지'로 보고 매칭 점수에 반영 */
-export const WORK_SITES = [
-  { value: 'GIHEUNG', text: '기흥캠퍼스', region: 'GH' },
-  { value: 'HWASEONG', text: '화성캠퍼스', region: 'GH' },
-  { value: 'PYEONGTAEK', text: '평택캠퍼스', region: 'PT' },
-  { value: 'ONYANG', text: '온양캠퍼스', region: 'CN' },
-  { value: 'CHEONAN', text: '천안캠퍼스', region: 'CN' },
-  { value: 'SUWON', text: '수원 (삼성디지털시티)', region: 'GH' },
-  { value: 'SEOCHO', text: '서초사옥', region: 'SEOUL' },
-  { value: 'ETC', text: '기타', region: null },
-];
-export const WORK_SITE_MAP = byValue(WORK_SITES);
-
-/** 근무 형태 — 교대 근무자는 만날 수 있는 시간대가 달라서 매칭에 참고 */
-export const WORK_PATTERNS = [
-  { value: 'DAY', text: '주간 근무' },
-  { value: 'SHIFT', text: '교대 근무' },
-  { value: 'FLEX', text: '자율 출퇴근' },
+/** 같은 팀·건물·사업부 피하기 (여러 개 선택) */
+export const AVOID_OPTIONS = [
+  { value: 'TEAM', text: '같은 팀' },
+  { value: 'BUILDING', text: '같은 건물' },
+  { value: 'DIVISION', text: '같은 사업부' },
 ];
 
-export const BODY_TYPES = [
-  { value: 'SLIM', text: '마른 편' },
-  { value: 'SLENDER', text: '슬림' },
-  { value: 'AVERAGE', text: '보통' },
-  { value: 'TONED', text: '탄탄한 편' },
-  { value: 'CHUBBY', text: '통통한 편' },
-  { value: 'BUILT', text: '건장한 편' },
+/**
+ * 선호 항목 — 신청서 '선호' 섹션과 우선순위 선택지
+ *  key: 신청서 필드, group: 기준정보 그룹, kind: range(범위) | multi(여러 개)
+ */
+export const PREF_ITEMS = [
+  { value: 'AGE', text: '나이', kind: 'range' },
+  { value: 'AGEGAP', text: '연상·연하', kind: 'multi', key: 'prefAgeGap', fixed: 'AGE_GAP' },
+  { value: 'HEIGHT', text: '키', kind: 'range', group: 'HEIGHT' },
+  { value: 'DIVISION', text: '사업부', kind: 'multi', key: 'prefDivisions', group: 'DIVISION' },
+  { value: 'FACE', text: '얼굴상', kind: 'multi', key: 'prefFaces', group: 'FACE' },
+  { value: 'HOBBY', text: '취미', kind: 'multi', key: 'prefHobbies', group: 'HOBBY' },
+  { value: 'DRINKING', text: '음주', kind: 'multi', key: 'prefDrinking', group: 'DRINKING' },
+  { value: 'MBTI', text: 'MBTI', kind: 'multi', key: 'prefMbtis', group: 'MBTI' },
+  { value: 'RELIGION', text: '종교', kind: 'multi', key: 'prefReligions', group: 'RELIGION' },
+  { value: 'SMOKING', text: '흡연', kind: 'multi', key: 'prefSmoking', group: 'SMOKING' },
+  { value: 'BODY', text: '체형', kind: 'multi', key: 'prefBodies', group: 'BODY' },
 ];
+export const PREF_ITEM_MAP = byValue(PREF_ITEMS);
+export const MAX_PRIORITIES = 5;
 
-export const EDUCATIONS = [
-  { value: 'HIGH', text: '고등학교 졸업' },
-  { value: 'COLLEGE', text: '전문대 졸업' },
-  { value: 'UNIV', text: '대학교 졸업' },
-  { value: 'MASTER', text: '석사' },
-  { value: 'DOCTOR', text: '박사' },
+/** 매칭 하루 정책 */
+export const DAILY_CARD_LIMIT = 3; // 하루에 볼 수 있는 후보 수
+export const DAILY_HEART_LIMIT = 1; // 하루에 보낼 수 있는 하트 수
+export const RESHOW_AFTER_DAYS = 30; // 한 번 본 후보는 이 기간 동안 다시 보여주지 않는다
+
+/**
+ * 신청자 본인에게 보여주는 상태 — 딱 두 가지.
+ * 내부 상태(접수·검토·보류·거절 등)는 본인에게 노출하지 않고 '매칭 대기 중'으로 보인다.
+ */
+export const USER_STATUS = [
+  { value: 'WAITING', text: '매칭 대기 중', userText: '어울리는 인연을 기다리고 있어요. 매일 새 후보가 도착해요.' },
+  { value: 'MATCHING', text: '매칭 중', userText: '서로 마음이 닿았어요! 쪽지함에서 먼저 인사를 건네보세요.' },
+  { value: 'COUPLED', text: '커플 성사', userText: '축하해요! 두 분의 인연이 이어졌어요. 사緣은 여기서 조용히 응원할게요.' },
 ];
+export const USER_STATUS_MAP = byValue(USER_STATUS);
 
-/** 종교는 민감정보 — 별도 동의(agreeSensitive)가 있을 때만 저장 */
-export const RELIGIONS = [
-  { value: 'NONE', text: '무교' },
-  { value: 'CHRISTIAN', text: '기독교' },
-  { value: 'CATHOLIC', text: '천주교' },
-  { value: 'BUDDHIST', text: '불교' },
-  { value: 'ETC', text: '기타' },
-];
-
-export const SMOKING = [
-  { value: 'NON', text: '비흡연' },
-  { value: 'E_CIG', text: '전자담배' },
-  { value: 'SMOKER', text: '흡연' },
-];
-
-export const DRINKING = [
-  { value: 'NONE', text: '거의 안 마셔요' },
-  { value: 'SOMETIMES', text: '가끔 즐겨요' },
-  { value: 'OFTEN', text: '자주 즐겨요' },
-];
-
-export const MBTIS = [
-  'ISTJ', 'ISFJ', 'INFJ', 'INTJ', 'ISTP', 'ISFP', 'INFP', 'INTP',
-  'ESTP', 'ESFP', 'ENFP', 'ENTP', 'ESTJ', 'ESFJ', 'ENFJ', 'ENTJ',
-].map((v) => ({ value: v, text: v }));
-
-export const HOBBIES = [
-  '러닝', '등산', '헬스', '요가·필라테스', '골프', '테니스', '수영', '캠핑',
-  '여행', '맛집 탐방', '카페 투어', '요리·베이킹', '독서', '영화', '드라마·예능', '전시·공연',
-  '음악 감상', '악기 연주', '게임', '사진', '반려동물', '드라이브', '와인', '봉사활동',
-];
-
-export const PERSONALITIES = [
-  '다정한', '유머러스한', '차분한', '활발한', '섬세한', '계획적인',
-  '즉흥적인', '진중한', '긍정적인', '솔직한', '배려심 깊은', '호기심 많은',
-];
-
-export const IDEAL_KEYWORDS = [
-  '대화가 잘 통하는', '잘 웃는', '성실한', '자기관리 하는', '취미를 함께할',
-  '가치관이 비슷한', '배려심 있는', '유머 감각 있는', '책임감 있는', '차분한',
-  '밝은 에너지', '연락이 꾸준한',
-];
-
-export const PREF_SMOKING = [
-  { value: 'ANY', text: '상관없어요' },
-  { value: 'NON', text: '비흡연자였으면 해요' },
-];
-
-export const MEETING_STYLES = [
-  { value: 'LUNCH', text: '점심 식사' },
-  { value: 'DINNER', text: '퇴근 후 저녁' },
-  { value: 'WEEKEND', text: '주말 카페' },
-  { value: 'ANY', text: '상관없어요' },
-];
-
-/** 매칭에서 제외할 범위 — 매일 마주치는 사이는 부담스러울 수 있어서 */
-export const AVOID_SCOPES = [
-  { value: 'TEAM', text: '같은 팀만 피할래요' },
-  { value: 'DIVISION', text: '같은 사업부도 피할래요' },
-  { value: 'NONE', text: '상관없어요' },
-];
-
-/** 신청 상태 (관리자가 변경) */
+/** 신청 상태 (관리자용 내부 상태) */
 export const APPLY_STATUS = [
-  { value: 'RECEIVED', text: '접수', userText: '접수되었어요. 매칭 담당자가 곧 확인할 거예요.' },
-  { value: 'REVIEWING', text: '검토 중', userText: '매칭 담당자가 어울리는 분을 찾고 있어요.' },
-  { value: 'MATCHING', text: '매칭 중', userText: '어울리는 분께 조심스럽게 의사를 묻고 있어요.' },
-  { value: 'MATCHED', text: '매칭 완료', userText: '인연이 닿았어요! 담당자가 곧 연락드릴게요.' },
-  { value: 'HOLD', text: '보류', userText: '잠시 매칭을 쉬고 있어요. 궁금한 점은 담당자에게 문의해 주세요.' },
+  { value: 'RECEIVED', text: '접수' },
+  { value: 'REVIEWING', text: '검토 중' },
+  { value: 'MATCHING', text: '매칭 중' },
+  { value: 'MATCHED', text: '매칭 완료' },
+  { value: 'COUPLED', text: '커플 완료' },
+  { value: 'HOLD', text: '보류' },
 ];
 export const APPLY_STATUS_MAP = byValue(APPLY_STATUS);
+/**
+ * 관리자가 직접 지정할 수 있는 상태. 매칭 중·매칭 완료·커플 완료는 매칭 상태에서 저절로 정해진다
+ * (매칭 없이 '매칭 중'을 지정하면 본인 화면이 상대 없는 매칭 중에 갇혀 새 후보·하트·신청서 수정이 모두 막힌다)
+ */
+export const MANUAL_APPLY_STATUS = ['RECEIVED', 'REVIEWING', 'HOLD'];
+/** 일일 후보로 추천할 수 있는 신청 상태 */
+export const RECOMMENDABLE_STATUS = ['RECEIVED', 'REVIEWING'];
 
 /** 매칭 상태 */
 export const MATCH_STATUS = [
@@ -143,15 +112,64 @@ export const MATCH_STATUS = [
   { value: 'ACCEPTED', text: '양측 수락' },
   { value: 'MET', text: '만남 완료' },
   { value: 'DECLINED', text: '불발' },
+  { value: 'CLOSED', text: '종료(재매칭)' },
+  { value: 'COUPLE', text: '커플 성사(최종 완료)' },
 ];
+/** 진행 중인 매칭 — 이 상태면 두 사람 모두 '매칭 중'이고 신청서 수정이 잠긴다 */
 export const ACTIVE_MATCH_STATUS = ['PROPOSED', 'ACCEPTED', 'MET'];
+/** 후기를 쓸 수 있는 매칭 (서로 수락한 적이 있는 매칭) */
+export const REVIEWABLE_MATCH_STATUS = ['ACCEPTED', 'MET', 'CLOSED', 'DECLINED', 'COUPLE'];
+export const REVIEW_WINDOW_DAYS = 30; // 매칭 후 이 기간 안에만 후기 작성
+
+/** 후기 — 만남 결과 */
+export const REVIEW_OUTCOMES = [
+  { value: 'MET', text: '만났어요' },
+  { value: 'NOSHOW', text: '상대가 나오지 않았어요 (노쇼)' },
+  { value: 'NOT_MET', text: '일정이 안 맞아 못 만났어요' },
+  { value: 'NO_CONTACT', text: '연락이 닿지 않았어요' },
+];
+/** 후기 — 상대 평가 (상대에게는 절대 공개하지 않는다) */
+export const REVIEW_RATINGS = [
+  { value: 'LIKE', text: '좋았어요' },
+  { value: 'DISLIKE', text: '별로였어요' },
+];
+
+/** 시스템 개선의 소리(VOC) */
+export const VOC_CATEGORIES = [
+  { value: 'FEATURE', text: '기능 제안' },
+  { value: 'MATCHING', text: '매칭 품질' },
+  { value: 'BUG', text: '오류 신고' },
+  { value: 'PRIVACY', text: '개인정보·보안' },
+  { value: 'ETC', text: '기타' },
+];
+export const VOC_STATUS = [
+  { value: 'RECEIVED', text: '접수' },
+  { value: 'REVIEWING', text: '검토 중' },
+  { value: 'DONE', text: '반영 완료' },
+  { value: 'HOLD', text: '보류' },
+];
+
+/** 관리자 설정 기본값 (관리자 '설정' 화면에서 변경) */
+export const DEFAULT_SETTINGS = {
+  showDivisionRatio: true, // 대시보드 '사업부별 신청 비율' 차트 표시
+  dislikeLimit: 5, // 받은 '싫어요'가 이 수 이상이면 매칭에서 제외
+  noShowCountsAsDislike: true, // 노쇼 신고도 싫어요 1회로 센다
+  gatheringPopup: true, // 로그인 시 '곧 매칭이 시작돼요' 팝업 (숫자는 보여주지 않는다)
+  holdUntilStart: false, // true면 오픈 전까지 오늘의 인연·사주 인연을 열지 않는다
+  messageBurstLimit: 3, // 상대 답장 없이 연속으로 보낼 수 있는 쪽지 수
+};
+
+export const MATCH_SOURCES = [
+  { value: 'ADMIN', text: '담당자 제안' },
+  { value: 'HEART', text: '하트 맞교환' },
+];
 
 /** 관리자 열람 기록 행위 */
 export const AUDIT_ACTIONS = [
   { value: 'ADMIN_ENTER', text: '관리자 모드 진입' },
   { value: 'ADMIN_ENTER_FAIL', text: '관리자 인증 실패' },
   { value: 'ADMIN_EXIT', text: '관리자 모드 종료' },
-  { value: 'REVEAL_PII', text: '연락처 전체 표시' },
+  { value: 'REVEAL_PII', text: '이름 전체 표시' },
   { value: 'VIEW_APPLICANT', text: '신청자 상세 열람' },
   { value: 'UPDATE_APPLICANT', text: '신청자 정보 수정' },
   { value: 'STATUS_CHANGE', text: '상태 변경' },
@@ -160,4 +178,13 @@ export const AUDIT_ACTIONS = [
   { value: 'MATCH_CREATE', text: '매칭 제안' },
   { value: 'MATCH_UPDATE', text: '매칭 상태 변경' },
   { value: 'MATCH_DELETE', text: '매칭 삭제' },
+  { value: 'CODE_CHANGE', text: '기준정보 변경' },
+  { value: 'VIEW_REVIEWS', text: '후기 열람' },
+  { value: 'SANCTION_RESET', text: '싫어요 제재 해제' },
+  { value: 'VOC_UPDATE', text: '개선의 소리 처리' },
+  { value: 'VIEW_MESSAGES', text: '쪽지 열람' },
+  { value: 'BLACKLIST_ADD', text: '블랙리스트 등록' },
+  { value: 'BLACKLIST_REMOVE', text: '블랙리스트 해제' },
+  { value: 'SETTINGS_CHANGE', text: '설정 변경' },
+  { value: 'MESSAGE_SEND', text: '쪽지 보냄' },
 ];

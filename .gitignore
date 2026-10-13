@@ -9,6 +9,9 @@ Thumbs.db
 .env.local
 .env.*.local
 server/.env
+# 관리자 계정·비밀번호 (예시는 server/config/admins.example.js)
+server/config/admins.js
+server/logs/
 
 # DevExtreme 라이선스 키 생성물 — 커밋 금지
 .devextreme/
@@ -17,3 +20,6 @@ server/.env
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# 로컬 도구 설정
+.claude/

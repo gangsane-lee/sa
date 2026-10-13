@@ -1,5 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { session, restoreSession } from '@/stores/session';
+import { loadCodes } from '@/stores/codes';
+import { setPageTitle } from '@/stores/office';
+import { ADMIN_PATH } from '@/config';
 
 const routes = [
   {
@@ -14,16 +17,35 @@ const routes = [
     children: [
       { path: '', name: 'home', component: () => import('@/views/HomeView.vue') },
       { path: 'apply', name: 'apply', component: () => import('@/views/ApplyView.vue'), meta: { title: '신청서' } },
+      { path: 'apply/done', name: 'apply-done', component: () => import('@/views/ApplyDoneView.vue'), meta: { title: '신청 완료' } },
+      // 마이페이지 = 내 신청서 보기·수정 (오늘의 인연·받은 하트는 홈에서)
+      { path: 'me', name: 'mypage', component: () => import('@/views/ApplyView.vue'), meta: { title: '마이페이지' } },
+      { path: 'saju', name: 'saju', component: () => import('@/views/SajuView.vue'), meta: { title: '인연 사주' } },
+      { path: 'messages', name: 'messages', component: () => import('@/views/MessagesView.vue'), meta: { title: '쪽지함' } },
+      { path: 'voc', name: 'voc', component: () => import('@/views/VocView.vue'), meta: { title: '개선의 소리' } },
+      { path: 'privacy', name: 'privacy', component: () => import('@/views/PrivacyView.vue'), meta: { title: '개인정보 처리 안내' } },
     ],
   },
+  // 관리자 화면 — 사용자 화면과 다른 주소로만 들어온다 (주소는 sayeon.config.js 의 adminPath)
   {
-    path: '/admin',
+    path: `${ADMIN_PATH}/login`,
+    name: 'admin-login',
+    component: () => import('@/views/admin/AdminLoginView.vue'),
+    meta: { public: true, title: '관리자 로그인' },
+  },
+  {
+    path: ADMIN_PATH,
     component: () => import('@/layouts/AdminLayout.vue'),
     meta: { admin: true },
     children: [
       { path: '', name: 'admin-dashboard', component: () => import('@/views/admin/AdminDashboard.vue'), meta: { title: '대시보드' } },
       { path: 'applicants', name: 'admin-applicants', component: () => import('@/views/admin/AdminApplicants.vue'), meta: { title: '신청자 관리' } },
       { path: 'matching', name: 'admin-matching', component: () => import('@/views/admin/AdminMatching.vue'), meta: { title: '매칭 관리' } },
+      { path: 'reviews', name: 'admin-reviews', component: () => import('@/views/admin/AdminReviews.vue'), meta: { title: '후기·제재' } },
+      { path: 'messages', name: 'admin-messages', component: () => import('@/views/admin/AdminMessages.vue'), meta: { title: '쪽지' } },
+      { path: 'voc', name: 'admin-voc', component: () => import('@/views/admin/AdminVoc.vue'), meta: { title: '개선의 소리' } },
+      { path: 'settings', name: 'admin-settings', component: () => import('@/views/admin/AdminSettings.vue'), meta: { title: '설정' } },
+      { path: 'codes', name: 'admin-codes', component: () => import('@/views/admin/AdminCodes.vue'), meta: { title: '기준정보' } },
       { path: 'audit', name: 'admin-audit', component: () => import('@/views/admin/AdminAuditLog.vue'), meta: { title: '열람 기록' } },
     ],
   },
@@ -39,13 +61,18 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   if (to.meta.public) return true;
   await restoreSession();
-  if (!session.user) return { name: 'login', query: to.fullPath !== '/' ? { redirect: to.fullPath } : {} };
-  if (to.matched.some((r) => r.meta.admin) && !session.isAdmin) return { name: 'home' };
+  const adminArea = to.matched.some((r) => r.meta.admin);
+  const back = to.fullPath !== '/' ? { redirect: to.fullPath } : {};
+  // 관리자 주소로 들어왔으면 관리자 로그인으로, 아니면 사용자 로그인으로
+  if (!session.user) return { name: adminArea ? 'admin-login' : 'login', query: back };
+  await loadCodes().catch(() => null); // 기준정보(선택 목록) — 실패해도 화면은 열고, 각 화면이 오류를 보여준다
+  // 관리자 계정(서버가 판단한 isAdmin) + 관리자 비밀번호 확인(관리자 세션)이 둘 다 있어야 한다
+  if (adminArea && !(session.user.isAdmin && session.isAdmin)) return { name: 'admin-login', query: back };
   return true;
 });
 
 router.afterEach((to) => {
-  document.title = to.meta.title ? `${to.meta.title} · 사緣` : '사緣 · 사내 인연 매칭';
+  setPageTitle(to.meta.title ? `${to.meta.title} · 사緣` : '사緣 · 사내 인연 매칭');
 });
 
 export default router;

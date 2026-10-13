@@ -6,13 +6,15 @@ import { DxButton } from 'devextreme-vue/button';
 import { DxValidator, DxRequiredRule, DxPatternRule } from 'devextreme-vue/validator';
 import { login } from '@/stores/session';
 import SaLogo from '@/components/SaLogo.vue';
-import ThreadScene from '@/components/ThreadScene.vue';
+import BadgeScene from '@/components/BadgeScene.vue';
 
-const DEV_MOCK = import.meta.env.VITE_API_MODE === 'mock';
+import { isTestMode } from '@/config';
+
+const DEV_MOCK = isTestMode;
 
 const route = useRoute();
 const router = useRouter();
-const empNo = ref('');
+const account = ref('');
 const password = ref('');
 const pwMode = ref('password');
 const error = ref('');
@@ -32,7 +34,7 @@ async function submit() {
   busy.value = true;
   error.value = '';
   try {
-    await login(empNo.value.trim(), password.value);
+    await login(account.value.trim(), password.value);
     const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') ? route.query.redirect : '/';
     router.replace(redirect);
   } catch (e) {
@@ -43,11 +45,14 @@ async function submit() {
   }
 }
 
+/** 테스트 계정 정보 — VITE_INCLUDE_MOCK=false 빌드에서는 import 자체가 사라진다 */
+const loadSeed = () => (import.meta.env.VITE_INCLUDE_MOCK !== 'false' ? import('@/api/mock/accounts.js') : Promise.resolve(null));
+
 async function fillTestAccount(kind) {
-  if (!DEV_MOCK) return;
-  const { TEST_ACCOUNTS, MOCK_PASSWORD } = await import('@/api/mock/seed.js');
-  empNo.value = TEST_ACCOUNTS[kind];
-  password.value = MOCK_PASSWORD;
+  const seed = DEV_MOCK ? await loadSeed() : null;
+  if (!seed) return;
+  account.value = seed.TEST_ACCOUNTS[kind];
+  password.value = seed.MOCK_PASSWORD;
 }
 </script>
 
@@ -60,25 +65,25 @@ async function fillTestAccount(kind) {
         사緣은 DS부문 임직원을 위한 비공개 소개팅이에요.
         緣은 '인연 연'. 회사에서 시작되는 인연을 조심스럽게 이어드려요.
       </p>
-      <ThreadScene class="story__art" />
+      <BadgeScene class="story__art" />
     </section>
 
     <section class="panel">
       <form class="card" novalidate @submit.prevent="submit">
         <p class="card__eyebrow">임직원 전용</p>
-        <h2 class="card__title">임직원 인증</h2>
-        <p class="card__sub">사번과 사내 계정 비밀번호로 재직 여부를 확인해요.</p>
+        <h2 class="card__title">사내 계정 로그인</h2>
+        <p class="card__sub">PC 로그인에 쓰는 사내 계정(AD)으로 재직 중인 임직원인지 확인해요.</p>
 
-        <label class="field__label" for="login-empno">사번</label>
+        <label class="field__label" for="login-account">사내 계정 ID 또는 사번</label>
         <DxTextBox
-          v-model:value="empNo"
-          placeholder="예: 20230001"
-          :max-length="20"
-          :input-attr="{ id: 'login-empno', autocomplete: 'username', inputmode: 'numeric' }"
+          v-model:value="account"
+          placeholder="예: gildong.hong 또는 20230001"
+          :max-length="40"
+          :input-attr="{ id: 'login-account', autocomplete: 'username', autocapitalize: 'off', spellcheck: 'false' }"
         >
           <DxValidator validation-group="login">
-            <DxRequiredRule message="사번을 입력해 주세요." />
-            <DxPatternRule :pattern="/^[A-Za-z0-9]{4,20}$/" message="사번은 영문·숫자 4~20자예요." />
+            <DxRequiredRule message="사내 계정 ID 또는 사번을 입력해 주세요." />
+            <DxPatternRule :pattern="/^[A-Za-z0-9._-]{3,40}$/" message="영문·숫자·점(.)으로 된 사내 계정 ID나 사번을 입력해 주세요." />
           </DxValidator>
         </DxTextBox>
 
@@ -99,7 +104,7 @@ async function fillTestAccount(kind) {
 
         <DxButton
           class="card__submit"
-          text="임직원 인증하고 들어가기"
+          text="사내 계정으로 로그인"
           type="default"
           width="100%"
           :use-submit-behavior="true"
@@ -112,8 +117,9 @@ async function fillTestAccount(kind) {
         </p>
 
         <div v-if="DEV_MOCK" class="dev">
-          <p class="dev__title">개발 모드 · 가짜 데이터로 동작 중</p>
+          <p class="dev__title">테스트 운영 중 · 가짜 데이터로 동작해요 (실제 정보를 넣지 마세요)</p>
           <div class="dev__btns">
+            <button type="button" class="dev__master" @click="fillTestAccount('MASTER')">만능 테스트 계정 (신청·하트)</button>
             <button type="button" @click="fillTestAccount('NEW')">신청 전 계정 채우기</button>
             <button type="button" @click="fillTestAccount('APPLIED')">신청 완료 계정 채우기</button>
             <button type="button" @click="fillTestAccount('RETIRED')">퇴직자 계정 채우기</button>
@@ -129,7 +135,9 @@ async function fillTestAccount(kind) {
   min-height: 100vh;
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
-  background: var(--c-indigo);
+  background:
+    radial-gradient(55% 60% at 30% 75%, rgba(64, 98, 235, 0.5) 0%, transparent 70%),
+    var(--c-indigo);
 }
 
 .story {
@@ -140,9 +148,13 @@ async function fillTestAccount(kind) {
   color: var(--c-on-indigo);
 }
 .story__title {
+  font-family: var(--f-body);
+  font-weight: 700;
+  letter-spacing: -0.03em;
   font-size: clamp(30px, 3.6vw, 46px);
-  line-height: 1.32;
+  line-height: 1.26;
   margin-top: clamp(24px, 6vh, 64px);
+  color: #fff;
 }
 .story__lead {
   max-width: 34em;
@@ -150,8 +162,9 @@ async function fillTestAccount(kind) {
   font-size: 16px;
 }
 .story__art {
-  max-width: 560px;
+  max-width: 420px;
   margin-top: auto;
+  align-self: center;
 }
 
 .panel {
@@ -227,6 +240,11 @@ async function fillTestAccount(kind) {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+}
+.dev__btns .dev__master {
+  border-color: var(--c-crimson);
+  color: var(--c-crimson-deep);
+  font-weight: 600;
 }
 .dev__btns button {
   padding: 4px 10px;

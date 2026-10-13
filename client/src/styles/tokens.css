@@ -1,34 +1,35 @@
 /*
  * 사緣 디자인 토큰
- * 모티프: 월하노인(月下老人)이 달빛 아래에서 붉은 실(紅絲)로 인연을 묶는다는 이야기.
- *  - 월하 남색: 밤하늘. 히어로·관리자 사이드바·제목
- *  - 홍실: 인연의 붉은 실. 주요 버튼·강조 (DevExtreme 테마 accent와 동일)
- *  - 달빛: 관리자 모드 경고 띠, 달
- *  - 한지: 차가운 흰 종이. 페이지 바탕
+ * 회사(삼성 블루)에서 시작되는 인연(홍실)이라는 두 축.
+ *  - 브랜드 블루(--c-indigo*): 사원증·사내 공간의 색. 히어로·관리자 사이드바·제목
+ *    (변수 이름은 예전 '월하 남색'을 그대로 둬 다른 화면이 같이 바뀌게 했다)
+ *  - 홍실: 인연의 붉은 실 = 사원증 목걸이 줄. 주요 버튼·하트 (DevExtreme 테마 accent와 동일)
+ *  - 달빛: 관리자 모드 경고 띠
+ *  - 바탕: 푸른 기가 도는 흰색
  */
 :root {
-  --c-indigo: #22244a;
-  --c-indigo-2: #2e3160;
-  --c-indigo-3: #3b3f7a;
-  --c-on-indigo: #e9e9f6;
-  --c-on-indigo-mute: #a9abd0;
+  --c-indigo: #1428a0;
+  --c-indigo-2: #1b34b6;
+  --c-indigo-3: #2a46cc;
+  --c-on-indigo: #f0f3ff;
+  --c-on-indigo-mute: #bac5f2;
 
   --c-crimson: #c8243f;
   --c-crimson-deep: #a11a32;
-  --c-thread-on-dark: #f2607a;
-  --c-blush: #f6dce2;
-  --c-blush-soft: #fbf0f3;
+  --c-thread-on-dark: #ff8fa6;
+  --c-blush: #f8dde4;
+  --c-blush-soft: #fdf1f4;
 
   --c-moon: #efe3c2;
   --c-moon-ink: #6b4e00;
 
-  --c-paper: #f5f4f8;
+  --c-paper: #f4f6fb;
   --c-surface: #ffffff;
-  --c-ink: #1b1b24;
-  --c-ink-2: #3f3f52;
-  --c-mute: #66667a;
-  --c-line: #e3e2ec;
-  --c-line-strong: #cfcde0;
+  --c-ink: #121733;
+  --c-ink-2: #3a4160;
+  --c-mute: #636b87;
+  --c-line: #e1e5f0;
+  --c-line-strong: #c9d0e3;
 
   --c-ok: #1f7a52;
   --c-ok-bg: #e3f2ea;
@@ -40,10 +41,30 @@
   --r-sm: 6px;
   --r-md: 10px;
   --r-lg: 18px;
-  --shadow-1: 0 1px 2px rgba(27, 27, 36, 0.05), 0 6px 20px rgba(34, 36, 74, 0.07);
-  --shadow-2: 0 2px 6px rgba(27, 27, 36, 0.08), 0 18px 48px rgba(34, 36, 74, 0.16);
+  --shadow-1: 0 1px 2px rgba(18, 23, 51, 0.05), 0 6px 20px rgba(20, 40, 160, 0.07);
+  --shadow-2: 0 2px 6px rgba(18, 23, 51, 0.08), 0 18px 48px rgba(20, 40, 160, 0.16);
 
   --gutter: clamp(16px, 4vw, 40px);
-  --maxw: 1160px;
+  --maxw: clamp(960px, 92vw, 1480px); /* 창 크기에 따라 넓어지되 아주 넓은 화면에선 읽기 좋은 폭에서 멈춘다 */
   --header-h: 64px;
+}
+
+/*
+ * 마음 쪽 화면(매칭 보드·마이페이지·인연 사주·궁합)은 파랑을 줄이고 따뜻한 자줏빛 먹색으로.
+ * 같은 토큰 이름을 이 영역 안에서만 바꿔서, 컴포넌트를 고치지 않고 색만 바뀐다.
+ * (회사 쪽 화면 — 랜딩·로그인·관리자 — 은 브랜드 블루 그대로. 엑셀 모드일 때는 엑셀 색을 따른다)
+ */
+html:not(.office) .tone-warm {
+  --c-indigo: #3a2238;
+  --c-indigo-2: #4b2d48;
+  --c-indigo-3: #8c3a5e;
+  --c-on-indigo: #fdf2f5;
+  --c-on-indigo-mute: #e6c7d3;
+  --c-thread-on-dark: #ffa3b7;
+  --c-paper: #faf6f7;
+  --c-line: #eee3e7;
+  --c-line-strong: #dccbd2;
+  --c-ink: #24181f;
+  --c-ink-2: #4a3a43;
+  --c-mute: #7a6871;
 }

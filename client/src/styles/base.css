@@ -127,3 +127,4 @@ a {
     transition-duration: 0.01ms !important;
   }
 }
+.badge--CLOSED { background: #ececf0; color: #55556a; }

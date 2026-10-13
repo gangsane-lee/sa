@@ -17,9 +17,8 @@ import 'devextreme/ui/select_box';
 import 'devextreme/ui/text_box';
 import { confirm } from 'devextreme/ui/dialog';
 import { adminApi } from '@/stores/session';
-import {
-  GENDERS, DIVISIONS, WORK_SITES, WORK_PATTERNS, MATCH_STATUS, AVOID_SCOPES, PREF_SMOKING, textOf,
-} from '@/constants/codes';
+import { GENDERS, MATCH_STATUS, MATCH_SOURCES, AVOID_OPTIONS, PREF_ITEMS, AGE_GAP, textOf } from '@/constants/codes';
+import { ct, cts } from '@/stores/codes';
 import { fmtDate } from '@/utils/format';
 import StatusBadge from '@/components/StatusBadge.vue';
 
@@ -93,7 +92,28 @@ const matchStore = new CustomStore({
 });
 
 const personText = (name, age, division) =>
-  name === '(삭제됨)' ? name : `${name} · ${age}세 · ${textOf(DIVISIONS, division)}`;
+  name === '(삭제됨)' ? name : `${name} · ${age}세 · ${ct('DIVISION', division)}`;
+
+/** 대상자의 선호를 칩으로 (우선순위 번호 포함) */
+const prefChips = computed(() => {
+  const t = target.value;
+  if (!t) return [];
+  const out = [];
+  const rankOf = (v) => {
+    const i = (t.priorities ?? []).indexOf(v);
+    return i >= 0 ? `${i + 1}순위 ` : '';
+  };
+  out.push(`${rankOf('AGE')}나이 ${t.prefAgeMin}~${t.prefAgeMax}세`);
+  if (t.prefHeightMin) out.push(`${rankOf('HEIGHT')}키 ${ct('HEIGHT', t.prefHeightMin)}~${ct('HEIGHT', t.prefHeightMax)}`);
+  for (const p of PREF_ITEMS.filter((x) => x.kind === 'multi')) {
+    if (t[p.key]?.length) {
+      const texts = p.fixed ? t[p.key].map((v) => textOf(AGE_GAP, v)) : cts(p.group, t[p.key]);
+      out.push(`${rankOf(p.value)}${p.text}: ${texts.join('·')}`);
+    }
+  }
+  if (t.avoid?.length) out.push(`피함: ${t.avoid.map((v) => textOf(AVOID_OPTIONS, v)).join('·')}`);
+  return out.sort((a, b) => /^\d/.test(b) - /^\d/.test(a) || a.localeCompare(b));
+});
 
 async function onMatchSaved() {
   await loadApplicants();
@@ -128,10 +148,10 @@ const scoreColor = (s) => (s >= 70 ? 'var(--c-crimson)' : s >= 45 ? '#D9677E' : 
             <div class="q">
               <div class="q__main">
                 <b>{{ data.name }}</b>
-                <span>{{ textOf(GENDERS, data.gender) }} · {{ data.age }}세 · {{ data.careerLevel }}</span>
+                <span>{{ textOf(GENDERS, data.gender) }} · {{ data.age }}세 · {{ data.mbti }}</span>
               </div>
               <div class="q__sub">
-                {{ textOf(DIVISIONS, data.division) }} · {{ textOf(WORK_SITES, data.workSite) }}
+                {{ ct('DIVISION', data.division) }}{{ data.campus ? ` · ${ct('CAMPUS', data.campus)}` : '' }}
               </div>
               <StatusBadge :status="data.status" />
             </div>
@@ -144,11 +164,7 @@ const scoreColor = (s) => (s >= 70 ? 'var(--c-crimson)' : s >= 45 ? '#D9677E' : 
           <header class="panel__head">
             <h2>{{ target.name }}님과 어울리는 분</h2>
             <p class="prefs">
-              <span class="chip">선호 {{ target.prefAgeMin }}~{{ target.prefAgeMax }}세</span>
-              <span class="chip">{{ textOf(AVOID_SCOPES, target.avoidScope) }}</span>
-              <span class="chip">상대 흡연: {{ textOf(PREF_SMOKING, target.prefSmoking) }}</span>
-              <span class="chip">{{ textOf(WORK_SITES, target.workSite) }} · {{ textOf(WORK_PATTERNS, target.workPattern) }}</span>
-              <span v-for="k in target.prefKeywords" :key="k" class="chip">{{ k }}</span>
+              <span v-for="c in prefChips" :key="c" class="chip">{{ c }}</span>
             </p>
           </header>
           <DxDataGrid
@@ -159,11 +175,11 @@ const scoreColor = (s) => (s >= 70 ? 'var(--c-crimson)' : s >= 45 ? '#D9677E' : 
             :column-auto-width="true"
             :hover-state-enabled="true"
             :word-wrap-enabled="true"
-            no-data-text="조건에 맞는 후보가 없어요. 선호 나이·제외 범위를 확인해 보세요."
+            no-data-text="조건에 맞는 후보가 없어요. 선호 나이·피하고 싶은 범위를 확인해 보세요."
           >
             <DxSorting mode="none" />
             <DxPaging :page-size="8" />
-            <DxColumn data-field="score" caption="점수" cell-template="scoreCell" :width="120" />
+            <DxColumn data-field="score" caption="점수" cell-template="scoreCell" :width="150" />
             <DxColumn data-field="name" caption="이름" :width="80" />
             <DxColumn caption="정보" cell-template="infoCell" :min-width="170" />
             <DxColumn data-field="reasons" caption="추천 이유" cell-template="reasonCell" :min-width="220" />
@@ -176,11 +192,12 @@ const scoreColor = (s) => (s >= 70 ? 'var(--c-crimson)' : s >= 45 ? '#D9677E' : 
                 <span class="score__bar"><span :style="{ width: `${data.value}%`, background: scoreColor(data.value) }" /></span>
                 <b>{{ data.value }}</b>
               </div>
+              <small class="score__sub">내 선호 {{ data.data.myScore }} · 상대 선호 {{ data.data.theirScore }}</small>
             </template>
             <template #infoCell="{ data }">
               <span class="info">
-                {{ data.data.age }}세 · {{ data.data.careerLevel }} · {{ textOf(DIVISIONS, data.data.division) }}<br />
-                <small>{{ data.data.dept }} · {{ textOf(WORK_SITES, data.data.workSite) }}</small>
+                {{ data.data.age }}세 · {{ data.data.mbti }} · {{ ct('FACE', data.data.face) }}<br />
+                <small>{{ ct('DIVISION', data.data.division) }} {{ data.data.team }}{{ data.data.campus ? ` · ${ct('CAMPUS', data.data.campus)}` : '' }}</small>
               </span>
             </template>
             <template #reasonCell="{ data }">
@@ -192,7 +209,7 @@ const scoreColor = (s) => (s >= 70 ? 'var(--c-crimson)' : s >= 45 ? '#D9677E' : 
         </template>
         <div v-else class="empty">
           <p class="empty__title">왼쪽에서 신청자를 골라주세요</p>
-          <p>서로의 선호 나이, 매칭 제외 범위, 흡연 선호를 지키는 분만 추천하고 취미·근무지·근무 형태가 맞을수록 점수가 높아요.</p>
+          <p>성별·피하고 싶은 범위·선호 나이를 지키는 분만 추천해요. 점수는 서로의 선호(우선순위 가중치)가 맞는 정도의 평균이에요.</p>
         </div>
       </section>
     </div>
@@ -223,6 +240,9 @@ const scoreColor = (s) => (s >= 70 ? 'var(--c-crimson)' : s >= 45 ? '#D9677E' : 
         <DxColumn data-field="id" caption="#" :width="56" :allow-editing="false" sort-order="desc" css-class="mono-cell" />
         <DxColumn caption="신청자 A" :allow-editing="false" :calculate-cell-value="(r) => personText(r.aName, r.aAge, r.aDivision)" />
         <DxColumn caption="신청자 B" :allow-editing="false" :calculate-cell-value="(r) => personText(r.bName, r.bAge, r.bDivision)" />
+        <DxColumn data-field="source" caption="경로" :width="100" :allow-editing="false">
+          <DxLookup :data-source="MATCH_SOURCES" value-expr="value" display-expr="text" />
+        </DxColumn>
         <DxColumn data-field="score" caption="점수" :width="70" :allow-editing="false" />
         <DxColumn data-field="status" caption="상태" :width="130" cell-template="matchStatusCell">
           <DxLookup :data-source="MATCH_STATUS" value-expr="value" display-expr="text" />
@@ -321,6 +341,10 @@ const scoreColor = (s) => (s >= 70 ? 'var(--c-crimson)' : s >= 45 ? '#D9677E' : 
   display: block;
   height: 100%;
   border-radius: inherit;
+}
+.score__sub {
+  color: var(--c-mute);
+  font-size: 11.5px;
 }
 .info small {
   color: var(--c-mute);

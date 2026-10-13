@@ -37,13 +37,20 @@ const del = (p) => request('DELETE', p);
 
 export const api = {
   auth: {
-    /** @returns {{ user, adminExpiresAt }} */
-    login: (empNo, password) => post('/auth/login', { empNo, password }),
+    /** 사내 계정(AD) ID 또는 사번 + 사내 계정 비밀번호 → 서버가 AD bind/SSO로 재직 확인 */
+    login: (account, password) => post('/auth/login', { account, password }),
     me: () => get('/auth/me'),
     logout: () => post('/auth/logout'),
     /** @returns {{ adminExpiresAt }} */
     enterAdmin: (password) => post('/auth/admin', { password }),
     exitAdmin: () => del('/auth/admin'),
+    /** 사내 SSO(통합 인증) 자동 로그인 — 서버가 SSO 토큰/Windows 인증으로 확인되면 세션 발급, 아니면 401 */
+    sso: () => post('/auth/sso'),
+  },
+
+  codes: {
+    /** 기준정보 전체 { [group]: [{ value, text, order, use, parent?, attr? }] } */
+    list: () => get('/codes'),
   },
 
   application: {
@@ -52,11 +59,59 @@ export const api = {
     create: (data) => post('/applications', data),
     update: (data) => put('/applications/me', data),
     withdraw: () => del('/applications/me'),
+    /** 쓰지 않은 닉네임 추천 */
+    suggestNicknames: (count = 4) => get(`/applications/nicknames?count=${count}`),
+  },
+
+  /** 마이페이지: 상태 · 오늘의 후보 · 받은 하트 */
+  me: {
+    dashboard: () => get('/me/dashboard'),
+    pass: () => post('/me/daily/pass'),
+    heart: () => post('/me/daily/heart'),
+    answerHeart: (heartId, accept) => post(`/me/hearts/${heartId}`, { accept }),
+    /** 매칭 후기 { outcome, rating, wantMore, comment } */
+    submitReview: (review) => put('/me/review', review),
+    resume: () => post('/me/resume'),
+    /** 커플 최종 완료 */
+    completeCouple: () => post('/me/couple'),
+  },
+
+  stats: {
+    gathering: () => get('/stats/gathering'),
+  },
+
+  /** 쪽지함 */
+  messages: {
+    /** box: inbox | sent | trash */
+    box: (box) => get(`/messages?box=${box}`),
+    counts: () => get('/messages/counts'),
+    read: (id) => get(`/messages/${id}`),
+    recipients: () => get('/messages/recipients'),
+    /** to: 'A{신청자id}'(담당자) | 'M{매칭id}'(매칭 상대) */
+    send: (to, body) => post('/messages', { to, body }),
+    /** to: trash | restore | delete */
+    move: (ids, to) => post('/messages/move', { ids, to }),
+    unread: () => get('/messages/unread'),
+  },
+
+  /** 사주로 찾은 인연 (신청 전) */
+  saju: {
+    pick: (birth) => post('/saju/pick', birth),
+    /** 신청 전: 필수 항목으로 신청 + 사주 인연에게 하트 */
+    apply: (data) => post('/saju/apply', data),
+    /** 신청 후: 사주 인연에게 바로 하트 */
+    heart: () => post('/saju/heart'),
+  },
+
+  /** 시스템 개선의 소리 */
+  voc: {
+    create: (item) => post('/voc', item),
+    listMine: () => get('/voc/mine'),
   },
 
   admin: {
     stats: () => get('/admin/stats'),
-    listApplicants: ({ reveal = false } = {}) => get(`/admin/applicants${reveal ? '?reveal=1' : ''}`),
+    listApplicants: () => get('/admin/applicants'),
     getApplicant: (id) => get(`/admin/applicants/${id}`),
     updateApplicant: (id, data) => put(`/admin/applicants/${id}`, data),
     changeStatus: (ids, status) => patch('/admin/applicants/status', { ids, status }),
@@ -67,6 +122,28 @@ export const api = {
     createMatch: (aId, bId, memo = '') => post('/admin/matches', { aId, bId, memo }),
     updateMatch: (id, changes) => patch(`/admin/matches/${id}`, changes),
     deleteMatch: (id) => del(`/admin/matches/${id}`),
+
+    listCodes: (group) => get(`/admin/codes/${group}`),
+    createCode: (group, item) => post(`/admin/codes/${group}`, item),
+    updateCode: (group, value, changes) => patch(`/admin/codes/${group}/${encodeURIComponent(value)}`, changes),
+    deleteCode: (group, value) => del(`/admin/codes/${group}/${encodeURIComponent(value)}`),
+
+    listReviews: () => get('/admin/reviews'),
+    resetDislikes: (id) => post(`/admin/applicants/${id}/reset-dislikes`),
+    listVocs: () => get('/admin/voc'),
+    updateVoc: (id, changes) => patch(`/admin/voc/${id}`, changes),
+    messageMatches: () => get('/admin/messages/matches'),
+    matchMessages: (matchId) => get(`/admin/messages/matches/${matchId}`),
+    messageUsers: () => get('/admin/messages/users'),
+    userMessages: (applicantId) => get(`/admin/messages/users/${applicantId}`),
+    sendMessage: (applicantId, body) => post(`/admin/messages/users/${applicantId}`, { body }),
+    listDislikes: () => get('/admin/dislikes'),
+    searchEmployees: (q) => get(`/admin/employees?q=${encodeURIComponent(q)}`),
+    listBlacklist: () => get('/admin/blacklist'),
+    addBlacklist: (empNo, reason) => post('/admin/blacklist', { empNo, reason }),
+    removeBlacklist: (empNo) => del(`/admin/blacklist/${empNo}`),
+    getSettings: () => get('/admin/settings'),
+    updateSettings: (changes) => patch('/admin/settings', changes),
 
     listAuditLogs: () => get('/admin/audit-logs'),
     recordExport: (count) => post('/admin/audit-logs/export', { count }),

@@ -6,7 +6,6 @@ import {
   DxExport, DxColumnChooser, DxToolbar, DxItem, DxButton as DxGridButton, DxLoadPanel,
 } from 'devextreme-vue/data-grid';
 import { DxSelectBox } from 'devextreme-vue/select-box';
-import { DxSwitch } from 'devextreme-vue/switch';
 import { DxDropDownButton } from 'devextreme-vue/drop-down-button';
 import CustomStore from 'devextreme/data/custom_store';
 import { exportDataGrid } from 'devextreme/excel_exporter';
@@ -16,25 +15,25 @@ import notify from 'devextreme/ui/notify';
 import { confirm } from 'devextreme/ui/dialog';
 import 'devextreme/ui/button'; // 툴바의 widget: 'dxButton'
 import { adminApi } from '@/stores/session';
-import {
-  APPLY_STATUS, GENDERS, DIVISIONS, WORK_SITES, WORK_PATTERNS, CAREER_LEVELS, textOf,
-} from '@/constants/codes';
+import { APPLY_STATUS, MANUAL_APPLY_STATUS, GENDERS, USER_STATUS, SERIOUSNESS } from '@/constants/codes';
+import { allItems } from '@/stores/codes';
 import ApplicantDetailPopup from '@/components/ApplicantDetailPopup.vue';
 
 const route = useRoute();
 const router = useRouter();
 const gridRef = ref();
-const reveal = ref(false);
 const statusFilter = ref(null);
 const selectedKeys = ref([]);
 const detail = reactive({ visible: false, id: null, edit: false });
 
 const STATUS_FILTER_ITEMS = [{ value: null, text: '전체 상태' }, ...APPLY_STATUS];
+/** 일괄 변경은 직접 지정할 수 있는 상태만 (매칭 중·완료·커플은 매칭 상태에서 정해진다) */
+const MANUAL_STATUS_ITEMS = APPLY_STATUS.filter((s) => MANUAL_APPLY_STATUS.includes(s.value));
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 const store = new CustomStore({
   key: 'id',
-  load: () => adminApi.listApplicants({ reveal: reveal.value }),
+  load: () => adminApi.listApplicants(),
 });
 
 const grid = () => gridRef.value?.instance;
@@ -55,18 +54,6 @@ onMounted(() => {
 function applyStatusFilter(e) {
   statusFilter.value = e.value;
   grid()?.columnOption('status', 'filterValue', e.value ?? undefined);
-}
-
-async function toggleReveal(e) {
-  if (!e.event) return; // 코드로 되돌린 경우는 무시
-  if (e.value) {
-    const ok = await confirm('가려진 휴대전화·이메일을 모두 표시할까요?<br>표시한 사실이 열람 기록에 남아요.', '연락처 전체 표시');
-    if (!ok) {
-      reveal.value = false;
-      return;
-    }
-  }
-  refresh();
 }
 
 async function bulkChange(e) {
@@ -107,7 +94,7 @@ async function onExporting(e) {
   const selectedOnly = e.selectedRowsOnly;
   const count = selectedOnly ? selectedKeys.value.length : e.component.totalCount();
   const ok = await confirm(
-    `${count}명의 정보를 엑셀로 내려받을까요?<br>${reveal.value ? '<b>연락처가 그대로 포함돼요.</b>' : '연락처는 가려진 상태로 저장돼요.'} 내려받은 기록이 남아요.`,
+    `${count}명의 정보를 엑셀로 내려받을까요?<br><b>이름이 그대로 포함돼요.</b> 내려받은 기록이 남고, 파일은 사내 보안 기준에 따라 보관해 주세요.`,
     '엑셀 내려받기',
   );
   if (!ok) return;
@@ -139,6 +126,7 @@ function goMatch(id) {
       :column-auto-width="true"
       :allow-column-reordering="true"
       :word-wrap-enabled="false"
+      :column-hiding-enabled="true"
       no-data-text="조건에 맞는 신청자가 없어요."
       @row-dbl-click="(e) => open(e.data.id)"
       @selection-changed="(e) => (selectedKeys = e.selectedRowKeys)"
@@ -146,7 +134,7 @@ function goMatch(id) {
     >
       <DxLoadPanel :enabled="true" text="불러오는 중" />
       <DxSelection mode="multiple" show-check-boxes-mode="always" />
-      <DxSearchPanel :visible="true" :width="220" placeholder="이름·소속 검색" />
+      <DxSearchPanel :visible="true" :width="220" placeholder="이름·팀 검색" />
       <DxHeaderFilter :visible="true" />
       <DxPaging :page-size="15" />
       <DxPager :visible="true" :show-page-size-selector="true" :allowed-page-sizes="[15, 30, 50]" :show-info="true" info-text="{2}명 · {0}/{1}쪽" />
@@ -155,7 +143,6 @@ function goMatch(id) {
 
       <DxToolbar>
         <DxItem location="before" template="statusFilterTpl" />
-        <DxItem location="before" template="revealTpl" />
         <DxItem location="after" template="bulkTpl" />
         <DxItem name="exportButton" />
         <DxItem name="columnChooserButton" />
@@ -167,26 +154,39 @@ function goMatch(id) {
         <DxLookup :data-source="APPLY_STATUS" value-expr="value" display-expr="text" />
       </DxColumn>
       <DxColumn data-field="name" caption="이름" />
+      <DxColumn data-field="nickname" caption="닉네임" />
+      <DxColumn data-field="serious" caption="진지한 만남" :width="96" :visible="false">
+        <DxLookup :data-source="SERIOUSNESS" value-expr="value" display-expr="short" />
+      </DxColumn>
       <DxColumn data-field="empNo" caption="사번" css-class="mono-cell" :visible="false" />
       <DxColumn data-field="gender" caption="성별" :width="70">
         <DxLookup :data-source="GENDERS" value-expr="value" display-expr="text" />
       </DxColumn>
       <DxColumn data-field="age" caption="나이" data-type="number" :width="70" alignment="left" />
       <DxColumn data-field="division" caption="사업부">
-        <DxLookup :data-source="DIVISIONS" value-expr="value" display-expr="text" />
+        <DxLookup :data-source="allItems('DIVISION')" value-expr="value" display-expr="text" />
       </DxColumn>
-      <DxColumn data-field="dept" caption="소속" />
-      <DxColumn data-field="careerLevel" caption="직급" :width="72">
-        <DxLookup :data-source="CAREER_LEVELS" value-expr="value" display-expr="text" />
+      <DxColumn data-field="team" caption="팀" />
+      <DxColumn data-field="campus" caption="캠퍼스">
+        <DxLookup :data-source="allItems('CAMPUS')" value-expr="value" display-expr="text" />
       </DxColumn>
-      <DxColumn data-field="workSite" caption="근무지">
-        <DxLookup :data-source="WORK_SITES" value-expr="value" display-expr="text" />
+      <DxColumn data-field="building" caption="건물" :visible="false" />
+      <DxColumn data-field="mbti" caption="MBTI" :width="76" />
+      <DxColumn data-field="face" caption="얼굴상" :visible="false">
+        <DxLookup :data-source="allItems('FACE')" value-expr="value" display-expr="text" />
       </DxColumn>
-      <DxColumn data-field="workPattern" caption="근무 형태" :visible="false">
-        <DxLookup :data-source="WORK_PATTERNS" value-expr="value" display-expr="text" />
+      <DxColumn data-field="looks" caption="외모" :width="64" :visible="false">
+        <DxLookup :data-source="allItems('LOOKS')" value-expr="value" display-expr="text" />
       </DxColumn>
-      <DxColumn data-field="phone" caption="휴대전화" css-class="mono-cell" :allow-header-filtering="false" />
-      <DxColumn data-field="email" caption="이메일" css-class="mono-cell" :allow-header-filtering="false" :visible="false" />
+      <DxColumn data-field="heightBand" caption="키" :visible="false">
+        <DxLookup :data-source="allItems('HEIGHT')" value-expr="value" display-expr="text" />
+      </DxColumn>
+      <DxColumn data-field="heartsIn" caption="받은 하트" data-type="number" :width="84" />
+      <DxColumn data-field="dislikes" caption="싫어요" data-type="number" :width="76" cell-template="dislikeCell" />
+      <DxColumn data-field="heartsOut" caption="보낸 하트" data-type="number" :width="84" :visible="false" />
+      <DxColumn data-field="userStatus" caption="본인 화면 상태" :visible="false">
+        <DxLookup :data-source="USER_STATUS" value-expr="value" display-expr="text" />
+      </DxColumn>
       <DxColumn data-field="createdAt" caption="신청일" data-type="date" format="yyyy.MM.dd" sort-order="desc" />
       <DxColumn data-field="hasMemo" caption="메모" data-type="boolean" :width="70" :visible="false" />
       <DxColumn type="buttons" :width="112" caption="관리">
@@ -195,6 +195,11 @@ function goMatch(id) {
         <DxGridButton hint="삭제" icon="trash" :on-click="(e) => remove(e.row.data)" />
       </DxColumn>
 
+      <template #dislikeCell="{ data }">
+        <span :class="{ 'dislike--out': data.data.sanctioned }" :title="data.data.sanctioned ? '싫어요 기준 이상 — 매칭 제외 중' : ''">
+          {{ data.value }}{{ data.data.sanctioned ? ' · 제외' : '' }}
+        </span>
+      </template>
       <template #statusCell="{ data }">
         <span class="badge" :class="`badge--${data.value}`">{{ data.text }}</span>
       </template>
@@ -209,17 +214,11 @@ function goMatch(id) {
           @value-changed="applyStatusFilter"
         />
       </template>
-      <template #revealTpl>
-        <label class="reveal">
-          <DxSwitch v-model:value="reveal" :element-attr="{ 'aria-label': '연락처 전체 표시' }" @value-changed="toggleReveal" />
-          연락처 전체 표시
-        </label>
-      </template>
       <template #bulkTpl>
         <DxDropDownButton
           text="선택 항목 상태 변경"
           icon="tags"
-          :items="APPLY_STATUS"
+          :items="MANUAL_STATUS_ITEMS"
           key-expr="value"
           display-expr="text"
           :disabled="!selectedKeys.length"
@@ -249,15 +248,9 @@ function goMatch(id) {
   border: 1px solid var(--c-line);
   border-radius: var(--r-md);
 }
-.reveal {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: 6px;
-  font-size: 13.5px;
-  color: var(--c-ink-2);
-  white-space: nowrap;
-  cursor: pointer;
+.dislike--out {
+  color: var(--c-crimson-deep);
+  font-weight: 700;
 }
 .hint {
   margin-top: 10px;
