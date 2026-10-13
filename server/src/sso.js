@@ -5,7 +5,7 @@
  *   { empNo: '사번', adId: '사내 계정 ID', name: '이름', gender: 'M'|'F'|null,
  *     division: '사업부 코드(기준정보 DIVISION 값)', team: '팀 이름', email: '메일', active: true(재직)|false }
  * 서버는 이 정보로 화면을 나눈다.
- *   관리자: config/admins.js 에 있는 사번·계정  → 관리자 주소(/admin)에서 관리자 비밀번호까지 맞으면 관리 화면
+ *   관리자: config/admins.js 에 있는 사번·계정  → 관리자 주소(/changeme)에서 관리자 비밀번호까지 맞으면 관리 화면
  *   신청자: 신청서가 있는 사람 (상태: 매칭 대기 중 / 매칭 중 / 커플 성사)
  *   미신청: 신청서가 없는 사람 → 소개·신청 화면
  *

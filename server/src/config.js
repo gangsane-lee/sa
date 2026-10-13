@@ -31,7 +31,7 @@ export const config = {
   /** open: 실제 서버 사용 / test: 화면이 브라우저 가짜 데이터로만 동작 */
   serviceMode: str(env.SERVICE_MODE, 'open') === 'test' ? 'test' : 'open',
   /** 관리자 화면 주소 (사용자 화면에는 들어가는 버튼이 없다) */
-  adminPath: `/${str(env.ADMIN_PATH, 'admin').replace(/^\/+|\/+$/g, '') || 'admin'}`,
+  adminPath: `/${str(env.ADMIN_PATH, 'changeme').replace(/^\/+|\/+$/g, '') || 'changeme'}`,
 
   // ── 세션 ──
   session: {

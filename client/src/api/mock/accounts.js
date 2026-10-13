@@ -3,7 +3,7 @@
  * (운영 서버의 관리자 계정은 server/config/admins.js 에서 관리한다)
  *
  * 사용자 화면 : /login              → 아래 사내 계정 ID(또는 사번) + MOCK_PASSWORD
- * 관리자 화면 : /admin (별도 주소)  → 관리자 계정으로 로그인 후 MOCK_ADMIN_PASSWORD
+ * 관리자 화면 : /changeme (별도 주소)  → 관리자 계정으로 로그인 후 MOCK_ADMIN_PASSWORD
  */
 export const MOCK_PASSWORD = 'sayeon1234';
 export const MOCK_ADMIN_PASSWORD = 'admin!sayeon';

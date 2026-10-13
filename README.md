@@ -39,7 +39,7 @@ pm2 start ecosystem.config.cjs
 ```
 
 - 그 전에 `server/.env`(서버·DB 주소, 키)와 `server/config/admins.js`(관리자)를 만든다 — git에 없다
-- 접속: 사용자 `http://12.83.18.17:3000`, 관리자 `http://12.83.18.17:3000/admin`, 상태 `/api/health`, 로그 `pm2 logs sayeon-api`
+- 접속: 사용자 `http://12.83.18.17:3000`, 관리자 `http://12.83.18.17:3000/changeme`, 상태 `/api/health`, 로그 `pm2 logs sayeon-api`
 - ⚠ `server` 폴더만 따로 옮기지 않는다 (서버가 `client/src`의 업무 규칙과 `client/node_modules`를 함께 쓴다)
 - ⚠ PM2 인스턴스는 반드시 1개(설정에 고정). 데이터를 메모리에 두고 DB에 저장하는 구조다
 
@@ -48,7 +48,7 @@ pm2 start ecosystem.config.cjs
 - **사용자 화면**(`/`): 사내 SSO(`SSO_MODE`) → 실패하면 로그인 화면(사내 계정 ID/비밀번호 → `AUTH_LOGIN_URL`)
 - 서버가 로그인 정보에 역할을 담아 준다 — `role`: `ADMIN`(관리자 계정) · `APPLICANT`(신청서 있음) · `GUEST`(신청 전), `applicant.userStatus`: 매칭 대기 중 / 매칭 중 / 커플 성사
   - 신청 전 → 소개·신청 화면, 신청자 → 매칭 보드, 헤더에 신청 상태 표시
-- **관리자 화면**(`/admin`, `.env`의 `ADMIN_PATH`로 변경 가능): 사용자 화면에는 들어가는 버튼이 없다. 관리자 주소에서 사내 계정 확인 → `admins.js`에 있는 계정인지 확인 → 관리자 비밀번호 순서로 들어간다(5회 틀리면 10분 잠금, 30분 무활동 시 종료)
+- **관리자 화면**(`/changeme`, `.env`의 `ADMIN_PATH`로 변경 가능): 사용자 화면에는 들어가는 버튼이 없다. 관리자 주소에서 사내 계정 확인 → `admins.js`에 있는 계정인지 확인 → 관리자 비밀번호 순서로 들어간다(5회 틀리면 10분 잠금, 30분 무활동 시 종료)
 
 ## 개발 · 시연 (test 모드)
 
@@ -68,7 +68,7 @@ npm run dev
 | 신청 완료 + 받은 하트 1 | `doyun.lee` | |
 | 퇴직자 | `seojin.park` | 로그인 거절 확인용 |
 
-- 비밀번호·관리자 비밀번호는 `client/src/api/mock/accounts.js`에 있다. 로그인 화면(사용자)과 `/admin/login`(관리자)의 '테스트 운영' 버튼으로 바로 채울 수 있다
+- 비밀번호·관리자 비밀번호는 `client/src/api/mock/accounts.js`에 있다. 로그인 화면(사용자)과 `/changeme/login`(관리자)의 '테스트 운영' 버튼으로 바로 채울 수 있다
 - 홈 "테스트 · 다음 날로 넘기기": 오늘의 후보·하트 제한 초기화 / 관리자 사이드바 "가짜 데이터 초기화": 처음 상태로
 - 실서버로 개발하려면 `server`에서 `npm run dev`, `client/public/sayeon.config.js`의 `mode`를 `'open'`으로 바꾸면 `/api`가 3000번 포트로 넘어간다
 

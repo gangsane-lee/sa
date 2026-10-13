@@ -148,7 +148,7 @@ Test-NetConnection 10.101.107.127 -Port 1433
 | `PORT` | `3000` | 바꾸면 방화벽도 같이 |
 | `PUBLIC_URL` | `http://12.83.18.17:3000` | 로그·안내용 |
 | `SERVICE_MODE` | 시연 `test` / 오픈 `open` | [12단계](#12-정식-오픈-전환)에서 `open`으로 |
-| `ADMIN_PATH` | `/admin` | 남이 짐작하기 어려운 주소로 바꾸는 것을 권장 |
+| `ADMIN_PATH` | `/changeme` | 바꾸면 관리자 접속 주소가 바뀐다 (사용자에게 공지하지 않는다) |
 | `SESSION_SECRET` | 긴 무작위 문자열 | 비워 두면 `npm run check`가 예시 값을 만들어 준다 |
 | `COOKIE_SECURE` | `false` | https로 접속할 때만 `true` (http에서 `true`면 로그인이 바로 풀린다) |
 | `TRUST_PROXY` | `false` | 앞단에 IIS·Nginx가 있으면 `true` |
@@ -230,7 +230,7 @@ npm run hash-password -- "새 관리자 비밀번호"
 ```
 
 - 파일을 저장하면 서버를 다시 켜지 않아도 3초 안에 반영된다
-- 관리자 진입: `http://12.83.18.17:3000/admin` → 사내 계정 확인 → `accounts`에 있는지 확인 → 관리자 비밀번호 (5번 틀리면 10분 잠금, 30분 동안 아무 동작이 없으면 자동 종료)
+- 관리자 진입: `http://12.83.18.17:3000/changeme` → 사내 계정 확인 → `accounts`에 있는지 확인 → 관리자 비밀번호 (5번 틀리면 10분 잠금, 30분 동안 아무 동작이 없으면 자동 종료)
 
 ## 9. 점검
 

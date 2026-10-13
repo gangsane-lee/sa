@@ -1,6 +1,6 @@
 <script setup>
 /**
- * 관리자 로그인 — 사용자 화면과 다른 주소(기본 /admin/login)로만 들어온다.
+ * 관리자 로그인 — 사용자 화면과 다른 주소(기본 /changeme/login)로만 들어온다.
  *  1) 사내 계정 확인 (SSO로 이미 확인됐으면 건너뜀)
  *  2) 관리자 계정인지 서버가 판단 (운영: server/config/admins.js · test: api/mock/accounts.js)
  *  3) 관리자 비밀번호 확인 → 관리자 화면

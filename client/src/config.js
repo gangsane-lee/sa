@@ -20,7 +20,7 @@ export const isTestMode = SERVICE_MODE === 'test';
 
 /**
  * 관리자 화면 주소 — 사용자 화면에는 들어가는 버튼이 없고, 이 주소로 직접 들어간다.
- * 운영 서버에서는 server/.env 의 ADMIN_PATH 가 sayeon.config.js 로 내려와 여기에 들어온다 (기본 /admin)
+ * 운영 서버에서는 server/.env 의 ADMIN_PATH 가 sayeon.config.js 로 내려와 여기에 들어온다 (기본 /changeme)
  */
-const adminPath = `/${String(runtime.adminPath ?? 'admin').replace(/^\/+|\/+$/g, '')}`;
-export const ADMIN_PATH = adminPath === '/' ? '/admin' : adminPath;
+const adminPath = `/${String(runtime.adminPath ?? 'changeme').replace(/^\/+|\/+$/g, '')}`;
+export const ADMIN_PATH = adminPath === '/' ? '/changeme' : adminPath;

@@ -7,6 +7,6 @@
 window.SAYEON_CONFIG = {
   mode: 'test',
   // 관리자 화면 주소 (사용자 화면에는 들어가는 버튼이 없다)
-  adminPath: '/admin',
+  adminPath: '/changeme',
 };
 // ※ 운영 서버(server/)가 화면을 내보낼 때는 이 파일 대신 server/.env 의 SERVICE_MODE·ADMIN_PATH 로 만든 값이 내려간다
