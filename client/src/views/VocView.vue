@@ -1,26 +1,19 @@
 <script setup>
 /**
  * 시스템 개선의 소리 — 바라는 점·불편한 점을 남긴다.
- * 내용은 담당자(관리자)만 볼 수 있고, 작성자는 자기 글과 처리 상태·답변만 볼 수 있다.
+ * 내용은 담당자(관리자)만 볼 수 있다. 사용자 화면에는 보낸 글 목록을 두지 않는다.
  */
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive } from 'vue';
 import { DxSelectBox } from 'devextreme-vue/select-box';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxTextArea } from 'devextreme-vue/text-area';
 import { DxButton } from 'devextreme-vue/button';
 import notify from 'devextreme/ui/notify';
 import { api } from '@/api';
-import { VOC_CATEGORIES, VOC_STATUS, textOf } from '@/constants/codes';
-import { fmtDateTime } from '@/utils/format';
+import { VOC_CATEGORIES } from '@/constants/codes';
 
 const f = reactive({ category: 'FEATURE', title: '', content: '' });
-const mine = ref([]);
 const busy = ref(false);
-
-async function load() {
-  mine.value = await api.voc.listMine().catch(() => []);
-}
-onMounted(load);
 
 async function submit() {
   if (f.title.trim().length < 2) return notify({ message: '제목을 2자 이상 적어주세요.', type: 'warning', displayTime: 2000 });
@@ -30,7 +23,6 @@ async function submit() {
     await api.voc.create({ ...f });
     Object.assign(f, { title: '', content: '' });
     notify({ message: '소중한 의견 고마워요. 담당자가 확인할게요.', type: 'success', displayTime: 2600 });
-    await load();
   } catch (e) {
     notify({ message: e.message, type: 'error', displayTime: 3500 });
   } finally {
@@ -70,24 +62,6 @@ async function submit() {
           <DxButton text="의견 보내기" type="default" :use-submit-behavior="true" :disabled="busy" class="form__go" />
         </form>
       </section>
-
-      <section class="panel">
-        <h2 class="display">내가 남긴 의견</h2>
-        <p class="lead">처리 상태와 담당자 답변을 여기서 확인할 수 있어요. 다른 사람의 글은 보이지 않아요.</p>
-        <ul v-if="mine.length" class="list">
-          <li v-for="v in mine" :key="v.id">
-            <div class="list__head">
-              <span class="chip">{{ textOf(VOC_CATEGORIES, v.category) }}</span>
-              <span class="state" :class="`state--${v.status}`">{{ textOf(VOC_STATUS, v.status) }}</span>
-            </div>
-            <h3>{{ v.title }}</h3>
-            <p class="list__body">{{ v.content }}</p>
-            <p v-if="v.reply" class="list__reply"><b>담당자 답변</b> {{ v.reply }}</p>
-            <p class="list__meta mono">{{ fmtDateTime(v.createdAt) }}</p>
-          </li>
-        </ul>
-        <p v-else class="empty">아직 남긴 의견이 없어요.</p>
-      </section>
     </div>
   </div>
 </template>
@@ -97,10 +71,7 @@ async function submit() {
   padding: clamp(24px, 4vw, 48px) 0 72px;
 }
 .voc__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: 20px;
-  align-items: start;
+  max-width: 760px;
 }
 .panel {
   padding: clamp(18px, 3vw, 32px);
@@ -116,10 +87,6 @@ async function submit() {
 h1 {
   margin-top: 6px;
   font-size: clamp(24px, 3vw, 32px);
-  color: var(--c-indigo);
-}
-h2 {
-  font-size: 20px;
   color: var(--c-indigo);
 }
 .lead {
@@ -150,78 +117,5 @@ h2 {
 }
 .form__go {
   height: 48px;
-}
-.list {
-  display: grid;
-  gap: 12px;
-  margin: 16px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.list li {
-  padding: 14px 16px;
-  border: 1px solid var(--c-line);
-  border-radius: var(--r-md);
-}
-.list__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-.list h3 {
-  margin-top: 8px;
-  font-size: 15.5px;
-}
-.list__body {
-  margin-top: 4px;
-  color: var(--c-ink-2);
-  font-size: 14px;
-  white-space: pre-wrap;
-}
-.list__reply {
-  margin-top: 10px;
-  padding: 10px 12px;
-  border-radius: var(--r-sm);
-  background: var(--c-blush-soft);
-  font-size: 13.5px;
-}
-.list__reply b {
-  margin-right: 6px;
-  color: var(--c-crimson-deep);
-}
-.list__meta {
-  margin-top: 8px;
-  color: var(--c-mute);
-  font-size: 12px;
-}
-.state {
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 12.5px;
-  font-weight: 600;
-  background: #e7e8f6;
-  color: var(--c-indigo-3);
-}
-.state--DONE {
-  background: var(--c-ok-bg);
-  color: var(--c-ok);
-}
-.state--HOLD {
-  background: #ececf0;
-  color: #55556a;
-}
-.state--REVIEWING {
-  background: #f6edd6;
-  color: var(--c-moon-ink);
-}
-.empty {
-  margin-top: 16px;
-  color: var(--c-mute);
-}
-@media (max-width: 860px) {
-  .voc__grid {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

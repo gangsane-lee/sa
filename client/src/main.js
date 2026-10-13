@@ -23,7 +23,10 @@ import { initOffice } from './stores/office';
 import App from './App.vue';
 import router from './router';
 
-config({ editorStylingMode: 'outlined' });
+// DevExtreme 라이선스 — src/.devextreme/license-key.js (npx devextreme-license 로 만든 파일, git 제외)
+// 파일이 없으면 평가판으로 동작한다(빌드는 그대로 된다). 키는 화면이 만들어지기 전에 등록해야 한다
+const licenseFile = Object.values(import.meta.glob('./.devextreme/license-key.js', { eager: true }))[0];
+config({ editorStylingMode: 'outlined', ...(licenseFile?.licenseKey && { licenseKey: licenseFile.licenseKey }) });
 loadMessages(koMessages);
 locale('ko');
 

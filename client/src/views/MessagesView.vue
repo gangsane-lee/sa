@@ -15,7 +15,7 @@ import { DxSelectBox } from 'devextreme-vue/select-box';
 import { DxTextArea } from 'devextreme-vue/text-area';
 import { api } from '@/api';
 import { fmtDateTime } from '@/utils/format';
-import { refreshUnread } from '@/stores/session';
+import { session, refreshUnread } from '@/stores/session';
 import FaceIcon from '@/components/FaceIcon.vue';
 
 const BOXES = [
@@ -32,7 +32,9 @@ const counts = ref({ inbox: 0, unread: 0, sent: 0, trash: 0 });
 const checked = ref([]);
 const opened = ref(null); // 읽는 중인 쪽지
 const loading = ref(true);
-const noApp = ref(false);
+// 신청 전이면 쪽지함을 처음부터 그리지 않는다 (로그인 정보로 바로 판단 — 목록을 그렸다가 지우면 화면이 깜빡인다)
+const noApp = ref(!session.user?.applicant);
+const ready = ref(noApp.value); // 신청자는 첫 목록을 받은 뒤에 쪽지함을 보여준다
 
 // 쪽지 쓰기
 const compose = ref(false);
@@ -130,7 +132,9 @@ async function send() {
 }
 
 onMounted(async () => {
+  if (noApp.value) return;
   await load();
+  ready.value = true;
   if (!noApp.value) recipients.value = await api.messages.recipients().catch(() => []);
   if (route.query.compose && !noApp.value) openCompose(String(route.query.compose));
 });
@@ -147,7 +151,7 @@ const peerLabel = (m) => (m.dir === 'IN' ? '보낸 사람' : '받는 사람');
           <h1 class="display">쪽지</h1>
           <p class="head__lead">매칭된 상대와는 매칭이 이어지는 동안만 쪽지를 주고받을 수 있어요. 담당자에게는 언제든 보낼 수 있어요.</p>
         </div>
-        <DxButton v-if="!noApp" text="쪽지 쓰기" icon="edit" type="default" class="head__write" @click="openCompose()" />
+        <DxButton v-if="ready && !noApp" text="쪽지 쓰기" icon="edit" type="default" class="head__write" @click="openCompose()" />
       </header>
 
       <section v-if="noApp" class="empty">
@@ -155,7 +159,7 @@ const peerLabel = (m) => (m.dir === 'IN' ? '보낸 사람' : '받는 사람');
         <DxButton text="신청하러 가기" type="default" @click="router.push({ name: 'apply' })" />
       </section>
 
-      <div v-else class="grid">
+      <div v-else-if="ready" class="grid">
         <nav class="boxes" aria-label="쪽지함">
           <button v-for="b in BOXES" :key="b.key" type="button" class="boxes__item" :class="{ 'is-on': box === b.key }" @click="pickBox(b.key)">
             <i :class="`dx-icon-${b.icon}`" aria-hidden="true" />

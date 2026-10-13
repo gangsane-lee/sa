@@ -90,6 +90,7 @@ git clone https://github.com/gangsane-lee/sa.git
 등록하지 않으면 화면 맨 위에 평가판 배너가 뜬다. **빌드하기 전에** 한다.
 
 - [ ] [README의 'DevExtreme 라이선스 등록'](../README.md#devextreme-라이선스-등록-직접-해야-함) 1~4번 진행 (키 파일은 커밋하지 않는다)
+- [ ] 작업 PC에서 만든 `client/src/.devextreme/license-key.js`가 있으면 서버의 같은 위치에 복사해도 된다 (git에는 없다)
 
 ## 4. 패키지 설치와 화면 빌드
 

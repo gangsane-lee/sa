@@ -131,7 +131,7 @@ const ELS = Object.values(ELEMENTS);
         </div>
       </section>
 
-      <!-- 기밀 약속 — 문구는 실제 동작과 같게 유지할 것 (관리자 화면은 이름 전체를 보되, 볼 때마다 기록이 남는다) -->
+      <!-- 기밀 약속 — 문구는 실제 동작과 같게 유지할 것 (추천 카드는 닉네임·초성만, 이름·메일은 server/.env 의 DATA_KEY 로 암호화 저장) -->
       <section class="vow" aria-labelledby="vow-title">
         <div class="container vow__grid">
           <div class="vow__head">
@@ -145,8 +145,8 @@ const ELS = Object.values(ELEMENTS);
           <ul class="vow__list">
             <li>
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2.5" /><path d="M8 10V7.5a4 4 0 0 1 8 0V10" /></svg>
-              <h3>신청 사실은 본인과 담당자만 알아요</h3>
-              <p>다른 신청자에게는 닉네임과 이름 초성만 담긴 카드가 보여요. 팀·건물·외모 정보는 다른 신청자에게 보여주지 않아요.</p>
+              <h3>신청 사실은 상대방이 전혀 몰라요</h3>
+              <p>추천 카드에는 닉네임과 이름 초성만 보이고, 이름·팀·건물은 보여주지 않아요. 서로 마음을 확인하기 전까지 상대방은 내가 누구인지 알 수 없어요.</p>
             </li>
             <li>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20c-5.5-3.8-8.7-6.8-8.7-10.2C3.3 7.3 5.2 5.5 7.5 5.5c1.8 0 3.3 1 4.5 2.7 1.2-1.7 2.7-2.7 4.5-2.7 2.3 0 4.2 1.8 4.2 4.3 0 3.4-3.2 6.4-8.7 10.2z" /></svg>
@@ -155,8 +155,8 @@ const ELS = Object.values(ELEMENTS);
             </li>
             <li>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6z" /><path d="M9 12l2 2 4-4" /></svg>
-              <h3>열람할 때마다 기록이 남아요</h3>
-              <p>이름은 암호화해 보관해요. 매칭 담당자가 신청서를 열람·수정·내려받을 때마다 기록이 남고, 그 기록은 고치거나 지울 수 없어요.</p>
+              <h3>개인정보는 암호화해 보관해요</h3>
+              <p>이름과 사내 메일처럼 누구인지 알 수 있는 정보는 암호화해서 저장해요. 데이터베이스를 직접 열어 봐도 알아볼 수 없어요.</p>
             </li>
             <li>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v6M14 11v6" /></svg>

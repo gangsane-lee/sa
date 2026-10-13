@@ -84,9 +84,9 @@ npm run dev
 등록 전에는 화면 상단에 평가판 배너가 뜬다.
 
 1. 키를 환경 변수 `DevExpress_License`에 넣거나 `%APPDATA%\DevExpress\DevExpress_License.txt`에 저장
-2. `client`에서 `npx devextreme-license --out src/.devextreme/license-key.js` 실행 (`.gitignore` 대상 — 커밋 금지)
-3. `src/main.js`에서 `import { licenseKey } from './.devextreme/license-key';` 후 `config({ licenseKey, ... })`
-4. 빌드하는 서버에서도 1번 환경 변수를 설정하고 빌드 전에 2번을 실행
+2. `client` 폴더에서 `npx devextreme-license --out src/.devextreme/license-key.js --no-gitignore --force` 실행 → `client/src/.devextreme/license-key.js`가 생긴다 (`.gitignore` 대상 — 커밋 금지)
+3. 다시 빌드(`npm run build`)하거나 개발 화면을 새로 고친다 — `src/main.js`가 이 파일이 있으면 자동으로 등록한다 (없으면 평가판으로 빌드된다)
+4. 운영 서버(빌드하는 PC)에서도 1~2번을 하거나, 만들어 둔 `license-key.js`를 같은 위치에 복사한 뒤 빌드한다
 
 ## 사내망 참고
 

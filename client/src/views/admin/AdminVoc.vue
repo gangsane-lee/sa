@@ -1,6 +1,6 @@
 <script setup>
 /**
- * 시스템 개선의 소리 — 관리자만 본다. 상태(접수·검토 중·반영 완료·보류)와 답변을 남기면 작성자 화면에 보인다.
+ * 시스템 개선의 소리 — 관리자만 본다. 상태(접수·검토 중·반영 완료·보류)와 답변 메모는 관리자 화면에만 남는다(작성자 화면에는 목록이 없다).
  * 익명 글은 작성자를 알 수 없고, 실명 글은 이름·팀이 보인다.
  */
 import { ref, reactive, computed, onMounted } from 'vue';
@@ -42,7 +42,7 @@ async function save() {
   try {
     const v = await adminApi.updateVoc(selId.value, { status: edit.status, reply: edit.reply });
     items.value = items.value.map((x) => (x.id === v.id ? v : x));
-    notify({ message: '저장했어요. 작성자 화면에 상태와 답변이 보여요.', type: 'success', displayTime: 2200 });
+    notify({ message: '저장했어요.', type: 'success', displayTime: 2200 });
   } catch (e) {
     notify({ message: e.message, type: 'error', displayTime: 3500 });
   } finally {
@@ -107,7 +107,7 @@ async function save() {
             <DxSelectBox v-model:value="edit.status" :items="VOC_STATUS" value-expr="value" display-expr="text" />
           </label>
           <label class="field">
-            <span>답변 <small>· 작성자에게 보여요</small></span>
+            <span>답변 메모 <small>· 관리자만 봐요 (작성자에게 알리려면 쪽지로)</small></span>
             <DxTextArea v-model:value="edit.reply" :max-length="500" :height="110" placeholder="예: 다음 배포(10월 말)에 반영할게요." />
           </label>
           <DxButton text="저장" type="default" :disabled="busy" @click="save" />
