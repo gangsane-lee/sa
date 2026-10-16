@@ -8,18 +8,17 @@
 
 ```mermaid
 flowchart LR
-  U[임직원 브라우저] -- HTTPS --> R[IIS / Nginx 리버스 프록시]
-  R --> N[Node.js + Express<br/>정적 파일(Vue 빌드) + /api]
-  N -- 재직 확인 --> H[(인사 DB 뷰 또는 AD/LDAP · SSO)]
-  N -- mssql/tedious, TLS --> D[(MSSQL: SAYEON DB)]
+  U[임직원 브라우저] -- "HTTP :3000 (https는 앞단 프록시를 둘 때)" --> N["Node.js + Express · 12.83.18.17<br/>화면(Vue 빌드) + /api · PM2 1개"]
+  N -- 재직 확인 --> H[("인사 DB 뷰 또는 AD/LDAP · SSO")]
+  N -- "mssql/tedious :1433" --> D[("MSSQL · 10.166.101.127<br/>SAYEON.dbo.SA_DOC")]
 ```
 
 | 영역 | 기술 |
 |---|---|
 | 프론트 | Vue 3, Vite, vue-router, DevExtreme 26.1 (Complete), 커스텀 테마 `dx.sayeon.css` |
-| 백엔드 | Node.js 20+, Express, `mssql`, `express-session`(MSSQL 세션 저장소), `bcrypt`, `helmet`, `express-rate-limit` |
-| DB | MSSQL (TDE 권장) |
-| 배포 | Node 서버 1개가 `client/dist` 정적 파일과 `/api`를 함께 서빙 → CORS 불필요 |
+| 백엔드 | Node.js 22.12.0, Express 5, `mssql`(tedious), `express-session` + `memorystore`(로그인 정보는 메모리 — 재시작하면 다시 로그인), `bcryptjs`, `helmet`, 로그인 실패 제한(자체 구현) |
+| DB | MSSQL — 문서 테이블 `SA_DOC` 1개, 이름·메일은 앱에서 AES-256-GCM 암호화 (TDE는 DB 쪽 선택) |
+| 배포 | Node 서버 1개(PM2 인스턴스 1개)가 `client/dist` 화면과 `/api`를 함께 서빙 → CORS 불필요. 절차는 [GO-LIVE.md](GO-LIVE.md) |
 
 **업무 규칙은 한 파일** — `client/src/api/core/service.js`. 브라우저 test 모드(`api/mock`)와 Node 서버(`server/`)가 이 파일을 함께 쓰고, 저장소·세션·사내 인증·관리자 확인만 끼워 넣는다(`configureService`). 그래서 화면에서 시험한 동작이 운영에서도 똑같다.
 
@@ -91,7 +90,7 @@ flowchart LR
 > **실제 저장 방식**: 서버는 아래 개념 모델을 문서 테이블 하나에 JSON으로 저장한다 — `SA_DOC(COLL, DOC_ID, BODY NVARCHAR(MAX), UPDATED_AT)`, 기본키 (COLL, DOC_ID).
 > 신청자·매칭·하트·후기·쪽지·열람 기록 한 건이 한 행이고, 이름·메일은 `DATA_KEY`로 AES-256-GCM 암호화한다.
 > 서버가 시작할 때 전체를 메모리로 읽고, 요청마다 바뀐 행만 한 트랜잭션으로 저장한다(그래서 PM2 인스턴스는 1개).
-> 사내 규모(신청자 수천 명) 기준이며, 수만 명 이상이 되면 아래 정규화 테이블로 옮긴다. 테이블은 서버가 처음 시작할 때 자동으로 만든다.
+> 사내 규모(신청자 수천 명) 기준이며, 수만 명 이상이 되면 아래 정규화 테이블로 옮긴다. 테이블은 `npm run db:setup`(또는 DB 담당자용 `server/sql/setup.sql`)이 만들고, `DB_AUTO_CREATE=true`이고 권한이 있으면 서버가 처음 켤 때 만든다 — [GO-LIVE 3단계](GO-LIVE.md#3-db--데이터베이스-계정-권한-테이블).
 
 
 ```sql
@@ -101,7 +100,7 @@ CREATE TABLE SA_CODE (                      -- 기준정보
   CODE_NM    NVARCHAR(40) NOT NULL,
   SORT_ORD   INT NOT NULL,
   USE_YN     BIT NOT NULL DEFAULT 1,         -- 0이면 새 선택지에서만 숨김
-  PARENT_CD  VARCHAR(30) NULL,               -- BUILDING → CAMPUS
+  PARENT_CD  VARCHAR(30) NULL,               -- 상위 그룹 코드 (지금은 쓰는 그룹 없음)
   ATTR       NVARCHAR(20) NULL,              -- CAMPUS → 권역
   CONSTRAINT PK_SA_CODE PRIMARY KEY (GROUP_CD, CODE)
 );
@@ -218,6 +217,8 @@ CREATE TABLE SA_ADMIN (EMP_NO VARCHAR(20) PRIMARY KEY);  -- 관리자 허용 사
 | PATCH/DELETE | `/admin/matches/:id` | 상태·메모 변경 / 삭제 |
 | GET/POST | `/admin/codes/:group` | 기준정보 목록(쓰는 신청서 수 포함) / 추가 |
 | PATCH/DELETE | `/admin/codes/:group/:code` | 이름·순서·사용·상위·보조 값 변경 / 삭제(409 사용 중) |
+| GET | `/admin/reference` | 기준정보·설정 전체 내보내기 (`{ kind: "sayeon-reference", codes, settings }`) |
+| POST | `/admin/reference/import` `{payload, apply}` | 일괄 변경 — `apply=false` 미리보기(추가·수정·사용 안 함·삭제·오류), `true` 적용(열람 기록 `REFERENCE_IMPORT`) |
 | GET | `/admin/audit-logs` | 열람 기록 |
 | POST | `/admin/audit-logs/export` `{count}` | 엑셀 내려받기 기록 |
 
@@ -321,9 +322,9 @@ CREATE TABLE SA_SETTING (SETTING_KEY VARCHAR(40) PRIMARY KEY, SETTING_VALUE NVAR
 ## 7. 보안 설계 ("100% 기밀"을 실제로 뒷받침하는 장치)
 
 1. **임직원 인증(사내 로그인)**: 사내 계정(AD/LDAP bind) 또는 사내 SSO(SAML/OIDC)로 확인 + 인사 DB 재직 뷰로 재직 여부 판단. 비밀번호는 저장하지 않음
-2. **관리자 이중 확인**: `SA_ADMIN` 허용 사번 + 별도 관리자 비밀번호(bcrypt 해시는 `.env`) · 5회 실패 시 10분 잠금 · 30분 무활동 자동 종료(슬라이딩)
-3. **세션**: HttpOnly + Secure + SameSite=Strict 쿠키, 상태 변경 요청은 `X-Requested-With` 헤더 필수, 로그인 rate limit
-4. **암호화**: 이름 AES-256-GCM(키는 `.env`/키 관리 시스템), DB TDE, 전 구간 TLS. 연락처는 받지 않고 매칭 시 사내 메일(인사 정보)로 안내
+2. **관리자 이중 확인**: `server/config/admins.js`의 사번·사내 계정 ID + 별도 관리자 비밀번호(bcrypt 해시 권장) · 5회 실패 시 10분 잠금(사번 기준) · 30분 무활동 자동 종료(슬라이딩)
+3. **세션**: HttpOnly + SameSite=Strict 쿠키(https면 Secure), 상태 변경 요청은 `X-Requested-With` 헤더 필수, 로그인 실패 제한(같은 IP·계정 10분에 10회), 로그인할 때 세션 ID 새로 발급, SSO 헤더 모드는 프록시 비밀값 필수
+4. **암호화**: 이름·메일 AES-256-GCM(키는 `.env`의 `DATA_KEY` — 바꾸면 기존 데이터를 읽을 수 없어 서버가 시작을 멈추고 알려 준다). DB 연결 암호화는 `DB_ENCRYPT`, https는 앞단 프록시를 둘 때. 연락처는 받지 않고 매칭 시 사내 메일(인사 정보)로 안내
 5. **최소 노출**: 후보 카드는 이름 초성·팀/건물/외모/종교 미노출. 관리자 화면은 매칭 업무상 이름 전체를 보되, 상세 열람·수정·삭제·엑셀·쪽지 열람은 전부 기록. 관리 메모·내부 상태는 본인에게도 비공개 (홈의 '100% 기밀 보장'은 '신청 사실은 상대방이 전혀 몰라요'·'개인정보는 암호화해 보관해요'를 약속한다 — 이 동작과 같게 유지할 것)
 5-1. **거절 비노출**: 하트 거절·무응답·관리자 불발은 본인 화면에서 모두 '매칭 대기 중'으로만 보인다
 6. **방문 사실 보호**: 일반 임직원의 로그인/방문은 관리자 화면에 남기지 않음(서버 보안 로그에만 단기 보관)
@@ -340,27 +341,33 @@ CREATE TABLE SA_SETTING (SETTING_KEY VARCHAR(40) PRIMARY KEY, SETTING_VALUE NVAR
 
 ```
 sa/
+├─ docs/GO-LIVE.md             ★ 운영 전환 가이드 (배포 절차는 여기에만)
 ├─ docs/DESIGN.md
 ├─ client/                     Vue 3 + DevExtreme
+│  ├─ .env.production          VITE_INCLUDE_MOCK (시연용/정식 빌드)
 │  ├─ public/sayeon.config.js  test/open 모드·관리자 주소 (개발용, 운영은 서버가 내려줌)
+│  ├─ scripts/preflight.mjs    빌드 전 Node.js 버전·설치 경로 확인
 │  └─ src/
 │     ├─ api/core/service.js   ★ 업무 규칙 (서버와 공용)
 │     ├─ api/core/matching.js  매칭 점수
 │     ├─ api/mock/             test 모드 어댑터 · 가짜 데이터 · accounts.js(테스트 계정)
 │     ├─ api/http.js           운영 모드 API 호출
+│     ├─ utils/referenceFile.js 기준정보 일괄 변경 엑셀·JSON 읽기/쓰기
+│     ├─ .devextreme/          라이선스 키 (git 제외)
 │     └─ views · components · layouts · constants · utils · styles
 └─ server/                     Node.js + Express + MSSQL (PM2)
    ├─ .env / .env.example      ★ 서버·DB·세션·SSO 설정
-   ├─ config/admins.js         ★ 관리자 계정·비밀번호 (예시: admins.example.js)
+   ├─ config/admins.js         ★ 관리자 계정·비밀번호 (예시: admins.example.js, git 제외)
+   ├─ preflight.cjs · start.cjs  시작 전 확인 · PM2 진입점
+   ├─ ecosystem.config.cjs     PM2 설정 (인스턴스 1개, 실패 시 10초 간격 재시도)
+   ├─ sql/setup.sql            DB 담당자용 DB·계정·권한·테이블 준비
    ├─ src/sso.js               ★ 사내 AD/SSO 연동
-   ├─ src/store.js             MSSQL 저장 (SA_DOC)
+   ├─ src/store.js             MSSQL 저장 (SA_DOC) · 시작 단계 오류 안내
+   ├─ src/dbErrors.js          DB 오류 → 원인·해결
    ├─ src/app.js · routes.js   Express 조립 · /api 경로
-   ├─ ecosystem.config.cjs     PM2 설정 (인스턴스 1개)
-   └─ scripts/check.js · hash-password.js
+   └─ scripts/                 run.mjs(실행기) · check.js(npm run check) · db-setup.js(npm run db:setup) · hash-password.js
 ```
 
 ## 9. 다음 단계
 
-1. 사내 인증 API 사양 확인 → `server/src/sso.js`의 필드 이름·`.env` 주소 채우기
-2. 오픈 전: `sa` 대신 사緣 DB 전용 로그인으로 교체, 정보보호 심의, `DATA_KEY` 별도 보관
-3. 오픈 후: `.env`의 `SERVICE_MODE=open` 확인, 필요하면 `VITE_INCLUDE_MOCK=false`로 다시 빌드해 test 코드 제거
+운영 전환 순서와 남은 확인 항목은 [GO-LIVE.md](GO-LIVE.md)를 따른다.

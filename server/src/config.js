@@ -55,6 +55,9 @@ export const config = {
     trustServerCertificate: bool(env.DB_TRUST_CERT, true),
     /** DB·테이블이 없으면 처음 실행할 때 만든다 (CREATE DATABASE 권한 필요) */
     autoCreate: bool(env.DB_AUTO_CREATE, true),
+    /** npm run db:setup 전용 관리 계정 (DB·로그인을 만들 권한). 준비가 끝나면 .env 에서 지운다 */
+    adminUser: str(env.DB_ADMIN_USER),
+    adminPassword: env.DB_ADMIN_PASSWORD ?? '',
   },
   /** 이름·메일 암호화 키 (base64 32바이트). 비우면 평문 저장 — 운영에서는 반드시 채운다 */
   dataKey: str(env.DATA_KEY),

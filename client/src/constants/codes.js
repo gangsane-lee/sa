@@ -159,6 +159,29 @@ export const DEFAULT_SETTINGS = {
   messageBurstLimit: 3, // 상대 답장 없이 연속으로 보낼 수 있는 쪽지 수
 };
 
+/** 기준정보 일괄 변경 파일(엑셀·JSON) 표시 */
+export const REFERENCE_KIND = 'sayeon-reference';
+
+/** 설정 항목의 이름·형식·범위 — 설정 저장과 기준정보 일괄 변경(엑셀·JSON)이 같은 규칙으로 검사한다 */
+export const SETTING_ITEMS = [
+  { key: 'showDivisionRatio', text: '대시보드 사업부별 신청 비율 표시', type: 'bool' },
+  { key: 'dislikeLimit', text: '싫어요 누적 매칭 제외 기준(회)', type: 'int', min: 1, max: 50 },
+  { key: 'noShowCountsAsDislike', text: '노쇼 신고를 싫어요 1회로 셈', type: 'bool' },
+  { key: 'gatheringPopup', text: "로그인 시 '곧 매칭이 시작돼요' 팝업", type: 'bool' },
+  { key: 'holdUntilStart', text: '오픈 전 매칭 멈춤', type: 'bool' },
+  { key: 'messageBurstLimit', text: '답장 없이 연속으로 보낼 수 있는 쪽지 수', type: 'int', min: 1, max: 20 },
+];
+
+/** 'Y'/'N', true/false, 1/0, 사용/미사용, O/X → true/false (알 수 없으면 null) */
+export function toBool(v) {
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v === 1 ? true : v === 0 ? false : null;
+  const s = String(v ?? '').trim().toUpperCase();
+  if (['Y', 'YES', 'TRUE', '1', 'O', '사용', '예', '표시', '켬', 'ON'].includes(s)) return true;
+  if (['N', 'NO', 'FALSE', '0', 'X', '미사용', '사용 안 함', '아니오', '숨김', '끔', 'OFF'].includes(s)) return false;
+  return null;
+}
+
 export const MATCH_SOURCES = [
   { value: 'ADMIN', text: '담당자 제안' },
   { value: 'HEART', text: '하트 맞교환' },
@@ -179,6 +202,7 @@ export const AUDIT_ACTIONS = [
   { value: 'MATCH_UPDATE', text: '매칭 상태 변경' },
   { value: 'MATCH_DELETE', text: '매칭 삭제' },
   { value: 'CODE_CHANGE', text: '기준정보 변경' },
+  { value: 'REFERENCE_IMPORT', text: '기준정보 일괄 변경' },
   { value: 'VIEW_REVIEWS', text: '후기 열람' },
   { value: 'SANCTION_RESET', text: '싫어요 제재 해제' },
   { value: 'VOC_UPDATE', text: '개선의 소리 처리' },

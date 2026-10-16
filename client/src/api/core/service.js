@@ -19,7 +19,7 @@ import {
   APPLY_STATUS, APPLY_STATUS_MAP, MANUAL_APPLY_STATUS, MATCH_STATUS, ACTIVE_MATCH_STATUS, CODE_GROUP_MAP, PREF_ITEMS, RECOMMENDABLE_STATUS,
   DAILY_CARD_LIMIT, DAILY_HEART_LIMIT, RESHOW_AFTER_DAYS, textOf,
   DEFAULT_SETTINGS, REVIEW_OUTCOMES, REVIEW_RATINGS, REVIEWABLE_MATCH_STATUS, REVIEW_WINDOW_DAYS,
-  VOC_CATEGORIES, VOC_STATUS,
+  VOC_CATEGORIES, VOC_STATUS, SETTING_ITEMS, REFERENCE_KIND, toBool,
 } from '../../constants/codes.js';
 import { ADMIN_IDLE_MS, ADMIN_LOCK_MS, ADMIN_MAX_FAILS, ADMIN_LOCK_MINUTES } from '../../constants/policy.js';
 
@@ -350,6 +350,154 @@ function codeInUse(group, value) {
   const n = db.applicants.filter((a) => fields.some((f) => (Array.isArray(a[f]) ? a[f].includes(value) : a[f] === value))).length;
   const children = 0;
   return { n, children };
+}
+
+/** 설정 변경을 검사해 바뀐 설정을 돌려준다 (잘못된 값이면 ApiError) — 설정 화면 · 일괄 변경이 함께 쓴다 */
+function settingsAfter(base, changes) {
+  const next = { ...base };
+  for (const item of SETTING_ITEMS) {
+    if (changes[item.key] === undefined) continue;
+    const raw = changes[item.key];
+    if (item.type === 'bool') {
+      const v = toBool(raw);
+      if (v === null) throw new ApiError(400, `'${item.text}' 값은 Y 또는 N으로 적어주세요.`, 'VALIDATION');
+      next[item.key] = v;
+    } else {
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < item.min || n > item.max) {
+        throw new ApiError(400, `'${item.text}' 값은 ${item.min}~${item.max} 사이 정수로 적어주세요.`, 'VALIDATION');
+      }
+      next[item.key] = n;
+    }
+  }
+  return next;
+}
+
+// ── 기준정보 일괄 변경 ─────────────────────────────────
+// 내보내기(엑셀·JSON) → 파일에서 고치기 → 가져오기(미리보기) → 적용
+//  - 파일에 있는 그룹만 바꾼다. 파일에 없는 그룹은 그대로 둔다
+//  - 그룹 안에서 파일에 없는 항목: 신청서가 쓰고 있으면 '사용 안 함'으로, 아무도 안 쓰면 삭제
+//  - 코드 값은 바꿀 수 없다(신청서가 참조). 바꾸려면 새 코드를 추가하고 예전 코드는 빼거나 '사용 안 함'
+const CODE_FIELDS = ['text', 'order', 'use', 'parent', 'attr'];
+const FIELD_NAMES = { text: '이름', order: '순서', use: '사용', parent: '상위', attr: '보조 값' };
+
+function planReference(payload) {
+  const errors = [];
+  const notes = [];
+  const changes = [];
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new ApiError(400, '파일 내용을 읽지 못했어요. 사緣에서 내보낸 엑셀·JSON 파일인지 확인해 주세요.', 'VALIDATION');
+  }
+  if (payload.kind !== undefined && payload.kind !== REFERENCE_KIND) errors.push('사緣 기준정보 파일이 아니에요.');
+  const codesIn = payload.codes ?? {};
+  if (typeof codesIn !== 'object' || Array.isArray(codesIn)) errors.push('기준정보(codes) 형식이 맞지 않아요.');
+  const nextCodes = clone(db.codes);
+
+  for (const [group, items] of Object.entries(errors.length ? {} : codesIn)) {
+    const g = CODE_GROUP_MAP[group];
+    if (!g) {
+      errors.push(`없는 기준정보 그룹이에요: ${group} (쓸 수 있는 그룹: ${Object.keys(CODE_GROUP_MAP).join(', ')})`);
+      continue;
+    }
+    if (!Array.isArray(items) || !items.length) {
+      errors.push(`${g.text}: 항목이 없어요. 이 그룹을 바꾸지 않으려면 파일에서 그룹째 빼 주세요.`);
+      continue;
+    }
+    const incoming = [];
+    const seen = new Set();
+    items.forEach((raw, i) => {
+      const where = `${g.text} ${raw?.row ? `${raw.row}행` : `${i + 1}번째`}`;
+      const value = String(raw?.value ?? '').trim().toUpperCase();
+      if (!/^[A-Z0-9_]{1,30}$/.test(value)) return errors.push(`${where}: 코드 '${raw?.value ?? ''}' — 영문 대문자·숫자·_ 30자 이내로 적어주세요.`);
+      if (seen.has(value)) return errors.push(`${g.text}: 코드 ${value} 가 두 번 있어요.`);
+      seen.add(value);
+      const text = String(raw?.text ?? '').trim();
+      if (!text || text.length > 40) return errors.push(`${where}(${value}): 표시 이름을 1~40자로 적어주세요.`);
+      const order = raw.order === undefined || raw.order === null || raw.order === '' ? (i + 1) * 10 : Number(raw.order);
+      if (!Number.isFinite(order)) return errors.push(`${where}(${value}): 순서는 숫자로 적어주세요.`);
+      const use = raw.use === undefined || raw.use === null || raw.use === '' ? true : toBool(raw.use);
+      if (use === null) return errors.push(`${where}(${value}): 사용 여부는 Y 또는 N으로 적어주세요.`);
+      const item = { value, text, order, use };
+      if (g.parent) item.parent = String(raw.parent ?? '').trim().toUpperCase();
+      if (g.attrLabel) item.attr = String(raw.attr ?? '').trim().slice(0, 20);
+      incoming.push(item);
+      return null;
+    });
+
+    const cur = db.codes[group] ?? [];
+    const next = [];
+    for (const it of incoming) {
+      const old = cur.find((c) => c.value === it.value);
+      if (!old) {
+        changes.push({ group, value: it.value, text: it.text, action: 'ADD' });
+        next.push(it);
+        continue;
+      }
+      const fields = CODE_FIELDS.filter((k) => k in it && it[k] !== old[k] && !(k === 'attr' && !it[k] && !old[k]));
+      if (fields.includes('parent') && codeInUse(group, it.value).n) {
+        errors.push(`${g.text} ${it.value}: 신청서가 쓰고 있는 항목이라 상위 항목을 바꿀 수 없어요.`);
+      }
+      if (fields.length) {
+        changes.push({
+          group, value: it.value, text: it.text, action: 'UPDATE',
+          detail: fields.map((k) => `${FIELD_NAMES[k]}: ${old[k] ?? '-'} → ${it[k] ?? '-'}`).join(' · '),
+        });
+      }
+      next.push({ ...old, ...it });
+    }
+    for (const old of cur) {
+      if (incoming.some((it) => it.value === old.value)) continue;
+      const { n } = codeInUse(group, old.value);
+      if (n) {
+        next.push({ ...old, use: false });
+        if (old.use) changes.push({ group, value: old.value, text: old.text, action: 'DISABLE', detail: `신청서 ${n}건이 쓰고 있어 지우지 않고 '사용 안 함'으로 바꿔요` });
+        else notes.push(`${g.text} ${old.value}: 파일에 없지만 신청서 ${n}건이 써서 '사용 안 함'으로 남겨 둬요.`);
+      } else {
+        changes.push({ group, value: old.value, text: old.text, action: 'REMOVE' });
+      }
+    }
+    if (incoming.length && !next.some((c) => c.use)) errors.push(`${g.text}: '사용'인 항목이 하나는 있어야 해요.`);
+    nextCodes[group] = next.sort((a, b) => a.order - b.order);
+  }
+
+  // 상위 항목 확인은 모든 그룹을 반영한 뒤에 (상위 그룹도 같은 파일에서 바뀔 수 있다)
+  for (const [group, items] of Object.entries(nextCodes)) {
+    const g = CODE_GROUP_MAP[group];
+    if (!g?.parent || !(group in codesIn)) continue;
+    for (const it of items) {
+      if (!nextCodes[g.parent]?.some((p) => p.value === it.parent)) {
+        errors.push(`${g.text} ${it.value}: 상위 ${CODE_GROUP_MAP[g.parent].text} '${it.parent || '(빈칸)'}' 이(가) 없어요.`);
+      }
+    }
+  }
+
+  // 설정
+  let nextSettings = null;
+  const settingsChanges = [];
+  if (payload.settings !== undefined && payload.settings !== null) {
+    if (typeof payload.settings !== 'object' || Array.isArray(payload.settings)) errors.push('설정(settings) 형식이 맞지 않아요.');
+    else {
+      const known = Object.fromEntries(Object.entries(payload.settings).filter(([k]) => SETTING_ITEMS.some((x) => x.key === k)));
+      for (const k of Object.keys(payload.settings)) if (!(k in known)) notes.push(`설정 '${k}'은(는) 모르는 항목이라 건너뛰어요.`);
+      try {
+        nextSettings = settingsAfter(db.settings, known);
+        for (const item of SETTING_ITEMS) {
+          if (nextSettings[item.key] !== db.settings[item.key]) {
+            settingsChanges.push({ key: item.key, text: item.text, before: db.settings[item.key], after: nextSettings[item.key] });
+          }
+        }
+      } catch (e) {
+        errors.push(`설정: ${e.message}`);
+      }
+    }
+  }
+
+  const summary = {};
+  for (const ch of changes) {
+    const row = (summary[ch.group] ??= { group: ch.group, text: CODE_GROUP_MAP[ch.group].text, ADD: 0, UPDATE: 0, DISABLE: 0, REMOVE: 0 });
+    row[ch.action] += 1;
+  }
+  return { errors, notes, changes, settingsChanges, summary: Object.values(summary), nextCodes, nextSettings };
 }
 
 // ── 오늘의 후보 ─────────────────────────────────────────
@@ -1417,6 +1565,45 @@ export const api = {
       return null;
     },
 
+    /** 기준정보·설정 전체 내보내기 — 엑셀·JSON 파일로 저장해 고친 뒤 importReference 로 되돌려 넣는다 */
+    async exportReference() {
+      await wait();
+      requireAdmin();
+      const codes = Object.fromEntries(
+        Object.keys(CODE_GROUP_MAP).map((g) => [g, [...(db.codes[g] ?? [])].sort((a, b) => a.order - b.order).map(clone)]),
+      );
+      return { kind: REFERENCE_KIND, version: 1, exportedAt: nowIso(), codes, settings: pickFields(db.settings, SETTING_ITEMS.map((x) => x.key)) };
+    },
+
+    /**
+     * 기준정보·설정 일괄 변경. apply=false 면 바뀔 내용만 돌려준다(미리보기)
+     * 적용할 때도 같은 파일로 다시 계산하므로, 미리보기와 적용 사이에 다른 사람이 바꾼 내용도 반영된다
+     */
+    async importReference(payload, { apply = false } = {}) {
+      await wait();
+      const user = requireAdmin();
+      const plan = planReference(payload);
+      const out = {
+        ok: !plan.errors.length,
+        applied: false,
+        errors: plan.errors.slice(0, 100),
+        notes: plan.notes,
+        changes: plan.changes,
+        settingsChanges: plan.settingsChanges,
+        summary: plan.summary,
+      };
+      if (!apply || plan.errors.length || (!plan.changes.length && !plan.settingsChanges.length)) return out;
+      db.codes = plan.nextCodes;
+      if (plan.nextSettings) db.settings = plan.nextSettings;
+      const count = (a) => plan.changes.filter((x) => x.action === a).length;
+      audit(
+        user, 'REFERENCE_IMPORT', '기준정보 일괄 변경',
+        `추가 ${count('ADD')} · 수정 ${count('UPDATE')} · 사용 안 함 ${count('DISABLE')} · 삭제 ${count('REMOVE')} · 설정 ${plan.settingsChanges.length}`,
+      );
+      commit();
+      return { ...out, applied: true };
+    },
+
     // ── 후기 ──
     async listReviews() {
       await wait();
@@ -1627,21 +1814,7 @@ export const api = {
     async updateSettings(changes) {
       await wait();
       const user = requireAdmin();
-      const next = { ...db.settings };
-      if (changes.showDivisionRatio !== undefined) next.showDivisionRatio = Boolean(changes.showDivisionRatio);
-      if (changes.noShowCountsAsDislike !== undefined) next.noShowCountsAsDislike = Boolean(changes.noShowCountsAsDislike);
-      if (changes.holdUntilStart !== undefined) next.holdUntilStart = Boolean(changes.holdUntilStart);
-      if (changes.gatheringPopup !== undefined) next.gatheringPopup = Boolean(changes.gatheringPopup);
-      if (changes.messageBurstLimit !== undefined) {
-        const n = Number(changes.messageBurstLimit);
-        if (!Number.isInteger(n) || n < 1 || n > 20) throw new ApiError(400, '연속 쪽지 수는 1~20 사이 정수로 적어주세요.', 'VALIDATION');
-        next.messageBurstLimit = n;
-      }
-      if (changes.dislikeLimit !== undefined) {
-        const n = Number(changes.dislikeLimit);
-        if (!Number.isInteger(n) || n < 1 || n > 50) throw new ApiError(400, '싫어요 기준은 1~50 사이 정수로 적어주세요.', 'VALIDATION');
-        next.dislikeLimit = n;
-      }
+      const next = settingsAfter(db.settings, changes ?? {});
       const what = Object.keys(changes).filter((k) => k in next && next[k] !== db.settings[k]);
       db.settings = next;
       audit(user, 'SETTINGS_CHANGE', '설정', what.length ? `변경: ${what.join(', ')}` : '변경 없음');

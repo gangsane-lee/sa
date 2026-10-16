@@ -17,6 +17,10 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
+      // 시작 실패(DB 연결 등)면 10초 간격으로 다시 시도하고, 15번 연속 실패하면 멈춘다 → pm2 logs 로 원인 확인
+      restart_delay: 10000,
+      min_uptime: '20s',
+      max_restarts: 15,
       max_memory_restart: '700M',
       kill_timeout: 8000,
       env: { NODE_ENV: 'production' },

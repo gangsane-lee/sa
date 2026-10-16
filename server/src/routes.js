@@ -155,6 +155,9 @@ export function apiRouter(store) {
   r.post('/admin/codes/:group', h((req) => A.createCode(req.params.group, b(req))));
   r.patch('/admin/codes/:group/:value', h((req) => A.updateCode(req.params.group, req.params.value, b(req))));
   r.delete('/admin/codes/:group/:value', h((req) => A.deleteCode(req.params.group, req.params.value)));
+  // 기준정보·설정 일괄 변경 — 내보내기 / 가져오기(apply=false 면 미리보기)
+  r.get('/admin/reference', h(() => A.exportReference()));
+  r.post('/admin/reference/import', h((req) => A.importReference(b(req).payload, { apply: b(req).apply === true })));
 
   r.get('/admin/reviews', h(() => A.listReviews()));
   r.get('/admin/voc', h(() => A.listVocs()));

@@ -14,7 +14,15 @@ if (config.session.secretMissing) {
   console.warn('[server] SESSION_SECRET 이 비어 있어 임시 값을 써요. 서버를 다시 켜면 모두 로그아웃돼요. .env 에 채워 주세요.');
 }
 
-const store = await openStore(config);
+let store;
+try {
+  store = await openStore(config);
+} catch (e) {
+  // 원인·해결이 담긴 문구를 남기고 끝낸다 (PM2는 잠시 뒤 다시 시도한다 — ecosystem.config.cjs 의 restart_delay)
+  console.error(`[server] 시작하지 못했어요 — ${e.name === 'DbSetupError' ? e.message : e.stack ?? e}`);
+  console.error('[server] 설정을 고친 뒤 server 폴더에서  npm run check  로 확인하고  pm2 restart sayeon-api');
+  process.exit(1);
+}
 await initAdmins();
 const app = await createApp({
   config,

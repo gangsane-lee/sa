@@ -6,6 +6,7 @@
 import crypto from 'node:crypto';
 
 const PREFIX = 'enc:v1:';
+export const ENC_PREFIX = PREFIX;
 
 export function makeCipher(keyB64) {
   if (!keyB64) {

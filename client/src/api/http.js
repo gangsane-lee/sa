@@ -127,6 +127,8 @@ export const api = {
     createCode: (group, item) => post(`/admin/codes/${group}`, item),
     updateCode: (group, value, changes) => patch(`/admin/codes/${group}/${encodeURIComponent(value)}`, changes),
     deleteCode: (group, value) => del(`/admin/codes/${group}/${encodeURIComponent(value)}`),
+    exportReference: () => get('/admin/reference'),
+    importReference: (payload, { apply = false } = {}) => post('/admin/reference/import', { payload, apply }),
 
     listReviews: () => get('/admin/reviews'),
     resetDislikes: (id) => post(`/admin/applicants/${id}/reset-dislikes`),
