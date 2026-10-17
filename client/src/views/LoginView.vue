@@ -1,58 +1,47 @@
 <script setup>
-import { ref } from 'vue';
+/**
+ * test 모드 입구 — 테스트 계정을 골라 바로 들어간다 (계정마다 상태가 달라 화면별로 나눠 시험할 수 있다).
+ * 정식 운영은 이 화면 대신 SsoGateView (사내 AD SSO로만 들어온다).
+ */
+import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { DxTextBox, DxButton as DxTextBoxButton } from 'devextreme-vue/text-box';
+import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxButton } from 'devextreme-vue/button';
-import { DxValidator, DxRequiredRule, DxPatternRule } from 'devextreme-vue/validator';
 import { login } from '@/stores/session';
+import { ADMIN_PATH } from '@/config';
 import SaLogo from '@/components/SaLogo.vue';
 import BadgeScene from '@/components/BadgeScene.vue';
 
-import { isTestMode } from '@/config';
-
-const DEV_MOCK = isTestMode;
-
 const route = useRoute();
 const router = useRouter();
+const accounts = ref([]); // [{ key, title, desc, account }]
+const seed = ref(null);
 const account = ref('');
-const password = ref('');
-const pwMode = ref('password');
 const error = ref('');
-const busy = ref(false);
-
-const pwToggle = {
-  icon: 'eyeopen',
-  stylingMode: 'text',
-  hint: '비밀번호 보기',
-  onClick: (e) => {
-    pwMode.value = pwMode.value === 'password' ? 'text' : 'password';
-    e.component.option('icon', pwMode.value === 'password' ? 'eyeopen' : 'eyeclose');
-  },
-};
-
-async function submit() {
-  busy.value = true;
-  error.value = '';
-  try {
-    await login(account.value.trim(), password.value);
-    const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') ? route.query.redirect : '/';
-    router.replace(redirect);
-  } catch (e) {
-    error.value = e.message;
-    password.value = '';
-  } finally {
-    busy.value = false;
-  }
-}
+const busy = ref('');
 
 /** 테스트 계정 정보 — VITE_INCLUDE_MOCK=false 빌드에서는 import 자체가 사라진다 */
 const loadSeed = () => (import.meta.env.VITE_INCLUDE_MOCK !== 'false' ? import('@/api/mock/accounts.js') : Promise.resolve(null));
 
-async function fillTestAccount(kind) {
-  const seed = DEV_MOCK ? await loadSeed() : null;
-  if (!seed) return;
-  account.value = seed.TEST_ACCOUNTS[kind];
-  password.value = seed.MOCK_PASSWORD;
+onMounted(async () => {
+  seed.value = await loadSeed();
+  if (!seed.value) return;
+  accounts.value = seed.value.TEST_ACCOUNT_LIST.map((a) => ({ ...a, account: seed.value.TEST_ACCOUNTS[a.key] }));
+});
+
+async function enter(id) {
+  if (!seed.value || !id) return;
+  busy.value = id;
+  error.value = '';
+  try {
+    await login(id.trim(), seed.value.MOCK_PASSWORD);
+    const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') ? route.query.redirect : '/';
+    router.replace(redirect);
+  } catch (e) {
+    error.value = `${id} — ${e.message}`;
+  } finally {
+    busy.value = '';
+  }
 }
 </script>
 
@@ -69,63 +58,45 @@ async function fillTestAccount(kind) {
     </section>
 
     <section class="panel">
-      <form class="card" novalidate @submit.prevent="submit">
-        <p class="card__eyebrow">임직원 전용</p>
-        <h2 class="card__title">사내 계정 로그인</h2>
-        <p class="card__sub">PC 로그인에 쓰는 사내 계정(AD)으로 재직 중인 임직원인지 확인해요.</p>
+      <div class="card">
+        <p class="card__eyebrow">테스트 운영 · 가짜 데이터</p>
+        <h2 class="card__title">테스트 계정으로 들어가기</h2>
+        <p class="card__sub">계정마다 신청 상태가 달라요. 시험할 화면에 맞는 계정을 고르면 바로 들어가요. (정식 운영에서는 이 화면 없이 사내 AD SSO로 들어와요)</p>
 
-        <label class="field__label" for="login-account">사내 계정 ID 또는 사번</label>
-        <DxTextBox
-          v-model:value="account"
-          placeholder="예: gildong.hong 또는 20230001"
-          :max-length="40"
-          :input-attr="{ id: 'login-account', autocomplete: 'username', autocapitalize: 'off', spellcheck: 'false' }"
-        >
-          <DxValidator validation-group="login">
-            <DxRequiredRule message="사내 계정 ID 또는 사번을 입력해 주세요." />
-            <DxPatternRule :pattern="/^[A-Za-z0-9._-]{3,40}$/" message="영문·숫자·점(.)으로 된 사내 계정 ID나 사번을 입력해 주세요." />
-          </DxValidator>
-        </DxTextBox>
-
-        <label class="field__label" for="login-pw">비밀번호</label>
-        <DxTextBox
-          v-model:value="password"
-          :mode="pwMode"
-          placeholder="사내 계정 비밀번호"
-          :input-attr="{ id: 'login-pw', autocomplete: 'current-password' }"
-        >
-          <DxTextBoxButton name="toggle" location="after" :options="pwToggle" />
-          <DxValidator validation-group="login">
-            <DxRequiredRule message="비밀번호를 입력해 주세요." />
-          </DxValidator>
-        </DxTextBox>
+        <ul class="accts">
+          <li v-for="a in accounts" :key="a.key">
+            <button type="button" class="acct" :class="{ 'is-pick': a.pick }" :disabled="!!busy" @click="enter(a.account)">
+              <span class="acct__head">
+                <b>{{ a.title }}</b>
+                <span class="acct__id mono">{{ a.account }}</span>
+              </span>
+              <span class="acct__desc">{{ a.desc }}</span>
+              <span class="acct__go">{{ busy === a.account ? '들어가는 중…' : '들어가기 →' }}</span>
+            </button>
+          </li>
+        </ul>
 
         <p v-if="error" class="card__error" role="alert">{{ error }}</p>
 
-        <DxButton
-          class="card__submit"
-          text="사내 계정으로 로그인"
-          type="default"
-          width="100%"
-          :use-submit-behavior="true"
-          validation-group="login"
-          :disabled="busy"
-        />
+        <form class="direct" novalidate @submit.prevent="enter(account)">
+          <label class="field__label" for="login-account">다른 계정 직접 입력 (사내 계정 ID 또는 사번)</label>
+          <div class="direct__row">
+            <DxTextBox
+              v-model:value="account"
+              placeholder="예: gildong.hong"
+              :max-length="40"
+              :input-attr="{ id: 'login-account', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' }"
+              class="direct__input"
+            />
+            <DxButton text="들어가기" type="default" :use-submit-behavior="true" :disabled="!!busy || !account.trim()" />
+          </div>
+        </form>
 
         <p class="card__privacy">
-          비밀번호는 재직 확인에만 쓰고 저장하지 않아요. 사緣에 들어왔다는 사실도 다른 임직원에게 알려지지 않아요.
+          관리자 화면은 <span class="mono">{{ ADMIN_PATH }}</span> 주소에서 만능 계정·매칭 담당자로 들어가요.
+          입력한 내용은 이 브라우저에만 저장돼요 — 실제 개인정보는 넣지 마세요.
         </p>
-
-        <div v-if="DEV_MOCK" class="dev">
-          <p class="dev__title">테스트 운영 중 · 가짜 데이터로 동작해요 (실제 정보를 넣지 마세요)</p>
-          <div class="dev__btns">
-            <button type="button" class="dev__master" @click="fillTestAccount('MASTER')">만능 테스트 계정 (신청·하트)</button>
-            <button type="button" @click="fillTestAccount('NEW')">신청 전 계정 채우기</button>
-            <button type="button" @click="fillTestAccount('APPLIED')">신청 완료 계정 채우기</button>
-            <button type="button" @click="fillTestAccount('RETIRED')">퇴직자 계정 채우기</button>
-          </div>
-        </div>
-      </form>
+      </div>
     </section>
   </div>
 </template>
@@ -197,7 +168,7 @@ async function fillTestAccount(kind) {
   font-size: 30px;
 }
 .card__sub {
-  margin: 6px 0 22px;
+  margin: 6px 0 18px;
   color: var(--c-mute);
 }
 .field__label {
@@ -211,54 +182,80 @@ async function fillTestAccount(kind) {
   color: var(--c-crimson-deep);
   font-size: 14px;
 }
-.card__submit {
-  margin-top: 24px;
-  height: 48px;
-}
-.card__submit :deep(.dx-button-text) {
-  font-size: 15px;
-  font-weight: 600;
-}
 .card__privacy {
   margin-top: 14px;
   color: var(--c-mute);
   font-size: 13px;
 }
 
-.dev {
-  margin-top: 28px;
+.accts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.acct {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
   padding: 12px 14px;
-  border: 1px dashed var(--c-line-strong);
+  border: 1px solid var(--c-line);
   border-radius: var(--r-md);
-}
-.dev__title {
-  font-size: 12px;
-  color: var(--c-mute);
-}
-.dev__btns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-.dev__btns .dev__master {
-  border-color: var(--c-crimson);
-  color: var(--c-crimson-deep);
-  font-weight: 600;
-}
-.dev__btns button {
-  padding: 4px 10px;
-  border: 1px solid var(--c-line-strong);
-  border-radius: 999px;
   background: var(--c-surface);
-  color: var(--c-ink-2);
+  color: var(--c-ink);
   font: inherit;
-  font-size: 12.5px;
+  text-align: left;
   cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-.dev__btns button:hover {
+.acct:hover:not(:disabled) {
   border-color: var(--c-crimson);
+  box-shadow: 0 2px 10px rgba(194, 39, 76, 0.1);
+}
+.acct:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.acct.is-pick {
+  border-color: var(--c-crimson);
+}
+.acct__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.acct__id {
+  color: var(--c-mute);
+  font-size: 12px;
+}
+.acct__desc {
+  grid-column: 1;
+  color: var(--c-ink-2);
+  font-size: 13px;
+}
+.acct__go {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
   color: var(--c-crimson-deep);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.direct {
+  display: flex;
+  flex-direction: column;
+  margin-top: 18px;
+}
+.direct__row {
+  display: flex;
+  gap: 8px;
+}
+.direct__input {
+  flex: 1;
 }
 
 @media (max-width: 900px) {

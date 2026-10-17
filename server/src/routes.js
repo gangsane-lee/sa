@@ -7,14 +7,19 @@ import { api } from '../../client/src/api/core/service.js';
 import { ApiError } from '../../client/src/api/errors.js';
 import { runWithRequest } from './context.js';
 
-/** 로그인 실패 제한 — 같은 IP·계정으로 10분 안에 10번 틀리면 잠시 막는다 (사내 계정 비밀번호 대입 방지) */
-const LOGIN_LIMIT = 10;
-const LOGIN_WINDOW_MS = 10 * 60 * 1000;
-const loginFails = new Map();
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of loginFails) if (v.until < now) loginFails.delete(k);
-}, 60 * 1000).unref();
+/** SSO 확인 횟수 제한 — 같은 IP에서 1분에 30번까지 (사내 SSO 서버에 요청이 몰리지 않게) */
+const SSO_LIMIT = 30;
+const ssoHits = new Map();
+setInterval(() => ssoHits.clear(), 60 * 1000).unref();
+
+/** 화면이 넘겨준 주소창 값(SSO 로그인 페이지에서 돌아올 때의 ticket 등) — 문자열만, 개수·길이 제한 */
+const cleanQuery = (q) =>
+  Object.fromEntries(
+    Object.entries(q && typeof q === 'object' && !Array.isArray(q) ? q : {})
+      .filter(([k, v]) => typeof v === 'string' && /^[\w.-]{1,40}$/.test(k))
+      .slice(0, 20)
+      .map(([k, v]) => [k, v.slice(0, 2000)]),
+  );
 
 /** 로그인할 때 세션 ID를 새로 받는다 (로그인 전에 심어 둔 세션을 그대로 쓰는 공격 방지) */
 const regenerate = (req) => new Promise((ok, fail) => req.session.regenerate((e) => (e ? fail(e) : ok())));
@@ -69,28 +74,13 @@ export function apiRouter(store) {
   });
 
   // ── 인증 ──
-  r.post('/auth/login', h(async (req) => {
-    const key = `${req.ip}|${String(b(req).account ?? '').trim().toLowerCase()}`;
-    const f = loginFails.get(key);
-    if (f && f.n >= LOGIN_LIMIT && f.until > Date.now()) {
-      throw new ApiError(429, '로그인을 여러 번 실패했어요. 10분 뒤에 다시 시도해 주세요.', 'LOGIN_LOCKED');
-    }
-    await regenerate(req);
-    try {
-      const out = await api.auth.login(b(req).account, b(req).password);
-      loginFails.delete(key);
-      return out;
-    } catch (e) {
-      if (e?.status === 401) {
-        const cur = loginFails.get(key);
-        loginFails.set(key, { n: (cur && cur.until > Date.now() ? cur.n : 0) + 1, until: Date.now() + LOGIN_WINDOW_MS });
-      }
-      throw e;
-    }
-  }));
+  // 운영은 사내 SSO로만 들어온다 (ID/비밀번호 로그인 없음). 화면을 열 때·'다시 확인'을 누를 때 부른다
   r.post('/auth/sso', h(async (req) => {
+    const n = (ssoHits.get(req.ip) ?? 0) + 1;
+    ssoHits.set(req.ip, n);
+    if (n > SSO_LIMIT) throw new ApiError(429, '잠시 뒤에 다시 시도해 주세요.', 'SSO_TOO_MANY');
     await regenerate(req);
-    return api.auth.sso();
+    return api.auth.sso({ query: cleanQuery(b(req).query) });
   }));
   r.get('/auth/me', h(() => api.auth.me()));
   r.post('/auth/logout', h(() => api.auth.logout()));

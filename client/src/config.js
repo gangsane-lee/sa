@@ -20,7 +20,13 @@ export const isTestMode = SERVICE_MODE === 'test';
 
 /**
  * 관리자 화면 주소 — 사용자 화면에는 들어가는 버튼이 없고, 이 주소로 직접 들어간다.
- * 운영 서버에서는 server/.env 의 ADMIN_PATH 가 sayeon.config.js 로 내려와 여기에 들어온다 (기본 /changeme)
+ * 운영 빌드 때 servers.config.mjs 의 adminPath 가 sayeon.config.js 로 들어가 여기로 온다 (기본 /changeme)
  */
 const adminPath = `/${String(runtime.adminPath ?? 'changeme').replace(/^\/+|\/+$/g, '')}`;
 export const ADMIN_PATH = adminPath === '/' ? '/changeme' : adminPath;
+
+/**
+ * (선택) 사내 SSO 로그인 페이지 — 운영에서 SSO 확인이 안 된 사람에게 '사내 SSO 로그인' 버튼으로 보여준다.
+ * server/.env 의 SSO_LOGIN_PAGE 가 내려온다. {returnUrl} 자리에 지금 사緣 주소가 들어간다
+ */
+export const SSO_LOGIN_PAGE = typeof runtime.ssoLoginPage === 'string' ? runtime.ssoLoginPage : '';

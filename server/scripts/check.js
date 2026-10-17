@@ -77,31 +77,21 @@ r.section('실행 환경 (Node.js · npm · PM2)');
   else if (cmpVer(npmVer, STANDARD.npm) < 0) r.warn(`npm ${npmVer} — 운영 표준은 ${STANDARD.npm} 이에요`, { fix: [`npm install -g npm@${STANDARD.npm}`] });
   else r.ok(`npm ${npmVer}${npmVer === STANDARD.npm ? ' (운영 표준)' : ''}`);
 
-  // PM2는 pm2 명령을 부르면 백그라운드 데몬이 뜰 수 있어, 전역 설치 폴더의 package.json 으로 버전을 읽는다
-  const globalRoot = sh('npm root -g');
+  // PM2 — server/node_modules 에 들어 있다 (오프라인 서버에서도 npm ci·패키지로 함께 설치)
   let pm2Ver = null;
   try {
-    if (globalRoot) pm2Ver = JSON.parse(fs.readFileSync(path.join(globalRoot, 'pm2', 'package.json'), 'utf8')).version;
+    pm2Ver = JSON.parse(fs.readFileSync(path.join(SERVER_ROOT, 'node_modules', 'pm2', 'package.json'), 'utf8')).version;
   } catch {
     /* 없음 */
   }
-  if (process.platform === 'win32' && globalRoot && /[^\x20-\x7E]/.test(globalRoot)) {
-    const crashes = /^22\.12\./.test(process.versions.node);
-    r[crashes ? 'fail' : 'warn'](`전역 npm 폴더에 한글 등 영문이 아닌 글자가 있어요: ${globalRoot}`, {
-      reason: crashes
-        ? 'Node.js 22.12 는 이런 경로의 패키지(PM2 포함)를 불러오다 강제 종료돼요. 윈도우 사용자 이름이 한글이면 생겨요.'
-        : '일부 도구가 이런 경로에서 오동작할 수 있어요.',
-      fix: ['npm config set prefix C:\\apps\\npm-global  →  시스템 환경 변수 Path 에 C:\\apps\\npm-global 추가  →  새 창에서 npm install -g pm2@' + STANDARD.pm2],
-    });
-  }
   if (!pm2Ver) {
-    r.warn('PM2를 찾지 못했어요 (전역 npm 폴더 기준)', {
-      reason: '서버를 PM2로 띄우려면 전역 설치가 필요해요. (다른 방법으로 설치했다면 무시해도 돼요)',
-      fix: [`npm install -g pm2@${STANDARD.pm2}`],
+    r.fail('PM2 가 없어요 (server/node_modules/pm2)', {
+      reason: '서버를 PM2 로 띄울 수 없어요.',
+      fix: ['개발 서버: server 폴더에서  npm ci  /  운영 서버: 배포 패키지(api)로 다시 설치'],
     });
   } else if (pm2Ver !== STANDARD.pm2) {
-    r.warn(`PM2 ${pm2Ver} — 운영 표준은 ${STANDARD.pm2} 이에요`, { fix: [`npm install -g pm2@${STANDARD.pm2}  →  pm2 update`] });
-  } else r.ok(`PM2 ${pm2Ver} (운영 표준)`);
+    r.warn(`PM2 ${pm2Ver} — 운영 표준은 ${STANDARD.pm2} 이에요`, { fix: ['server/package.json 의 pm2 버전 확인 후 npm ci'] });
+  } else r.ok(`PM2 ${pm2Ver} (server/node_modules — 실행:  npm run pm2 -- status)`);
   r.info(`${os.type()} ${os.release()} · ${os.hostname()}`);
   const pre = preflight();
   for (const p of pre.problems.filter((x) => x.title.startsWith('설치 경로'))) r[p.fatal ? 'fail' : 'warn'](p.title, p);
@@ -109,14 +99,45 @@ r.section('실행 환경 (Node.js · npm · PM2)');
 }
 
 const sql = (await import('mssql')).default;
-const { config } = await import('../src/config.js');
+const { config, RETIRED_ENV, topology } = await import('../src/config.js');
+const { placeholdersOf } = await import('../src/sso.js');
 const { poolConfig, SAFE_DB_NAME, TABLE, __internals } = await import('../src/store.js');
 const { makeCipher, ENC_PREFIX } = await import('../src/crypto.js');
 const { explainDbError } = await import('../src/dbErrors.js');
 const { inspectTable, TABLE_FIX } = await import('./lib/dbinspect.js');
 
-// ═══ 2. 설정 파일 server/.env ═══════════════════════════
-r.section('설정 파일 server/.env');
+// ═══ 2. 서버 기준정보 servers.config.mjs ═══════════════
+r.section(`서버 기준정보 servers.config.mjs — 환경 ${topology.envName}`);
+{
+  const T = topology;
+  if (!['production', 'development'].includes(env.SAYEON_ENV ?? 'production')) {
+    r.fail(`SAYEON_ENV 값이 맞지 않아요: ${env.SAYEON_ENV}`, { fix: ['server/.env 에  SAYEON_ENV=production  (개발이면 development)'] });
+  }
+  if (!env.SAYEON_ENV) r.info('server/.env 에 SAYEON_ENV 가 없어 production 으로 봐요');
+  if (T.problems.length) {
+    for (const p of T.problems) r.fail(p, { fix: ['저장소 맨 위 servers.config.mjs 를 고친 뒤 — 개발 서버에서 다시 패키지(npm run release)'] });
+  } else {
+    r.ok(`Web  ${T.publicUrl}  (IIS · 사용자가 접속하는 주소)`);
+    r.ok(`API  ${T.apiUrl}  (이 서버 · 포트 ${T.api.port})`);
+    r.ok(`DB   ${T.db.host}:${T.db.port} / ${T.db.name}`);
+    r.ok(`화면 모드 ${T.serviceMode} · 관리자 주소 ${T.adminPath}`);
+  }
+  const RESERVED = ['/', '/login', '/apply', '/me', '/saju', '/messages', '/voc', '/privacy', '/api', '/assets', '/sayeon.config.js', '/favicon.svg', '/_deploy'];
+  if (RESERVED.includes(T.adminPath.toLowerCase()) || !/^\/[A-Za-z0-9_-]+$/.test(T.adminPath)) {
+    r.fail(`adminPath(${T.adminPath})가 사용자 화면 주소와 겹치거나 형식이 맞지 않아요`, { fix: ['servers.config.mjs 의 adminPath 를 한 단어 주소로 (예: /changeme)'] });
+  }
+  // 이 서버의 IP 가 기준정보의 API 서버와 같은지 (다른 서버에 잘못 설치하는 것 방지)
+  const myIps = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4').map((i) => i.address);
+  if (T.api.host && !T.problems.some((p) => p.includes('API 서버')) && !myIps.includes(T.api.host)) {
+    r.warn(`이 서버의 IP(${myIps.filter((i) => i !== '127.0.0.1').join(', ') || '-'})가 기준정보의 API 서버(${T.api.host})와 달라요`, {
+      reason: '다른 서버에 설치했거나, servers.config.mjs 의 IP 가 실제와 달라요.',
+      fix: ['맞는 서버인지 확인 — IP 가 바뀌었다면 servers.config.mjs 를 고쳐 다시 패키지'],
+    });
+  } else if (T.api.host) r.ok(`이 서버가 기준정보의 API 서버(${T.api.host})예요`);
+}
+
+// ═══ 2-1. 설정 파일 server/.env ═════════════════════════
+r.section('설정 파일 server/.env (비밀값)');
 const envFile = path.join(SERVER_ROOT, '.env');
 const exampleFile = path.join(SERVER_ROOT, '.env.example');
 const keysOf = (file) => {
@@ -129,59 +150,26 @@ const keysOf = (file) => {
 if (!fs.existsSync(envFile)) {
   r.fail('server/.env 가 없어요', {
     reason: '서버 주소·DB·키 설정이 없어 기본값으로만 동작해요.',
-    fix: ['server 폴더에서  copy .env.example .env  (Linux: cp .env.example .env) 후 값 채우기 — docs/GO-LIVE.md 2-2'],
+    fix: ['server 폴더에서  copy .env.example .env  (Linux: cp .env.example .env) 후 값 채우기 — docs/GO-LIVE.md 1장 D-4'],
   });
   process.exit(r.summary({ failText: 'server/.env 를 만든 뒤 다시 실행해 주세요.' }));
 }
 {
   const known = new Set([...keysOf(exampleFile), 'NODE_ENV']);
-  const unknown = keysOf(envFile).filter((k) => !known.has(k));
+  const retired = keysOf(envFile).filter((k) => RETIRED_ENV[k]);
+  for (const k of retired) r.warn(`더 이상 쓰지 않는 항목: ${k}`, { reason: RETIRED_ENV[k], fix: ['.env 에서 지워도 돼요.'] });
+  const unknown = keysOf(envFile).filter((k) => !known.has(k) && !RETIRED_ENV[k]);
   if (unknown.length) {
     r.warn(`모르는 항목: ${unknown.join(', ')}`, { reason: '오타면 그 설정은 적용되지 않아요.', fix: ['.env.example 의 항목 이름과 비교해 주세요.'] });
   }
   const isTest = config.serviceMode === 'test';
   const raw = (k) => (env[k] ?? '').trim();
 
-  // 서버
-  if (raw('PORT') && !(/^\d+$/.test(raw('PORT')) && +raw('PORT') >= 1 && +raw('PORT') <= 65535)) {
-    r.fail(`PORT 값이 숫자가 아니에요: ${raw('PORT')}`, { reason: '잘못된 값이면 3000번으로 떠요.', fix: ['PORT=3000'] });
-  } else r.ok(`주소 ${config.host}:${config.port}`);
-  let pub = null;
-  try {
-    pub = new URL(config.publicUrl);
-  } catch {
-    r.fail(`PUBLIC_URL 형식이 맞지 않아요: ${config.publicUrl}`, { fix: ['예: PUBLIC_URL=http://12.83.18.17:3000'] });
+  // 쿠키 — http(IP·DNS) 로 접속하면 COOKIE_SECURE=false
+  const https = config.publicUrl.startsWith('https:');
+  if (config.session.cookieSecure && !https) {
+    r.fail('http 로 접속하는데 COOKIE_SECURE=true 예요', { reason: '브라우저가 http 에서는 보안 쿠키를 저장하지 않아 로그인해도 바로 풀려요.', fix: ['COOKIE_SECURE=false (Web 서버에 https 를 붙이면 true)'] });
   }
-  if (pub) {
-    const pubPort = pub.port ? +pub.port : pub.protocol === 'https:' ? 443 : 80;
-    if (pubPort !== config.port && !config.trustProxy) {
-      r.warn(`PUBLIC_URL 포트(${pubPort})와 PORT(${config.port})가 달라요`, {
-        reason: '앞단 프록시 없이 운영하면 사람들이 접속하는 주소와 서버 포트가 같아야 해요.',
-        fix: [`PUBLIC_URL=http://12.83.18.17:${config.port}  (프록시를 쓰면 TRUST_PROXY=true)`],
-      });
-    } else r.ok(`접속 주소 ${config.publicUrl}`);
-    if (/^(localhost|127\.)/.test(pub.hostname) && !isTest) r.warn('PUBLIC_URL 이 localhost 예요', { fix: ['PUBLIC_URL=http://12.83.18.17:3000'] });
-    const https = pub.protocol === 'https:';
-    if (config.session.cookieSecure && !https) {
-      r.fail('http 로 접속하는데 COOKIE_SECURE=true 예요', {
-        reason: '브라우저가 http 에서는 보안 쿠키를 저장하지 않아 로그인해도 바로 풀려요.',
-        fix: ['COOKIE_SECURE=false (https 를 붙이면 true)'],
-      });
-    } else if (https && !config.session.cookieSecure) {
-      r.warn('https 로 접속하는데 COOKIE_SECURE=false 예요', { fix: ['COOKIE_SECURE=true'] });
-    }
-  }
-
-  // 화면 운영
-  if (!['test', 'open'].includes(raw('SERVICE_MODE') || 'open')) {
-    r.fail(`SERVICE_MODE 값이 맞지 않아요: ${raw('SERVICE_MODE')}`, { reason: 'test 가 아니면 모두 open 으로 동작해요.', fix: ['SERVICE_MODE=open (정식) 또는 test (시연)'] });
-  } else r.ok(`화면 모드 ${config.serviceMode}${isTest ? ' — 시연: 데이터가 각자 브라우저에만 저장되고 DB를 쓰지 않아요' : ' — 정식 운영'}`);
-  const RESERVED = ['/', '/login', '/apply', '/me', '/saju', '/messages', '/voc', '/privacy', '/api', '/assets', '/sayeon.config.js', '/favicon.svg'];
-  if (!/^\/?[A-Za-z0-9_-]+\/?$/.test(raw('ADMIN_PATH') || '/admin')) {
-    r.fail(`ADMIN_PATH 는 한 단어 경로여야 해요: ${raw('ADMIN_PATH')}`, { fix: ['예: ADMIN_PATH=/changeme (영문·숫자·-·_)'] });
-  } else if (RESERVED.includes(config.adminPath.toLowerCase())) {
-    r.fail(`ADMIN_PATH(${config.adminPath})가 사용자 화면 주소와 겹쳐요`, { fix: ['겹치지 않는 주소로 바꿔 주세요. 예: /changeme'] });
-  } else r.ok(`관리자 주소 ${config.adminPath}`);
 
   // 세션 · 암호화
   if (config.session.secretMissing) {
@@ -204,13 +192,12 @@ if (!fs.existsSync(envFile)) {
   } else if (config.store === 'memory') {
     r[isTest ? 'warn' : 'fail']('STORE=memory — 서버를 다시 켜면 데이터가 모두 사라져요', { fix: ['운영은 STORE=mssql'] });
   }
-  for (const k of ['DB_ENCRYPT', 'DB_TRUST_CERT', 'DB_AUTO_CREATE', 'COOKIE_SECURE', 'TRUST_PROXY']) {
+  for (const k of ['DB_ENCRYPT', 'DB_TRUST_CERT', 'DB_AUTO_CREATE', 'COOKIE_SECURE']) {
     if (raw(k) && !BOOL_WORDS.includes(raw(k).toLowerCase())) r.warn(`${k} 값은 true 또는 false 로 적어 주세요: ${raw(k)}`, { reason: '알 수 없는 값은 false 로 처리돼요.' });
   }
   if (raw('DB_ADMIN_USER') || raw('DB_ADMIN_PASSWORD')) {
     r.warn('DB_ADMIN_USER · DB_ADMIN_PASSWORD 가 남아 있어요', { reason: '관리 계정 비밀번호는 DB 준비(npm run db:setup) 때만 필요해요.', fix: ['DB 준비가 끝났으면 .env 에서 지워 주세요.'] });
   }
-  if (raw('SSO_TIMEOUT_MS') && !/^\d+$/.test(raw('SSO_TIMEOUT_MS'))) r.warn(`SSO_TIMEOUT_MS 는 숫자(밀리초)로: ${raw('SSO_TIMEOUT_MS')}`);
 }
 
 // ═══ 3. 패키지 ═════════════════════════════════════════
@@ -242,7 +229,8 @@ r.section('패키지 (npm ci)');
 
 // ═══ 4. 화면 빌드 ══════════════════════════════════════
 r.section('화면 빌드 (client/dist)');
-{
+if (!config.clientDist) r.info('이 서버는 API 만 맡아요 — 화면은 Web 서버(IIS)가 내보내요. 화면 점검은 Web 서버의 _deploy\\check-web.ps1');
+else {
   const dist = config.clientDist;
   const indexHtml = path.join(dist, 'index.html');
   if (!fs.existsSync(indexHtml)) {
@@ -286,7 +274,7 @@ r.section('화면 빌드 (client/dist)');
     if (!key || key === 'TRIAL') {
       r.warn('DevExtreme 라이선스 키 파일이 없어요', {
         reason: '화면 맨 위에 평가판 배너가 떠요.',
-        fix: ['키 파일(client/src/.devextreme/license-key.js)을 만들거나 작업 PC에서 복사한 뒤  npm run build — docs/GO-LIVE.md 5-2'],
+        fix: ['키 파일(client/src/.devextreme/license-key.js)을 만들거나 작업 PC에서 복사한 뒤  npm run build — docs/GO-LIVE.md 8-1'],
       });
     } else if (!bundle.includes(key.slice(0, 40))) {
       r.warn('라이선스 키 파일은 있는데 빌드에 들어가지 않았어요', { reason: '키 파일을 만들기 전에 빌드했어요.', fix: ['client 폴더에서  npm run build'] });
@@ -310,11 +298,11 @@ r.section(`포트 ${config.port}`);
     if (health?.ok) r.ok(`사緣 서버가 이미 이 포트에서 실행 중이에요 (저장소 ${health.store})`);
     else {
       r.fail(`다른 프로그램이 ${config.port}번 포트를 쓰고 있어요`, {
-        fix: [`어떤 프로그램인지 확인: netstat -ano | findstr :${config.port}  (Linux: ss -ltnp | grep ${config.port})`, '그 프로그램을 끄거나 .env 의 PORT 를 바꿔 주세요 (방화벽도 함께)'],
+        fix: [`어떤 프로그램인지 확인: netstat -ano | findstr :${config.port}  (Linux: ss -ltnp | grep ${config.port})`, '그 프로그램을 끄거나 servers.config.mjs 의 api.port 를 바꿔 주세요 (방화벽·Web 서버 web.config 도 함께 — 다시 패키지)'],
       });
     }
   } else if (state === 'EACCES') r.fail(`${config.port}번 포트를 열 권한이 없어요`, { fix: ['1024 이상 포트(예: 3000)를 쓰거나 관리자 권한으로 실행해 주세요.'] });
-  else if (state === 'EADDRNOTAVAIL') r.fail(`HOST(${config.host}) 주소가 이 서버에 없어요`, { fix: ['HOST=0.0.0.0'] });
+  else if (state === 'EADDRNOTAVAIL') r.fail(`HOST(${config.host}) 주소가 이 서버에 없어요`, { fix: ['서버 네트워크 설정을 확인해 주세요'] });
   else r.warn(`포트 확인 실패: ${state}`);
 }
 
@@ -329,7 +317,7 @@ else {
   let pool;
   try {
     if (!c.user || !c.password) throw Object.assign(new Error('skip'), { skip: 'DB_USER · DB_PASSWORD 를 채워 주세요.' });
-    if (!SAFE_DB_NAME.test(c.database)) throw Object.assign(new Error('skip'), { skip: `DB_NAME 은 영문·숫자·_ 만: ${c.database}` });
+    if (!SAFE_DB_NAME.test(c.database)) throw Object.assign(new Error('skip'), { skip: `DB 이름(servers.config.mjs 의 db.name)은 영문·숫자·_ 만: ${c.database}` });
     r.info(`${c.server}:${c.port} · DB ${c.database} · 계정 ${c.user}`);
 
     // ① 네트워크 — 로그인 전에 포트가 열려 있는지만 본다 (원인을 나누기 위해)
@@ -356,7 +344,7 @@ else {
     if (s.sysadmin) {
       r.warn(`${c.user} 은(는) sysadmin(최고 관리자) 계정이에요`, {
         reason: '서버가 쓰는 계정 비밀번호가 새면 DB 서버 전체가 위험해요.',
-        fix: ['전용 계정 권장: npm run db:setup (docs/GO-LIVE.md 3단계)'],
+        fix: ['전용 계정 권장: npm run db:setup (docs/GO-LIVE.md 1장 E)'],
       });
     }
 
@@ -476,61 +464,103 @@ r.section('관리자 계정 (server/config/admins.js)');
   }
 }
 
-// ═══ 8. 사내 로그인 (SSO / AD) ══════════════════════════
-r.section('사내 로그인 (SSO / AD)');
+// ═══ 8. 사내 로그인 (AD SSO) ════════════════════════════
+r.section(`사내 로그인 — ${{ iis: 'IIS Windows 인증 → AD → 사내 인사 API', url: 'SSO 주소', off: '연결 안 됨' }[config.sso.mode]}`);
 {
   const S = config.sso;
   const isTest = config.serviceMode === 'test';
-  if (isTest) r.info('test 모드 — 화면이 가짜 계정으로 로그인해요. 아래는 정식 오픈 때 필요한 항목이에요');
+  if (isTest) r.info('test 모드 — 화면이 테스트 계정으로 들어가요. 아래는 정식 운영 때 필요한 항목이에요');
   const severity = isTest ? 'warn' : 'fail';
-  if (!['off', 'header', 'api'].includes(S.mode)) r.fail(`SSO_MODE 값이 맞지 않아요: ${S.mode}`, { fix: ['SSO_MODE=off · header · api 중 하나'] });
-  else r.ok(`SSO_MODE=${S.mode}`);
-  if (!S.loginUrl && S.mode === 'off') {
-    r[severity]('로그인 방법이 하나도 연결되지 않았어요', {
-      reason: 'AUTH_LOGIN_URL 이 비어 있고 SSO 도 꺼져 있어 아무도 로그인할 수 없어요.',
-      fix: ['AUTH_LOGIN_URL 에 사내 ID/비밀번호 확인 API 주소를 넣거나 SSO_MODE 를 설정 — docs/GO-LIVE.md 4-2'],
-    });
-  } else if (!S.loginUrl) {
-    r.warn('AUTH_LOGIN_URL 이 비어 있어요', { reason: 'SSO 가 실패했을 때 쓸 로그인 화면이 동작하지 않아요.' });
-  }
-  if (S.mode === 'header') {
-    if (!S.proxySecret) r[severity]('SSO_MODE=header 인데 SSO_PROXY_SECRET 이 비어 있어요', { reason: '헤더를 꾸민 요청을 막을 수 없어 SSO 자동 로그인이 꺼져 있어요.', fix: ['앞단 프록시와 같은 비밀값을 넣어 주세요.'] });
-    if (!S.lookupUrl) r.warn('HR_LOOKUP_URL 이 비어 있어요', { reason: '헤더의 사번만으로 들어와 이름·성별·사업부가 비어요.' });
-  }
-  if (S.mode === 'api') {
-    if (!S.tokenCookie || !S.verifyUrl) r[severity]('SSO_MODE=api 에 필요한 값이 비어 있어요', { fix: ['SSO_TOKEN_COOKIE · SSO_VERIFY_URL'] });
-    if (/^\d+\.\d+\.\d+\.\d+$/.test(URL.canParse(config.publicUrl) ? new URL(config.publicUrl).hostname : '')) {
-      r.warn('IP 주소로 접속하면 사내 SSO 쿠키가 전달되지 않아요', { fix: ['사내 DNS 이름을 받아 그 주소로 접속해 주세요 (PUBLIC_URL 도 함께)'] });
-    }
-  }
-  if (S.lookupUrl && !/\{(empNo|id)\}/.test(S.lookupUrl)) r.warn('HR_LOOKUP_URL 에 {empNo} 자리가 없어요', { fix: ['예: https://hr.사내/api/emp/{empNo}'] });
-  if (S.searchUrl && !/\{q\}/.test(S.searchUrl)) r.warn('HR_SEARCH_URL 에 {q} 자리가 없어요');
+  const urls = [];
 
-  const urls = [['AUTH_LOGIN_URL', S.loginUrl], ['SSO_VERIFY_URL', S.verifyUrl], ['HR_LOOKUP_URL', S.lookupUrl], ['HR_SEARCH_URL', S.searchUrl]].filter(([, v]) => v);
+  if (S.mode === 'off') {
+    r[severity]('사내 로그인이 꺼져 있어요 (servers.config.mjs 의 sso.mode)', { reason: '정식 운영은 사내 SSO로만 들어와요. 모두 안내 화면에서 멈춰요.', fix: ["servers.config.mjs 의 sso.mode 를 'iis' 로"] });
+  } else if (S.mode === 'iis') {
+    r.ok(`로그인 헤더 ${S.headerName} 는 Web 서버(${config.trustedProxies.join(', ')})에서 온 요청만 믿어요`);
+    if (S.devUser) r.warn(`개발 시험 계정 DEV_SSO_USER=${S.devUser} 가 켜져 있어요`, { reason: 'IIS 없이 이 계정으로 로그인돼요 (development 환경에서만).', fix: ['시험이 끝나면 server/.env 에서 지워 주세요.'] });
+    // 도메인 · AD 조회
+    if (S.adLookup) {
+      if (process.platform !== 'win32') r.fail('AD 조회는 Windows 서버에서만 돼요', { fix: ["servers.config.mjs 의 sso.adLookup 을 false 로 하거나 Windows 서버에서 실행"] });
+      else {
+        const dom = sh('powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem) | ForEach-Object { \'{0}|{1}\' -f $_.PartOfDomain, $_.Domain }"');
+        const [joined, domName] = String(dom ?? '').split('|');
+        if (joined !== 'True') {
+          r[severity]('이 서버가 도메인에 가입돼 있지 않아요', {
+            reason: 'AD 에서 사번·이름을 읽을 수 없어요 (sso.adLookup).',
+            fix: [`IT 부서에 ${S.domain} 도메인 가입 요청`, "또는 servers.config.mjs 의 sso.adLookup: false + hrApi 가 {id} 로 조회"],
+          });
+        } else {
+          r.ok(`도메인 가입: ${domName}`);
+          // 지금 이 명령을 실행한 계정으로 AD 조회를 시험한다 (PM2 도 같은 계정으로 돌아야 한다)
+          const who = `${env.USERDOMAIN ?? ''}\\${env.USERNAME ?? ''}`;
+          if ((env.USERDOMAIN ?? '').toUpperCase() !== S.domain) {
+            r.warn(`지금 계정(${who})이 ${S.domain} 도메인 계정이 아니에요`, {
+              reason: '서버(PM2)를 로컬 계정으로 돌리면 AD 를 조회하지 못할 수 있어요.',
+              fix: [`PM2 는 ${S.domain} 도메인 서비스 계정으로 실행 — 확인:  npm run sso:test -- --user 회사아이디`],
+            });
+          } else {
+            try {
+              const { resolveAccount } = await import('../src/sso.js');
+              const res = await resolveAccount(env.USERNAME, S.domain);
+              if (res.ad && Object.keys(res.ad).length) {
+                r.ok(`AD 조회 성공 (${who}) — 읽은 속성: ${Object.keys(res.ad).join(', ')}`);
+                if (!res.adProfile?.empNo) r.warn('AD 에 사번(employeeID·employeeNumber)이 없어요', { reason: "hrApi.body 에 {empNo} 를 쓰면 확인이 안 돼요.", fix: ["사번 속성 이름을 알려 주거나 hrApi.body 를 {id} 로"] });
+              } else r.warn(`AD 에서 ${who} 를 찾지 못했어요`, { reason: res.reason });
+            } catch (e) {
+              r.fail('AD 조회 실패', { reason: e.message, fix: ['npm run sso:test -- --user 회사아이디  로 자세히 확인'] });
+            }
+          }
+        }
+      }
+    } else r.info('AD 조회 안 함 (sso.adLookup: false)');
+    // 사내 인사 API
+    if (S.hrApi.url) {
+      if (!URL.canParse(S.hrApi.url.replace(/\{[^}]*\}/g, 'x'))) r.fail(`hrApi.url 형식이 맞지 않아요: ${S.hrApi.url}`);
+      else {
+        r.ok(`사내 인사 API ${S.hrApi.method} ${S.hrApi.url} · 본문 ${JSON.stringify(S.hrApi.body)}`);
+        urls.push(['사내 인사 API', S.hrApi.url]);
+      }
+      if (JSON.stringify(S.hrApi.body).includes('{empNo}') && !S.adLookup) r.fail('hrApi.body 가 {empNo} 를 쓰는데 AD 조회가 꺼져 있어요', { fix: ['sso.adLookup: true 또는 body 를 {id} 로'] });
+    } else if (!S.adLookup) {
+      r[severity]('AD 조회도 사내 인사 API 도 없어요', { reason: '계정 ID 만으로 들어와 이름·사업부가 비어요.', fix: ['servers.config.mjs 의 sso.adLookup 또는 sso.hrApi.url'] });
+    } else r.info('사내 인사 API 없음 — AD 정보만 써요 (휴직자는 AD 로 구분되지 않을 수 있어요)');
+    r.info('실제 확인:  npm run sso:test -- --user 회사아이디');
+  } else if (S.mode === 'url') {
+    const holes = placeholdersOf(S.url);
+    if (!URL.canParse(S.url.replace(/\{[^}]*\}/g, 'x'))) r.fail(`sso.url 형식이 맞지 않아요: ${S.url}`);
+    else {
+      r.ok(`SSO 주소 ${S.url}`);
+      urls.push(['SSO 주소', S.url]);
+    }
+    if (!holes.length) r.warn('sso.url 에 사용자 구분 값({ip} · {cookie:이름} · {query:이름})이 없어요');
+  }
+  if (S.searchUrl) urls.push(['임직원 검색 API', S.searchUrl]);
+
   for (const [name, value] of urls) {
+    if (args.has('--skip-net')) continue;
     let u;
     try {
-      u = new URL(value.replace(/\{(empNo|id|q)\}/g, 'x'));
+      u = new URL(value.replace(/\{[^}]*\}/g, 'x'));
     } catch {
-      r.fail(`${name} 형식이 맞지 않아요: ${value}`);
       continue;
     }
-    if (args.has('--skip-net')) continue;
     const port = +u.port || (u.protocol === 'https:' ? 443 : 80);
     const p = await tcpProbe(u.hostname, port, 4000);
     if (p.ok) r.ok(`${name}: ${u.hostname}:${port} 연결 가능`);
-    else {
-      r.warn(`${name}: ${u.hostname}:${port} 에 연결하지 못했어요 (${p.code})`, {
-        reason: p.code === 'ENOTFOUND' ? '주소 이름을 찾지 못했어요.' : '방화벽에 막혔거나 주소가 틀렸을 수 있어요.',
-        fix: ['API 서버(12.83.18.17)에서 사내 인증 서버로 나가는 방화벽을 확인해 주세요.'],
-      });
-    }
+    else r.warn(`${name}: ${u.hostname}:${port} 에 연결하지 못했어요 (${p.code})`, { reason: '방화벽에 막혔거나 주소가 틀렸을 수 있어요.', fix: [`API 서버(${topology.api.host}) → ${u.hostname}:${port} 방화벽 확인`] });
+  }
+
+  // Web 서버 → 이 서버 연결은 Web 서버의 check-web.ps1 이 확인한다. 여기서는 Web 서버가 살아 있는지만
+  if (!args.has('--skip-net') && !topology.problems.length) {
+    const w = await tcpProbe(topology.web.host, topology.web.port, 3000);
+    if (w.ok) r.ok(`Web 서버 ${topology.web.host}:${topology.web.port} 응답`);
+    else r.warn(`Web 서버 ${topology.web.host}:${topology.web.port} 에 연결하지 못했어요 (${w.code})`, { reason: 'Web 서버(IIS)가 아직 준비 전이거나 방화벽이에요. API 서버만 먼저 설치할 때는 괜찮아요.' });
   }
 }
 
 process.exit(
   r.summary({
-    okText: '시작할 준비가 됐어요 →  pm2 start ecosystem.config.cjs  (이미 실행 중이면  pm2 restart sayeon-api)',
+    okText: `시작할 준비가 됐어요 →  npm run pm2 -- start ecosystem.config.cjs  (이미 실행 중이면  npm run pm2 -- restart ${topology.envName === 'development' ? 'sayeon-api-dev' : 'sayeon-api'})`,
     failText: '✖ 항목을 고친 뒤 다시  npm run check  해 주세요. (자세한 순서: docs/GO-LIVE.md)',
   }),
 );

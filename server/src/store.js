@@ -172,7 +172,7 @@ async function mssqlStore(c, cipher) {
     throw new DbSetupError({ title: 'DB_USER가 비어 있어요', reason: 'server/.env 에 DB 계정이 없어요.', fix: ['server/.env 의 DB_USER · DB_PASSWORD 를 채워 주세요.'] });
   }
   if (!SAFE_DB_NAME.test(c.database)) {
-    throw new DbSetupError({ title: 'DB_NAME 형식이 맞지 않아요', reason: `${c.database}`, fix: ['DB_NAME 에는 영문·숫자·_ 만 쓸 수 있어요. (예: SAYEON)'] });
+    throw new DbSetupError({ title: 'DB 이름 형식이 맞지 않아요', reason: `${c.database}`, fix: ['servers.config.mjs 의 db.name 에는 영문·숫자·_ 만 쓸 수 있어요. (예: sasystem)'] });
   }
   if (c.autoCreate) await ensureDatabase(c);
   const pool = await step(c, () => new sql.ConnectionPool(poolConfig(c, c.database)).connect());

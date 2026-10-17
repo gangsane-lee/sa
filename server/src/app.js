@@ -1,6 +1,6 @@
 /**
  * Express 앱 조립 — 서비스(업무 규칙)에 저장소·세션·사내 인증·관리자 확인을 연결하고,
- * /api 와 화면(client/dist)을 한 서버에서 함께 내보낸다.
+ * /api 를 내보낸다. 화면은 보통 Web 서버(IIS)가 내보내고, CLIENT_DIST 를 정하면 여기서도 내보낸다.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -42,7 +42,8 @@ export async function createApp({ config, store, directory, admin }) {
 
   const app = express();
   app.disable('x-powered-by');
-  if (config.trustProxy) app.set('trust proxy', 1);
+  // Web 서버(IIS)에서 온 요청이면 X-Forwarded-For 의 사용자 IP 를 req.ip 로 쓴다
+  if (config.trustedProxies?.length) app.set('trust proxy', config.trustedProxies);
 
   app.use(
     helmet({
@@ -87,21 +88,29 @@ export async function createApp({ config, store, directory, admin }) {
   // 화면 운영 설정 — .env 값으로 만들어 내려준다 (캐시 금지)
   app.get('/sayeon.config.js', (req, res) => {
     res.set('Cache-Control', 'no-store').type('application/javascript');
-    res.send(`window.SAYEON_CONFIG = ${JSON.stringify({ mode: config.serviceMode, adminPath: config.adminPath })};\n`);
+    const runtime = { mode: config.serviceMode, adminPath: config.adminPath, ...(config.sso.loginPage && { ssoLoginPage: config.sso.loginPage }) };
+    res.send(`window.SAYEON_CONFIG = ${JSON.stringify(runtime)};\n`);
   });
 
   app.use('/api', apiRouter(store));
 
-  // 화면 (vite build 결과)
-  const indexHtml = path.join(config.clientDist, 'index.html');
-  app.use(express.static(config.clientDist, { index: false, maxAge: '7d', immutable: false }));
-  app.use((req, res, next) => {
-    if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
-    if (!fs.existsSync(indexHtml)) {
-      return res.status(503).type('text/plain; charset=utf-8').send('화면 빌드(client/dist)가 없어요. client 폴더에서 npm run build 를 먼저 실행해 주세요.');
-    }
-    res.set('Cache-Control', 'no-cache').sendFile(indexHtml);
-  });
+  // 화면 (vite build 결과) — CLIENT_DIST 를 정했을 때만. 보통은 Web 서버(IIS)가 내보낸다
+  if (config.clientDist) {
+    const indexHtml = path.join(config.clientDist, 'index.html');
+    app.use(express.static(config.clientDist, { index: false, maxAge: '7d', immutable: false }));
+    app.use((req, res, next) => {
+      if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
+      if (!fs.existsSync(indexHtml)) {
+        return res.status(503).type('text/plain; charset=utf-8').send('화면 빌드(client/dist)가 없어요. client 폴더에서 npm run build 를 먼저 실행해 주세요.');
+      }
+      res.set('Cache-Control', 'no-cache').sendFile(indexHtml);
+    });
+  } else {
+    app.use((req, res, next) => {
+      if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
+      res.status(404).type('text/plain; charset=utf-8').send(`사緣 API 서버예요. 화면은 Web 서버(${config.publicUrl})에서 열어 주세요.`);
+    });
+  }
 
   return app;
 }

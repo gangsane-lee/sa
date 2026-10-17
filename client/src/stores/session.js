@@ -11,10 +11,39 @@ export const session = reactive({
   user: null,
   adminExpiresAt: 0,
   restored: false,
+  /** 운영: 마지막 SSO 확인이 안 된 이유 { code, message } — 안내 화면(SsoGateView)이 보여준다 */
+  ssoError: null,
   get isAdmin() {
     return this.adminExpiresAt > Date.now();
   },
 });
+
+/** 주소창의 값 — SSO 로그인 페이지에서 돌아올 때 붙은 ticket 등을 서버에 넘긴다 */
+const pageQuery = () => {
+  try {
+    return Object.fromEntries(new URLSearchParams(window.location.search));
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * 운영(open): 사내 SSO로 임직원을 확인한다. 인사정보가 오면 바로 들어오고, 아니면 ssoError 에 이유를 남긴다
+ * @returns {Promise<boolean>} 확인됐는지
+ */
+export async function ssoLogin() {
+  try {
+    const r = await api.auth.sso({ query: pageQuery() });
+    session.user = r.user;
+    session.adminExpiresAt = 0;
+    session.ssoError = null;
+    return true;
+  } catch (e) {
+    session.user = null;
+    session.ssoError = { code: e.code ?? (e.status === 0 ? 'NETWORK' : 'SSO_FAILED'), message: e.message };
+    return false;
+  }
+}
 
 export async function restoreSession() {
   if (session.restored) return;
@@ -25,16 +54,9 @@ export async function restoreSession() {
   } catch {
     session.user = null;
     session.adminExpiresAt = 0;
-    // 정식 오픈: 사내 인사정보(SSO)로 인증되면 로그인 화면 없이 바로 들어온다. 실패하면 로그인 화면으로
-    if (!isTestMode && api.auth.sso) {
-      try {
-        const r = await api.auth.sso();
-        session.user = r.user;
-        session.adminExpiresAt = 0;
-      } catch {
-        /* SSO 미연동·실패 → 로그인 화면 */
-      }
-    }
+    // 정식 운영: 로그인 화면 없이 사내 SSO로만 들어온다. 확인되면 바로 홈, 아니면 안내 화면
+    // test 모드: 테스트 계정 로그인 화면
+    if (!isTestMode) await ssoLogin();
   } finally {
     session.restored = true;
   }
@@ -54,6 +76,7 @@ export async function refreshUser() {
   }
 }
 
+/** test 모드: 테스트 계정 로그인 (운영은 ssoLogin) */
 export async function login(account, password) {
   const r = await api.auth.login(account, password);
   session.user = r.user;
@@ -67,6 +90,8 @@ export async function logout() {
   } finally {
     session.user = null;
     session.adminExpiresAt = 0;
+    // 운영: 로그아웃한 뒤에는 SSO로 바로 다시 들어가지 않고 안내 화면에서 '다시 들어가기'를 누르게 한다
+    session.ssoError = isTestMode ? null : { code: 'LOGGED_OUT', message: '로그아웃했어요.' };
     // '곧 매칭이 시작돼요' 팝업은 로그인할 때마다 1번 — 같은 탭에서 다른 계정으로 다시 들어와도 보이게 표시를 지운다
     try {
       sessionStorage.removeItem('sayeon.gathering.shown');

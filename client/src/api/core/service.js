@@ -728,12 +728,15 @@ export const api = {
       return startSession(profile);
     },
 
-    /** 사내 SSO(통합 인증) — 로그인 화면 없이 요청 정보로 임직원을 확인한다 */
-    async sso() {
+    /**
+     * 사내 SSO — 로그인 화면 없이 요청 정보로 임직원을 확인한다 (운영은 이 방법으로만 들어온다)
+     * @param {{ query?: Record<string,string> }} [hint] 주소창의 값 (SSO 로그인 페이지에서 돌아올 때 붙은 ticket 등)
+     */
+    async sso(hint = {}) {
       await wait();
       if (!A.directory.identify) throw new ApiError(501, '사내 SSO가 연결되지 않았어요.', 'SSO_DISABLED');
-      const profile = await A.directory.identify();
-      if (!profile) throw new ApiError(401, '사내 SSO로 확인되지 않았어요. 사내 계정으로 로그인해 주세요.', 'SSO_FAILED');
+      const profile = await A.directory.identify(hint);
+      if (!profile) throw new ApiError(401, '사내 AD SSO로 확인되지 않았어요.', 'SSO_FAILED');
       return startSession(profile);
     },
 

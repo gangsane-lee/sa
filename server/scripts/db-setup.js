@@ -49,8 +49,8 @@ const separateApp = Boolean(c.adminUser) && c.adminUser.toLowerCase() !== c.user
 {
   let bad = false;
   if (config.store !== 'mssql') r.warn(`STORE=${config.store} — 서버는 DB를 쓰지 않는 설정이에요`, { fix: ['운영에서는 STORE=mssql'] });
-  if (!c.server) (bad = true), r.fail('DB_HOST 가 비어 있어요', { fix: ['DB_HOST=10.166.101.127'] });
-  if (!SAFE_DB_NAME.test(c.database)) (bad = true), r.fail(`DB_NAME 형식이 맞지 않아요: ${c.database}`, { fix: ['영문·숫자·_ 만 (예: SAYEON)'] });
+  if (!c.server) (bad = true), r.fail('DB 서버 주소가 비어 있어요', { fix: ['servers.config.mjs 의 db.host'] });
+  if (!SAFE_DB_NAME.test(c.database)) (bad = true), r.fail(`DB 이름 형식이 맞지 않아요: ${c.database}`, { fix: ['servers.config.mjs 의 db.name — 영문·숫자·_ 만 (예: sasystem)'] });
   if (!c.user) (bad = true), r.fail('DB_USER(앱 계정)가 비어 있어요', { fix: ['예: DB_USER=sayeon_app'] });
   else if (!SAFE_LOGIN.test(c.user)) (bad = true), r.fail(`DB_USER 형식이 맞지 않아요: ${c.user}`, { fix: ['영문·숫자·_ 만 쓸 수 있어요'] });
   if (!c.password) (bad = true), r.fail('DB_PASSWORD 가 비어 있어요');

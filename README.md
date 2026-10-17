@@ -4,50 +4,66 @@
 
 | 문서 | 내용 |
 |---|---|
-| **[docs/GO-LIVE.md](docs/GO-LIVE.md)** | **운영 전환 가이드** — 설치 · DB(계정·권한·테이블) · server · client 빌드 · 점검 · PM2 · 시연→정식 전환 · IP·API·기준정보 변경 · 문제 해결. 배포 절차는 이 문서에만 있다 |
+| **[docs/GO-LIVE.md](docs/GO-LIVE.md)** | **운영 가이드** — 서버 구성 · 확인 요청 목록 · 최초 배포(단계별 확인) · 기능 추가 배포 · 운영 중 변경 · 사내 로그인 · 점검 명령 읽는 법. 배포 절차는 이 문서에만 있다 |
 | [docs/DESIGN.md](docs/DESIGN.md) | 설계서 — 화면 · 데이터 · API · 매칭 규칙 · 보안 |
 
 ```
+servers.config.mjs  ★ 서버 기준정보(마스터) — Web·API·DB·개발 서버 주소, 포트, DB 이름, 관리자 주소, 로그인 방식
 client/   화면 (Vue 3 + DevExtreme) + 업무 규칙(client/src/api/core/service.js — 서버와 함께 씀)
-server/   API 서버 (Node.js + Express + MSSQL, PM2) — 화면(client/dist)도 함께 내보낸다
-docs/     운영 전환 가이드 · 설계서
+server/   API 서버 (Node.js + Express + MSSQL, PM2 내장)
+tools/    기준정보 읽기(topology.mjs) · 배포 패키지 만들기(release.mjs)
+docs/     운영 가이드 · 설계서
 ```
 
 ## 운영 한눈에
 
-| | |
-|---|---|
-| 웹 화면 + API | `12.83.18.17` — 사용자 `http://12.83.18.17:3000`, 관리자 `http://12.83.18.17:3000/changeme` |
-| DB | `10.166.101.127` — MSSQL, `SAYEON.dbo.SA_DOC` |
-| 운영 표준 버전 | Node.js **22.12.0** · npm **10.9.0** · PM2 **5.3.0** |
-| ⚠ 설치 경로 | 영문·숫자만 (예: `C:\apps\sa`) — Node.js 22.12.0은 Windows 한글 경로에서 강제 종료된다 |
+| 역할 | 주소 (`servers.config.mjs`) | 하는 일 |
+|---|---|---|
+| 개발 서버 (인터넷 됨) | `12.123.321.13` | 개발·시험, 빌드와 배포 패키지 만들기 |
+| Web 배포 운영 서버 | `10.123.321.12:8282` | IIS — 화면 · Windows 인증(AD SSO) · `/api` 를 API 서버로 |
+| API 배포 운영/개발 서버 | `12.83.18.17:8292` (개발 `:8293`) | Node.js + PM2 — AD 조회 · 사내 인사 API · DB |
+| DB 서버 | `10.166.101.127` | MSSQL `sasystem` (개발 `sasystem_dev`) |
+
+지금 IP 는 가짜다(`321` 은 IP 로 쓸 수 없음 — 서버·빌드·점검이 막는다). 운영 표준: Node.js **22.12.0** · npm **10.9.0** · PM2 **5.3.0**(서버 패키지에 포함). 설치 경로는 **영문만**(예: `C:\apps\sa`).
 
 ```powershell
+# 개발 서버 — 배포 패키지 만들기 (빌드 · 패키지 · 패키지 점검)
 cd C:\apps\sa\server
-npm run check        # 배포 점검 — 문제마다 원인·해결을 보여준다
-npm run db:setup     # DB · 앱 계정 · 권한 · 테이블 준비 (여러 번 실행해도 안전)
+npm run release
+
+# API 서버 — 백업 → 교체 → 점검 → 시작 → 상태 확인 (실패하면 자동으로 되돌림)
+powershell -ExecutionPolicy Bypass -File <패키지>\api\_deploy\deploy-api.ps1
+
+# Web 서버 — 백업 → 교체 → IIS·파일·연결·로그인 점검
+powershell -ExecutionPolicy Bypass -File <패키지>\web\_deploy\deploy-web.ps1 -SitePath D:\sites\sayeon
+
+# API 서버에서 따로 돌리는 점검
+npm run check                          # 서버 기준정보 · .env · DB · 관리자 · 사내 로그인
+npm run db:setup                       # DB · 앱 계정 · 권한 · 테이블 (여러 번 실행해도 안전)
+npm run sso:test -- --user 회사아이디   # AD 조회 → 사내 인사 API → 사緣에 들어올 정보
 ```
 
 ## ★ 고칠 곳 한눈에
 
 | 바꾸고 싶은 것 | 파일 |
 |---|---|
-| API 서버 주소·포트, DB 서버·계정·비밀번호, 세션·암호화 키, 관리자 주소, 화면 모드(test/open) | **`server/.env`** (설명: `server/.env.example`) |
-| 관리자 계정(사번·사내 계정 ID)과 관리자 비밀번호 | **`server/config/admins.js`** (예시: `admins.example.js`) — 고치면 3초 안에 반영 |
-| 사내 AD/SSO 연동 (인증 API 호출, 응답 필드 이름, 사업부 이름 → 코드) | **`server/src/sso.js`** + `.env`의 `SSO_*`·`AUTH_LOGIN_URL`·`HR_*` |
+| 서버 IP·포트, DB 서버·이름, 관리자 주소, 정식/시연, 사내 로그인 방식·인사 API | **`servers.config.mjs`** (개발 서버에서 고쳐 커밋 → `npm run release` → 배포) |
+| DB 계정·비밀번호, 세션·암호화 키, 인사 API 키 | API 서버 **`server/.env`** (설명: `server/.env.example`) |
+| 관리자 계정(사번·사내 계정 ID)과 관리자 비밀번호 | API 서버 **`server/config/admins.js`** (예시: `admins.example.js`) — 고치면 3초 안에 반영 |
+| AD·인사 API 응답 필드 이름, 사업부 이름 → 코드 | `server/src/sso.js` 의 `FIELD`·`DIVISION_MAP` |
 | DB 준비 (DB 담당자가 직접 할 때) | `server/sql/setup.sql` |
 | 사업부·캠퍼스 등 기준정보·설정 | 관리자 화면 '기준정보' — 한 건씩 또는 **엑셀로 일괄 변경** (기본값: `client/src/constants/defaultCodes.js`) |
-| 시연·정식 빌드 종류 | `client/.env.production`의 `VITE_INCLUDE_MOCK` |
 | PM2 실행 방식 | `server/ecosystem.config.cjs` |
 | test 모드 테스트 계정 | `client/src/api/mock/accounts.js` |
 
-`server/.env`, `server/config/admins.js`, DevExtreme 라이선스 키(`client/src/.devextreme/`)는 git에 올라가지 않는다. 서버에 직접 만들거나 복사해 둔다.
+`server/.env`, `server/config/admins.js`, DevExtreme 라이선스 키(`client/src/.devextreme/`)는 git·배포 패키지에 들어가지 않는다.
 
 ## 로그인과 역할
 
-- **사용자 화면**(`/`): 사내 SSO(`SSO_MODE`) → 실패하면 로그인 화면(사내 계정 ID/비밀번호 → `AUTH_LOGIN_URL`)
+- **정식 운영**: 로그인 화면이 없다. Web 서버 IIS 가 Windows 인증으로 `SECDS\아이디` 를 확인 → API 서버가 AD·사내 인사 API 로 재직 확인 → 바로 홈. 안 되면 "AD SSO로 확인된 임직원만 이용할 수 있어요" 안내 화면
+- **test 모드**: 입구에서 테스트 계정(만능·신청 전·신청 완료·매칭 담당자·퇴직자)을 골라 바로 들어간다
 - 서버가 로그인 정보에 역할을 담아 준다 — `role`: `ADMIN`(관리자 계정) · `APPLICANT`(신청서 있음) · `GUEST`(신청 전), `applicant.userStatus`: 매칭 대기 중 / 매칭 중 / 커플 성사
-- **관리자 화면**(`/changeme`, `.env`의 `ADMIN_PATH`): 사용자 화면에는 들어가는 버튼이 없다. 사내 계정 확인 → `admins.js`에 있는 계정인지 → 관리자 비밀번호 (5회 틀리면 10분 잠금, 30분 무활동 시 종료)
+- **관리자 화면**(`/changeme`, `servers.config.mjs` 의 `adminPath`): 사용자 화면에는 들어가는 버튼이 없다. 사내 SSO 확인 → `admins.js`에 있는 계정인지 → 관리자 비밀번호 (5회 틀리면 10분 잠금, 30분 무활동 시 종료)
 
 ## 개발 · 시연 (test 모드, 내 PC)
 
@@ -67,7 +83,7 @@ npm run dev
 | 신청 완료 + 받은 하트 1 | `doyun.lee` | |
 | 퇴직자 | `seojin.park` | 로그인 거절 확인용 |
 
-- 비밀번호·관리자 비밀번호는 `client/src/api/mock/accounts.js`. 로그인 화면(사용자)과 `/changeme/login`(관리자)의 '테스트 운영' 버튼으로 바로 채울 수 있다
+- 입구 화면에서 계정을 누르면 바로 들어간다. 관리자 비밀번호는 `client/src/api/mock/accounts.js` (`/changeme/login`의 '테스트 운영' 버튼으로 채울 수 있다)
 - 홈 "테스트 · 다음 날로 넘기기": 오늘의 후보·하트 제한 초기화 / 관리자 사이드바 "가짜 데이터 초기화": 처음 상태로
 - 실서버로 개발하려면 `server`에서 `npm run dev`, `client/public/sayeon.config.js`의 `mode`를 `'open'`으로 바꾸면 `/api`가 3000번 포트로 넘어간다
 - DevExtreme 라이선스 키 등록 방법은 [GO-LIVE 5-2](docs/GO-LIVE.md#5-2-devextreme-라이선스)

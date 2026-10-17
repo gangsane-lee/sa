@@ -10,7 +10,10 @@
     "dev": "node --watch src/index.js",
     "check": "node scripts/run.mjs check",
     "db:setup": "node scripts/run.mjs db-setup",
-    "hash-password": "node scripts/hash-password.js"
+    "sso:test": "node scripts/run.mjs sso-test",
+    "hash-password": "node scripts/hash-password.js",
+    "pm2": "pm2",
+    "release": "node ../tools/release.mjs"
   },
   "engines": {
     "node": ">=22.12.0",
@@ -23,6 +26,7 @@
     "express-session": "^1.19.0",
     "helmet": "^8.3.0",
     "memorystore": "^1.6.8",
-    "mssql": "^12.7.4"
+    "mssql": "^12.7.4",
+    "pm2": "5.3.0"
   }
 }

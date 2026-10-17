@@ -8,9 +8,11 @@
 
 ```mermaid
 flowchart LR
-  U[임직원 브라우저] -- "HTTP :3000 (https는 앞단 프록시를 둘 때)" --> N["Node.js + Express · 12.83.18.17<br/>화면(Vue 빌드) + /api · PM2 1개"]
-  N -- 재직 확인 --> H[("인사 DB 뷰 또는 AD/LDAP · SSO")]
-  N -- "mssql/tedious :1433" --> D[("MSSQL · 10.166.101.127<br/>SAYEON.dbo.SA_DOC")]
+  U[임직원 PC 브라우저] -- "http :8282 (Windows 로그인 자동 전송)" --> W["Web 서버 IIS<br/>화면 파일 · Windows 인증"]
+  W -- "/api + 계정 헤더(SECDS\\아이디)" --> N["API 서버 Node · PM2 :8292"]
+  N -- "AD 조회(사번·이름·부서)" --> AD[("SECDS AD")]
+  N -- "사번 → 재직 확인" --> H[("사내 인사 API")]
+  N -- "mssql :1433" --> D[("MSSQL sasystem.dbo.SA_DOC")]
 ```
 
 | 영역 | 기술 |
@@ -18,7 +20,7 @@ flowchart LR
 | 프론트 | Vue 3, Vite, vue-router, DevExtreme 26.1 (Complete), 커스텀 테마 `dx.sayeon.css` |
 | 백엔드 | Node.js 22.12.0, Express 5, `mssql`(tedious), `express-session` + `memorystore`(로그인 정보는 메모리 — 재시작하면 다시 로그인), `bcryptjs`, `helmet`, 로그인 실패 제한(자체 구현) |
 | DB | MSSQL — 문서 테이블 `SA_DOC` 1개, 이름·메일은 앱에서 AES-256-GCM 암호화 (TDE는 DB 쪽 선택) |
-| 배포 | Node 서버 1개(PM2 인스턴스 1개)가 `client/dist` 화면과 `/api`를 함께 서빙 → CORS 불필요. 절차는 [GO-LIVE.md](GO-LIVE.md) |
+| 배포 | Web 서버(IIS)가 화면과 `/api` 전달, API 서버 Node(PM2 1개)가 업무 처리 — 브라우저는 한 주소만 써서 CORS 불필요. 주소는 `servers.config.mjs`(마스터), 절차는 [GO-LIVE.md](GO-LIVE.md) |
 
 **업무 규칙은 한 파일** — `client/src/api/core/service.js`. 브라우저 test 모드(`api/mock`)와 Node 서버(`server/`)가 이 파일을 함께 쓰고, 저장소·세션·사내 인증·관리자 확인만 끼워 넣는다(`configureService`). 그래서 화면에서 시험한 동작이 운영에서도 똑같다.
 
@@ -29,13 +31,13 @@ flowchart LR
 | 사내 인증 | 가짜 임직원 (`api/mock/accounts.js`) | AD/SSO (`server/src/sso.js` + `.env`) |
 | 관리자 계정 | `api/mock/accounts.js` | `server/config/admins.js` |
 
-화면은 운영 모드 **test / open**을 `sayeon.config.js`로 전환한다(빌드 무관). 운영 서버가 화면을 내보낼 때는 `server/.env`의 `SERVICE_MODE`·`ADMIN_PATH`로 이 파일을 만들어 준다.
+화면은 운영 모드 **test / open**을 `sayeon.config.js`로 전환한다. 운영 빌드 때 `servers.config.mjs`의 `serviceMode`·`adminPath`로 이 파일과 IIS `web.config`를 만든다.
 
 ## 2. 화면
 
 | 경로 | 화면 | 비고 |
 |---|---|---|
-| `/login` | 사내 계정 로그인 | 사내 계정(AD) ID 또는 사번 + 비밀번호 → 서버가 AD bind/SSO로 재직 확인 |
+| `/login` | 입구 | 정식 운영: 로그인 화면 없음 — 사내 SSO 확인 결과 안내(확인 안 됨 · 재직 아님 · SSO 서버 오류 · 로그아웃) / test 모드: 테스트 계정 고르기 |
 | `/` | 홈 | 미신청: 소개 · 인연 사주 진입(마케팅) · 기밀 약속. **신청자: 매칭 보드**(상태 · 오늘의 인연 + 궁합 · 받은 하트 탭 + 궁합 · 매칭 상대 쪽지 버튼) |
 | `/saju` | 인연 사주 | 생년월일(+시간/모름) → 사주 4주·오행·일간 성향·끌리는 사람·오늘의 연애운. **'내 사주 인연 찾기'**(신청 전·후 같은 버튼) → 궁합 최고 1명 프로필 → [하트 보내기] 하나. 신청 전이면 **필수 항목만 받는 팝업**에서 신청+하트를 한 번에, 신청 후면 바로 하트(오늘의 하트 1개) |
 | `/apply` | 신청서 | 나(필수/선택) + 선호 + 선호 우선순위 + 동의 |
@@ -197,7 +199,7 @@ CREATE TABLE SA_ADMIN (EMP_NO VARCHAR(20) PRIMARY KEY);  -- 관리자 허용 사
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| POST | `/auth/login` `{account,password}` | 사내 계정(AD ID 또는 사번) 재직 확인 → `{user, adminExpiresAt}` (401 불일치 / 403 비재직) |
+| POST | `/auth/sso` `{query}` | 사내 SSO 확인(IIS 계정 헤더 → AD → 사내 인사 API) → `{user, adminExpiresAt}` (401 `SSO_FAILED` / 403 `NOT_ACTIVE_EMPLOYEE` / 503 `SSO_UNAVAILABLE`·`SSO_NOT_CONFIGURED` / 429). ID/비밀번호 로그인 API는 없다 |
 | GET | `/auth/me` | 세션 복원 |
 | POST | `/auth/logout` | |
 | POST/DELETE | `/auth/admin` | 관리자 모드 진입(401 남은 횟수 / 423 잠김) / 종료 |
@@ -297,7 +299,7 @@ CREATE TABLE SA_SETTING (SETTING_KEY VARCHAR(40) PRIMARY KEY, SETTING_VALUE NVAR
 - **쪽지**: 메일함 형태. 각자 휴지통/영구 삭제(`box[신청자id]`), 상대 쪽지함에는 남음. 연속 발송 제한은 '상대 답장 이후 내가 연달아 보낸 수' 기준(429 `MESSAGE_BURST`). 담당자는 운영·신고 대응 목적으로 매칭 쪽지 열람 가능(감사 로그 `VIEW_MESSAGES`)
 - **선호 연상·연하·동갑**(`prefAgeGap`): 고정 목록 OLDER/SAME/YOUNGER, 출생 연도로 판정
 - **성별 변경**: 관련 하트·오늘의 인연·본 이력 삭제 + 다른 사람의 오늘의 인연에서도 제거
-- **로그인**: 사내 SSO(`POST /auth/sso`)로 확인되면 로그인 화면 없이 홈. 실패하면 로그인 화면
+- **로그인**: 사내 SSO(`POST /auth/sso`)로 확인되면 로그인 화면 없이 홈. 실패하면 "AD SSO로 확인된 임직원만" 안내 화면
 - **모집 팝업**: 관리자 설정 `gatheringPopup`이 켜져 있으면 로그인 세션당 1번 '두근두근' 팝업(참여 인원 등 숫자 없음)
 - **엑셀 모드**: 우상단 버튼 또는 Ctrl+Shift+E. 스프레드시트처럼 보이는 껍데기(리본·수식줄·행/열 머리·시트 탭=메뉴)와 가짜 탭 제목·아이콘. 세션 동안 유지, 상태 표시줄 '기본 보기'로 해제
 
@@ -321,7 +323,7 @@ CREATE TABLE SA_SETTING (SETTING_KEY VARCHAR(40) PRIMARY KEY, SETTING_VALUE NVAR
 
 ## 7. 보안 설계 ("100% 기밀"을 실제로 뒷받침하는 장치)
 
-1. **임직원 인증(사내 로그인)**: 사내 계정(AD/LDAP bind) 또는 사내 SSO(SAML/OIDC)로 확인 + 인사 DB 재직 뷰로 재직 여부 판단. 비밀번호는 저장하지 않음
+1. **임직원 인증**: 사내 AD SSO로만 확인 — Web 서버 IIS 의 Windows 인증이 `SECDS\아이디`를 헤더로 넘기고(API 서버는 Web 서버 IP 에서 온 것만 믿음), API 서버가 AD·사내 인사 API 로 사번·재직을 확인한다. 비밀번호는 받지 않는다
 2. **관리자 이중 확인**: `server/config/admins.js`의 사번·사내 계정 ID + 별도 관리자 비밀번호(bcrypt 해시 권장) · 5회 실패 시 10분 잠금(사번 기준) · 30분 무활동 자동 종료(슬라이딩)
 3. **세션**: HttpOnly + SameSite=Strict 쿠키(https면 Secure), 상태 변경 요청은 `X-Requested-With` 헤더 필수, 로그인 실패 제한(같은 IP·계정 10분에 10회), 로그인할 때 세션 ID 새로 발급, SSO 헤더 모드는 프록시 비밀값 필수
 4. **암호화**: 이름·메일 AES-256-GCM(키는 `.env`의 `DATA_KEY` — 바꾸면 기존 데이터를 읽을 수 없어 서버가 시작을 멈추고 알려 준다). DB 연결 암호화는 `DB_ENCRYPT`, https는 앞단 프록시를 둘 때. 연락처는 받지 않고 매칭 시 사내 메일(인사 정보)로 안내
@@ -333,20 +335,23 @@ CREATE TABLE SA_SETTING (SETTING_KEY VARCHAR(40) PRIMARY KEY, SETTING_VALUE NVAR
 
 ## 7-1. 로그인 · 역할 · 관리자 주소
 
-- **사용자**(`/`): 사내 SSO(`SSO_MODE` header/api) → 안 되면 로그인 화면(`AUTH_LOGIN_URL`). 서버는 인사정보(Profile: 사번·계정·이름·성별·사업부·팀·메일·재직)를 받아 임직원 목록에 저장하고 세션을 만든다
+- **사용자**(`/`): 사내 SSO(IIS → AD → 인사 API)로 확인되면 바로 홈, 안 되면 안내 화면(로그인 화면 없음). 서버는 인사정보(Profile: 사번·계정·이름·성별·사업부·팀·메일·재직)를 받아 임직원 목록에 저장하고 세션을 만든다. 응답 JSON 안의 위치·필드 이름은 서버가 알아서 찾는다(`server/src/sso.js` `FIELD`)
 - **역할**: `/auth/me`·로그인 응답의 `user.role` = `ADMIN`(admins.js에 있는 계정) · `APPLICANT`(신청서 있음) · `GUEST`(신청 전), `user.applicant.userStatus` = WAITING/MATCHING/COUPLED. 화면은 이 값으로 소개 화면·매칭 보드를 나누고 헤더에 상태를 보여준다
-- **관리자**: 사용자 화면에는 진입 버튼이 없다. 별도 주소(`ADMIN_PATH`, 기본 `/changeme`) → 사내 계정 확인 → 관리자 계정 여부 → 관리자 비밀번호(평문 또는 bcrypt 해시) → 관리 화면. 실패 횟수는 사번 기준으로 세서 쿠키를 지워도 잠금이 풀리지 않는다
+- **관리자**: 사용자 화면에는 진입 버튼이 없다. 별도 주소(`servers.config.mjs` 의 `adminPath`, 기본 `/changeme`) → 사내 SSO 확인 → 관리자 계정 여부 → 관리자 비밀번호(평문 또는 bcrypt 해시) → 관리 화면. 실패 횟수는 사번 기준으로 세서 쿠키를 지워도 잠금이 풀리지 않는다
 
 ## 8. 폴더 구조
 
 ```
 sa/
-├─ docs/GO-LIVE.md             ★ 운영 전환 가이드 (배포 절차는 여기에만)
+├─ servers.config.mjs         ★ 서버 기준정보(마스터) — Web·API·DB·개발 서버 주소·포트·DB 이름·관리자 주소·로그인 방식
+├─ tools/                      topology.mjs(마스터 읽기·검사) · release.mjs(배포 패키지) · templates/deploy-api.ps1
+├─ docs/GO-LIVE.md             ★ 운영 가이드 (배포 절차는 여기에만)
 ├─ docs/DESIGN.md
 ├─ client/                     Vue 3 + DevExtreme
 │  ├─ .env.production          VITE_INCLUDE_MOCK (시연용/정식 빌드)
 │  ├─ public/sayeon.config.js  test/open 모드·관리자 주소 (개발용, 운영은 서버가 내려줌)
 │  ├─ scripts/preflight.mjs    빌드 전 Node.js 버전·설치 경로 확인
+│  ├─ scripts/postbuild.mjs    빌드 후 IIS web.config · sayeon.config.js · _deploy(check-web.ps1 · deploy-web.ps1 · 파일 목록)
 │  └─ src/
 │     ├─ api/core/service.js   ★ 업무 규칙 (서버와 공용)
 │     ├─ api/core/matching.js  매칭 점수

@@ -18,7 +18,7 @@ async function request(method, path, body) {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
-    throw new ApiError(0, '서버에 연결하지 못했어요. 사내망 연결을 확인한 뒤 다시 시도해 주세요.');
+    throw new ApiError(0, '서버에 연결하지 못했어요. 사내망 연결을 확인한 뒤 다시 시도해 주세요.', 'NETWORK');
   }
 
   if (res.status === 204) return null;
@@ -37,15 +37,14 @@ const del = (p) => request('DELETE', p);
 
 export const api = {
   auth: {
-    /** 사내 계정(AD) ID 또는 사번 + 사내 계정 비밀번호 → 서버가 AD bind/SSO로 재직 확인 */
-    login: (account, password) => post('/auth/login', { account, password }),
+    // 운영은 사내 SSO로만 들어온다 (ID/비밀번호 로그인 없음 — test 모드의 계정 로그인은 api/mock)
     me: () => get('/auth/me'),
     logout: () => post('/auth/logout'),
     /** @returns {{ adminExpiresAt }} */
     enterAdmin: (password) => post('/auth/admin', { password }),
     exitAdmin: () => del('/auth/admin'),
-    /** 사내 SSO(통합 인증) 자동 로그인 — 서버가 SSO 토큰/Windows 인증으로 확인되면 세션 발급, 아니면 401 */
-    sso: () => post('/auth/sso'),
+    /** 사내 SSO 확인 — query: 주소창의 값(SSO 로그인 페이지에서 돌아올 때 붙은 ticket 등) */
+    sso: (hint = {}) => post('/auth/sso', { query: hint.query ?? {} }),
   },
 
   codes: {

@@ -2,14 +2,15 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { session, restoreSession } from '@/stores/session';
 import { loadCodes } from '@/stores/codes';
 import { setPageTitle } from '@/stores/office';
-import { ADMIN_PATH } from '@/config';
+import { ADMIN_PATH, isTestMode } from '@/config';
 
 const routes = [
+  // 입구 — 정식 운영: 사내 SSO 확인 안내(로그인 화면 없음) / test 모드: 테스트 계정 고르기
   {
     path: '/login',
     name: 'login',
-    component: () => import('@/views/LoginView.vue'),
-    meta: { public: true, title: '임직원 인증' },
+    component: isTestMode ? () => import('@/views/LoginView.vue') : () => import('@/views/SsoGateView.vue'),
+    meta: { public: true, title: isTestMode ? '테스트 계정 로그인' : '임직원 확인' },
   },
   {
     path: '/',

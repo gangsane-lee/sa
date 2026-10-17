@@ -24,8 +24,8 @@ export function explainDbError(err, ctx = {}) {
   if (has(msg, /ENOTFOUND|EAI_AGAIN|getaddrinfo/i)) {
     return {
       title: 'DB 서버 이름을 찾지 못했어요',
-      reason: `DB_HOST(${ctx.host ?? '?'})를 주소로 바꾸지 못했어요.`,
-      fix: ['server/.env 의 DB_HOST 를 IP 주소(예: 10.166.101.127)로 적었는지 확인해 주세요.'],
+      reason: `DB 서버 주소(${ctx.host ?? '?'})를 찾지 못했어요.`,
+      fix: ['servers.config.mjs 의 db.host 를 IP 주소로 적었는지 확인해 주세요.'],
     };
   }
   if (has(msg, /ECONNREFUSED/i)) {
@@ -34,8 +34,8 @@ export function explainDbError(err, ctx = {}) {
       reason: `${where} 에 닿았지만 그 포트에서 SQL Server가 받고 있지 않아요.`,
       fix: [
         'DB 서버에서 SQL Server 서비스가 실행 중인지 확인해 주세요.',
-        "SQL Server 구성 관리자 → 'SQL Server 네트워크 구성' → TCP/IP 가 '사용'인지, 포트가 DB_PORT 와 같은지 확인해 주세요.",
-        '이름 있는 인스턴스(예: 서버\\SQLEXPRESS)는 고정 포트를 정해 DB_PORT 에 적어 주세요.',
+        "SQL Server 구성 관리자 → 'SQL Server 네트워크 구성' → TCP/IP 가 '사용'인지, 포트가 servers.config.mjs 의 db.port 와 같은지 확인해 주세요.",
+        '이름 있는 인스턴스(예: 서버\\SQLEXPRESS)는 고정 포트를 정해 servers.config.mjs 의 db.port 에 적어 주세요.',
       ],
     };
   }
@@ -45,8 +45,8 @@ export function explainDbError(err, ctx = {}) {
       reason: `${where} 까지 응답이 없어요. 방화벽에 막혔거나 주소·포트가 틀렸을 때 생겨요.`,
       fix: [
         `API 서버에서 DB 서버로 포트가 열려 있는지 확인: PowerShell  Test-NetConnection ${ctx.host ?? 'DB서버IP'} -Port ${ctx.port ?? 1433}`,
-        'DB 서버 Windows 방화벽과 네트워크 방화벽에서 API 서버(12.83.18.17) → 1433 허용을 요청해 주세요.',
-        'server/.env 의 DB_HOST · DB_PORT 를 확인해 주세요.',
+        'DB 서버 Windows 방화벽과 네트워크 방화벽에서 API 서버 → DB 포트 허용을 요청해 주세요.',
+        'servers.config.mjs 의 db.host · db.port 를 확인해 주세요.',
       ],
     };
   }
@@ -54,7 +54,7 @@ export function explainDbError(err, ctx = {}) {
     return {
       title: 'SQL Server 인스턴스를 찾지 못했어요',
       reason: '이름 있는 인스턴스를 찾는 SQL Browser(UDP 1434) 응답이 없어요.',
-      fix: ['인스턴스 이름 대신 고정 포트를 정해 DB_PORT 에 적어 주세요.'],
+      fix: ['인스턴스 이름 대신 고정 포트를 정해 servers.config.mjs 의 db.port 에 적어 주세요.'],
     };
   }
   if (has(msg, /certificate|self[- ]signed|SSL|TLS|ERR_TLS|routines:/i) && code !== 'ELOGIN') {
