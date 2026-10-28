@@ -25,7 +25,7 @@ import 'devextreme/ui/check_box';
 import 'devextreme/ui/button';
 import { adminApi } from '@/stores/session';
 import { reloadCodes, allItems } from '@/stores/codes';
-import { CODE_GROUPS, CODE_GROUP_MAP } from '@/constants/codes';
+import { CODE_GROUPS, CODE_GROUP_MAP } from '@shared/constants/codes';
 
 const group = ref('DIVISION');
 const gridRef = ref();

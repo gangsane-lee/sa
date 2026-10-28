@@ -17,9 +17,9 @@ import 'devextreme/ui/select_box';
 import 'devextreme/ui/text_box';
 import { confirm } from 'devextreme/ui/dialog';
 import { adminApi } from '@/stores/session';
-import { GENDERS, MATCH_STATUS, MATCH_SOURCES, AVOID_OPTIONS, PREF_ITEMS, AGE_GAP, textOf } from '@/constants/codes';
+import { GENDERS, MATCH_STATUS, MATCH_SOURCES, AVOID_OPTIONS, PREF_ITEMS, AGE_GAP, textOf } from '@shared/constants/codes';
 import { ct, cts } from '@/stores/codes';
-import { fmtDate } from '@/utils/format';
+import { fmtDate } from '@shared/utils/format';
 import StatusBadge from '@/components/StatusBadge.vue';
 
 const route = useRoute();

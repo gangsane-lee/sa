@@ -1,13 +1,13 @@
 /**
- * test 모드 API — 서버 없이 브라우저 안에서 core/service.js(실제 업무 규칙)를 돌린다.
+ * 개발 모드 API — 서버 없이 브라우저 안에서 core/service.js(실제 업무 규칙)를 돌린다.
  * 데이터: localStorage(가짜 DB, 브라우저마다 따로) · 세션: sessionStorage(탭을 닫으면 로그아웃)
  * 계정: accounts.js
  */
-import { configureService, api } from '../core/service.js';
+import { configureService, api } from '@shared/api/core/service.js';
 import { createSeed } from './seed.js';
 import { MOCK_PASSWORD, MOCK_ADMIN_PASSWORD } from './accounts.js';
 
-const DB_KEY = 'sayeon.mock.db.v7';
+const DB_KEY = 'sayeon.mock.db.v8'; // v8: 생년월일 → 출생연도만
 const SESSION_KEY = 'sayeon.mock.session';
 
 const memory = {};

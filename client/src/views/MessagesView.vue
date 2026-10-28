@@ -14,7 +14,7 @@ import { DxPopup } from 'devextreme-vue/popup';
 import { DxSelectBox } from 'devextreme-vue/select-box';
 import { DxTextArea } from 'devextreme-vue/text-area';
 import { api } from '@/api';
-import { fmtDateTime } from '@/utils/format';
+import { fmtDateTime } from '@shared/utils/format';
 import { session, refreshUnread } from '@/stores/session';
 import FaceIcon from '@/components/FaceIcon.vue';
 

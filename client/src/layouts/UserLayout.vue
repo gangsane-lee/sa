@@ -8,7 +8,7 @@ import { session, logout, unread, refreshUnread } from '@/stores/session';
 import GatheringPopup from '@/components/GatheringPopup.vue';
 import { setOffice } from '@/stores/office';
 import { ct } from '@/stores/codes';
-import { USER_STATUS_MAP } from '@/constants/codes';
+import { USER_STATUS_MAP } from '@shared/constants/codes';
 import SaLogo from '@/components/SaLogo.vue';
 
 const router = useRouter();

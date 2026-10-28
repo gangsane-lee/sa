@@ -10,8 +10,8 @@ import { DxTextArea } from 'devextreme-vue/text-area';
 import { DxButton } from 'devextreme-vue/button';
 import notify from 'devextreme/ui/notify';
 import { adminApi } from '@/stores/session';
-import { VOC_CATEGORIES, VOC_STATUS, textOf } from '@/constants/codes';
-import { fmtDateTime } from '@/utils/format';
+import { VOC_CATEGORIES, VOC_STATUS, textOf } from '@shared/constants/codes';
+import { fmtDateTime } from '@shared/utils/format';
 
 const items = ref([]);
 const selId = ref(null);

@@ -4,7 +4,7 @@
  * 값: ['AGE', 'SMOKING', ...] (앞쪽일수록 중요). 선호를 고르지 않은(상관없음) 항목은 누를 수 없다.
  */
 import { computed } from 'vue';
-import { PREF_ITEMS, PREF_ITEM_MAP, MAX_PRIORITIES } from '@/constants/codes';
+import { PREF_ITEMS, PREF_ITEM_MAP, MAX_PRIORITIES } from '@shared/constants/codes';
 
 const props = defineProps({
   modelValue: { type: Array, default: () => [] },

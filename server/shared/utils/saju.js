@@ -214,10 +214,25 @@ const DAY_RELATION = {
   SPARK: { score: 68, title: '끌림이 강한 궁합', text: '서로 다른 기운이 부딪히며 강한 끌림을 만들어요. 다름을 존중하면 누구보다 뜨거운 사이가 돼요.' },
 };
 
-/** 사주 기본 정보 (일간·띠·오행 분포) — 궁합 계산용, 원문 생년월일은 결과에 넣지 않는다 */
-function basics({ birthDate, birthTime = null }) {
-  const r = readSaju({ birthDate, birthTime });
-  return { dayEl: r.dayMaster.element, dayChar: r.dayMaster.char, yearZhi: r.pillars[3].zhi.char, counts: r.counts, missing: r.missing, image: r.dayMaster.image };
+/**
+ * 사주 기본 정보 (일간·띠·오행 분포) — 궁합 계산용, 원문 생년월일은 결과에 넣지 않는다
+ *  - birthDate: 인연 사주 화면에서 입력한 생년월일(저장하지 않음) → 4주로 계산
+ *  - birthYear: 신청서의 출생연도(월일은 저장하지 않음) → 연주(띠)만으로 계산
+ */
+function basics({ birthDate = null, birthTime = null, birthYear = null }) {
+  if (birthDate) {
+    const r = readSaju({ birthDate, birthTime });
+    return { dayEl: r.dayMaster.element, dayChar: r.dayMaster.char, yearZhi: r.pillars[3].zhi.char, counts: r.counts, missing: r.missing, image: r.dayMaster.image };
+  }
+  const y = Number(String(birthYear ?? '').slice(0, 4));
+  if (!Number.isInteger(y) || y < 1900) throw new Error('출생연도 없음');
+  const ec = Solar.fromYmdHms(y, 7, 1, 12, 0, 0).getLunar().getEightChar(); // 한해 가운데 날로 그해 연주
+  ec.setSect(1);
+  const p = pillarOf(ec.getYear(), '연주');
+  const counts = Object.fromEntries(ORDER.map((e) => [e, 0]));
+  counts[p.gan.el]++;
+  counts[p.zhi.el]++;
+  return { dayEl: p.gan.el, dayChar: p.gan.char, yearZhi: p.zhi.char, counts, missing: ORDER.filter((e) => counts[e] === 0), image: DAY_MASTER[p.gan.char]?.image };
 }
 
 /**
@@ -261,7 +276,7 @@ export function compatibility(a, b) {
   }
 
   // 같은 두 사람이면 늘 같은 결과가 나오도록 고정 시드로 미세 조정
-  const rnd = seeded([a.birthDate, b.birthDate].sort().join('|'));
+  const rnd = seeded([a, b].map((x) => String(x.birthDate ?? x.birthYear)).sort().join('|'));
   score = Math.max(55, Math.min(98, score + Math.floor(rnd() * 7) - 3));
   return { score, title: DAY_RELATION[rel].title, text: DAY_RELATION[rel].text, points: points.slice(0, 3), me: { element: A.dayEl }, them: { element: B.dayEl, image: B.image } };
 }

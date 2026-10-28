@@ -12,10 +12,10 @@ import notify from 'devextreme/ui/notify';
 import { confirm } from 'devextreme/ui/dialog';
 import 'devextreme/ui/button'; // 팝업 툴바의 widget: 'dxButton'
 import { adminApi } from '@/stores/session';
-import { APPLY_STATUS, MANUAL_APPLY_STATUS, GENDERS, USER_STATUS_MAP, textOf } from '@/constants/codes';
+import { APPLY_STATUS, MANUAL_APPLY_STATUS, GENDERS, USER_STATUS_MAP, textOf } from '@shared/constants/codes';
 import { ct } from '@/stores/codes';
-import { toFormModel, fromFormModel } from '@/utils/applicationModel';
-import { fmtDateTime } from '@/utils/format';
+import { toFormModel, fromFormModel } from '@shared/utils/applicationModel';
+import { fmtDateTime } from '@shared/utils/format';
 import ApplicantForm from './ApplicantForm.vue';
 import StatusBadge from './StatusBadge.vue';
 
@@ -158,7 +158,7 @@ function findMatch() {
             <div>
               <p class="summary__who">
                 <b>{{ app.name }}</b>
-                {{ textOf(GENDERS, app.gender) }} · {{ app.birthDate }}(만 {{ app.age }}세) ·
+                {{ textOf(GENDERS, app.gender) }} · {{ app.birthYear }}년생({{ app.age }}세) ·
                 {{ ct('DIVISION', app.division) }} {{ app.team }}
                 <template v-if="app.campus"> · {{ ct('CAMPUS', app.campus) }}{{ app.building ? ` ${app.building}` : '' }}</template>
               </p>

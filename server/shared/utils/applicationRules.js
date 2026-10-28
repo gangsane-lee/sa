@@ -8,21 +8,27 @@ import { isValidCode, rankOf } from './codeHelpers.js';
 
 export const THIS_YEAR = new Date().getFullYear();
 
-/** 만 나이 (2023.6 만 나이 통일법 기준) */
-export function ageOf(birthDate, today = new Date()) {
-  if (!birthDate) return null;
-  const [y, m, d] = String(birthDate).split('-').map(Number);
-  if (!y || !m || !d) return null;
-  let age = today.getFullYear() - y;
-  if (today.getMonth() + 1 < m || (today.getMonth() + 1 === m && today.getDate() < d)) age -= 1;
-  return age;
+/**
+ * 출생연도 → 나이 (올해 − 출생연도). 개인정보 보호로 생년월일은 저장하지 않고 출생연도만 받는다.
+ * 예전 데이터('YYYY-MM-DD')가 와도 연도만 본다.
+ */
+export function yearOf(birth) {
+  const y = Number(String(birth ?? '').slice(0, 4));
+  return Number.isInteger(y) && y > 1900 ? y : null;
 }
+export function ageOf(birthYear, today = new Date()) {
+  const y = yearOf(birthYear);
+  return y == null ? null : today.getFullYear() - y;
+}
+/** 신청할 수 있는 출생연도 범위 (나이 RULES.age 기준) */
+export const birthYearRange = (today = new Date()) => ({ min: today.getFullYear() - RULES.age.max, max: today.getFullYear() - RULES.age.min });
 
 export const RULES = {
   // 이름은 사내 인사정보 값이라 신청자가 고칠 수 없다. 외국인 임직원(Anne-Marie, O'Brien)이나 가운뎃점이 든 이름도
   // 통과하도록 글자 종류만 본다 (예전: 한글 2~10자/영문만 허용해 일부 임직원은 신청 자체가 막혔다)
   name: { pattern: /^\p{L}[\p{L}\s.'·-]{0,39}$/u, message: '이름 형식을 확인해 주세요.' },
   age: { min: 19, max: 60 },
+  /** 인연 사주 화면의 태어난 시간 입력 (저장하지 않음) */
   birthTime: { pattern: /^([01]\d|2[0-3]):[0-5]\d$/ },
   // 인사정보의 팀 이름에는 'S/W개발팀', 'Memory Sol. 기획그룹'처럼 / . , + 가 들어갈 수 있다
   team: { pattern: /^[\p{L}\p{N}&·()\s\-/.,+_']{2,30}$/u, message: '2~30자로 입력해 주세요.' },
@@ -35,7 +41,6 @@ export const RULES = {
   priorities: { min: 1, max: MAX_PRIORITIES },
 };
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const len = (s) => (s ?? '').trim().length;
 const isArr = (v) => Array.isArray(v);
 const uniq = (arr) => new Set(arr).size === arr.length;
@@ -72,9 +77,8 @@ export function validateApplication(a, codes, { requireConsent = true, previous 
   if (!RULES.nickname.pattern.test(a.nickname ?? '') || isBannedNickname(a.nickname ?? '')) e.push('닉네임');
   if (!GENDERS.some((g) => g.value === a.gender)) e.push('성별');
   if (!SERIOUSNESS.some((x) => x.value === a.serious)) e.push('진지한 만남 여부');
-  const age = DATE_RE.test(a.birthDate ?? '') ? ageOf(a.birthDate) : null;
-  if (age == null || age < RULES.age.min || age > RULES.age.max) e.push('생년월일');
-  if (a.birthTime != null && a.birthTime !== '' && !RULES.birthTime.pattern.test(a.birthTime)) e.push('태어난 시간');
+  const age = Number.isInteger(a.birthYear) ? ageOf(a.birthYear) : null;
+  if (age == null || age < RULES.age.min || age > RULES.age.max) e.push('출생연도');
   if (!code('HEIGHT', 'heightBand')) e.push('키');
   if (!codesArr('HOBBY', 'hobbies') || a.hobbies.length < RULES.hobbies.min || a.hobbies.length > RULES.hobbies.max) e.push('취미');
   if (!code('MBTI', 'mbti')) e.push('MBTI');

@@ -6,7 +6,7 @@
  *   - 설정    : 항목 키 · 설명 · 값 · 쓸 수 있는 값
  *  검사(코드 형식·중복·사용 중 항목 등)는 서버의 importReference 가 하고, 여기서는 읽고 쓰기만 한다.
  */
-import { CODE_GROUPS, CODE_GROUP_MAP, SETTING_ITEMS, REFERENCE_KIND } from '@/constants/codes';
+import { CODE_GROUPS, CODE_GROUP_MAP, SETTING_ITEMS, REFERENCE_KIND } from '@shared/constants/codes';
 
 const CODE_COLS = [
   { key: 'group', header: '그룹', width: 12 },

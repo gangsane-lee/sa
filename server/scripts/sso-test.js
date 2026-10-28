@@ -1,7 +1,9 @@
 /**
  * 사내 로그인 연결 시험 — API 서버의 server 폴더에서
  *
- *   npm run sso:test -- --user 회사아이디          iis 방식(기본): 그 계정으로 AD 조회 → 사내 인사 API → 사緣에 들어올 정보
+ *   npm run sso:test -- --file 응답.json          browser 방식(기본): 브라우저가 받은 인사정보 응답(localStorage sayeon.employee)을 읽어 보기
+ *   npm run sso:test -- --empno 사번              browser 방식: 서버 재확인용 사내 인사 API(sso.hrApi)만 시험
+ *   npm run sso:test -- --user 회사아이디          iis 방식: 그 계정으로 AD 조회 → 사내 인사 API → 사緣에 들어올 정보
  *
  * (url 방식일 때)
  *   npm run sso:test -- --ip 10.1.2.3            SSO_URL 에 {ip} 가 있을 때: 확인할 사용자 PC 의 IP
@@ -38,6 +40,67 @@ const S = config.sso;
 const mask = (v) => (String(v).length <= 16 ? String(v) : `${String(v).slice(0, 4)}…(${String(v).length}자)`);
 const LABEL = { empNo: '사번', adId: '사내 계정 ID', name: '이름', gender: '성별', division: '사업부', team: '팀', email: '메일', status: '재직 상태' };
 
+// ═══ browser 방식: 브라우저가 받은 인사정보 응답을 읽어 보고, 서버 재확인(인사 API)까지 시험 ═══
+if (S.mode === 'browser' && !opt('url')[0]) {
+  console.log(`\n사緣 사내 로그인 시험 (브라우저가 사내 인사정보 URL 로 확인) · 환경 ${config.envName}`);
+  const file = opt('file')[0];
+  const empNo = opt('empno')[0];
+  const E = S.employeeApi ?? {};
+  r.section('설정');
+  if (E.url) r.ok(`사내 인사정보 URL(사용자 PC 브라우저가 부름) ${E.method ?? 'GET'} ${E.url}${E.resultPath ? ` · 위치 ${E.resultPath}` : ''}`);
+  else r.fail('servers.config.mjs 의 sso.employeeApi.url 이 비어 있어요', { reason: '모든 사용자가 "임직원만 이용할 수 있어요" 화면으로 가요.' });
+  r.info(`서버 재확인(인사 API) ${S.hrApi.url ? `${S.hrApi.method} ${S.hrApi.url}` : '없음 — 브라우저가 보낸 정보를 그대로 믿어요'}`);
+  if (!file && !empNo) {
+    console.log('\n  사용법');
+    console.log('    npm run sso:test -- --file 응답.json    사내 PC 브라우저가 받은 응답을 읽어 보기');
+    console.log("        (사緣 화면 F12 → 애플리케이션 → 로컬 스토리지 → 'sayeon.employee' 값을 복사해 파일로 저장)");
+    console.log('    npm run sso:test -- --empno 사번        서버 재확인용 사내 인사 API(sso.hrApi)만 시험\n');
+    process.exit(r.summary({ failText: '위 사용법으로 다시 실행해 주세요.' }) || 1);
+  }
+  const { readEmployee } = await import('../shared/utils/employeeInfo.js');
+  const { verifyBrowserEmployee } = await import('../src/sso.js');
+  let user = null;
+  if (file) {
+    r.section(`브라우저가 받은 응답 (${file})`);
+    let json;
+    try {
+      json = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
+    } catch (e) {
+      r.fail('파일을 JSON 으로 읽지 못했어요', { reason: e.message });
+      process.exit(r.summary({}));
+    }
+    const got = readEmployee(json, E.resultPath ?? '');
+    if (!got.profile) {
+      r.fail('응답에서 사번을 찾지 못했어요', { fix: ['사번이 든 필드 이름을 client/src/utils/employeeInfo.js 의 FIELD.empNo 에 추가', '또는 servers.config.mjs 의 sso.employeeApi.resultPath 로 위치 지정'] });
+      process.exit(r.summary({}));
+    }
+    r.ok(`사용자 정보 위치: ${got.path || '(맨 바깥)'}`);
+    for (const [k, label] of Object.entries(LABEL)) {
+      const from = got.profile._from[k];
+      if (from) r.info(`${label} ← '${from}' = ${got.user[from]}`);
+    }
+    user = got.user;
+  } else user = { empNo };
+
+  r.section('결과 — 사緣에 들어오는 정보 (서버가 확인한 값)');
+  let p = null;
+  try {
+    p = await verifyBrowserEmployee(user);
+  } catch (e) {
+    r.fail(e.message, { fix: ['사내 인사 API 주소·방화벽(API 서버 → 인사 API)·SSO_API_KEY'] });
+    process.exit(r.summary({}));
+  }
+  if (!p) r.fail('확인되지 않았어요', { reason: S.hrApi.url ? '사내 인사 API 에서 이 사번이 확인되지 않았어요.' : '사번이 없어요.' });
+  else {
+    for (const [k, label] of Object.entries(LABEL)) {
+      if (k === 'status') (p.active ? r.ok.bind(r) : r.fail.bind(r))(`재직 상태: ${p.active ? '재직 — 들어올 수 있어요' : '재직 아님 — 들어올 수 없어요'}`);
+      else if (p[k]) r.ok(`${label}: ${p[k]}`);
+      else r.warn(`${label}: 비어 있어요`, { reason: k === 'gender' || k === 'division' ? '신청서에서 본인이 고르게 돼요.' : '없어도 들어갈 수는 있어요.' });
+    }
+  }
+  process.exit(r.summary({ okText: '이 정보로 사緣에 바로 들어올 수 있어요.', failText: '✖ 항목을 확인해 주세요. 실제 접속에서는 "임직원만 이용할 수 있어요" 안내 화면이 나와요.' }));
+}
+
 // ═══ iis 방식: 회사 계정 ID 하나로 AD → 사내 인사 API 를 차례로 확인 ═══
 if (S.mode === 'iis' && !opt('url')[0] && !opt('file')[0]) {
   console.log(`\n사緣 사내 로그인 시험 (IIS Windows 인증 → AD → 사내 인사 API) · 환경 ${config.envName}`);
@@ -59,7 +122,7 @@ if (S.mode === 'iis' && !opt('url')[0] && !opt('file')[0]) {
     r.fail(e.message, {
       reason: S.adLookup ? 'AD 조회나 사내 인사 API 연결이 실패했어요.' : '사내 인사 API 연결이 실패했어요.',
       fix: [
-        'API 서버가 도메인에 가입돼 있는지, 이 명령(=PM2)을 도메인 계정으로 실행했는지',
+        'API 서버가 도메인에 가입돼 있는지, IIS 앱 풀 ID 가 도메인 계정인지',
         `사내 인사 API 주소·방화벽(API 서버 → 인사 API)`,
       ],
     });
@@ -203,7 +266,7 @@ if (json !== null && status >= 200 && status < 300) {
 
 process.exit(
   r.summary({
-    okText: profile ? `이 사용자는 사緣에 바로 들어갈 수 있어요 (사번 ${profile.empNo}). 이 SSO_URL 을 server/.env 에 넣고 pm2 restart sayeon-api` : '확인을 마쳤어요.',
+    okText: profile ? `이 사용자는 사緣에 바로 들어갈 수 있어요 (사번 ${profile.empNo}). 이 주소를 servers.config.mjs 의 sso.url 에 넣고 다시 패키지·배포` : '확인을 마쳤어요.',
     failText: '✖ 항목을 확인해 주세요. 실제 접속에서는 "AD SSO로 확인된 임직원만" 안내 화면이 나와요.',
   }),
 );

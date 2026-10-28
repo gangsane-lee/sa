@@ -9,7 +9,7 @@ import {
   DxDataGrid, DxColumn, DxLookup, DxSearchPanel, DxHeaderFilter, DxPaging, DxPager, DxFilterRow,
 } from 'devextreme-vue/data-grid';
 import { adminApi } from '@/stores/session';
-import { AUDIT_ACTIONS } from '@/constants/codes';
+import { AUDIT_ACTIONS } from '@shared/constants/codes';
 
 const store = new CustomStore({ key: 'id', load: () => adminApi.listAuditLogs() });
 const CAUTION = new Set(['ADMIN_ENTER_FAIL', 'REVEAL_PII', 'EXPORT', 'DELETE_APPLICANT']);

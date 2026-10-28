@@ -15,7 +15,7 @@ import notify from 'devextreme/ui/notify';
 import { confirm } from 'devextreme/ui/dialog';
 import 'devextreme/ui/button'; // 툴바의 widget: 'dxButton'
 import { adminApi } from '@/stores/session';
-import { APPLY_STATUS, MANUAL_APPLY_STATUS, GENDERS, USER_STATUS, SERIOUSNESS } from '@/constants/codes';
+import { APPLY_STATUS, MANUAL_APPLY_STATUS, GENDERS, USER_STATUS, SERIOUSNESS } from '@shared/constants/codes';
 import { allItems } from '@/stores/codes';
 import ApplicantDetailPopup from '@/components/ApplicantDetailPopup.vue';
 

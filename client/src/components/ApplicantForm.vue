@@ -2,8 +2,12 @@
 /**
  * 신청서 폼 — 신청자 화면(ApplyView)과 관리자 상세/수정 팝업이 함께 쓴다.
  * 선택 목록은 기준정보(stores/codes), 유효성 기준은 utils/applicationRules.js 의 RULES (서버 검증과 동일).
+ *
+ * 페이지(utils/applicationModel.js 의 SECTIONS 4개)
+ *  - page 를 주면 그 페이지만 보인다 (처음 신청 — 설문처럼 한 페이지씩). 비우면 전부 (수정·관리자)
+ *  - compact: 선택 항목은 '선택 항목 더 보기'를 눌러야 보인다 (적어야 할 것이 적어 보이게)
  */
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import {
   DxForm, DxGroupItem, DxSimpleItem, DxLabel,
   DxRequiredRule, DxPatternRule, DxStringLengthRule, DxCustomRule,
@@ -16,11 +20,12 @@ import 'devextreme/ui/tag_box';
 import 'devextreme/ui/text_area';
 import 'devextreme/ui/check_box';
 import 'devextreme/ui/range_slider';
-import 'devextreme/ui/date_box';
-import { GENDERS, AVOID_OPTIONS, PREF_ITEMS, MAX_PRIORITIES, SERIOUSNESS, AGE_GAP } from '@/constants/codes';
+import 'devextreme/ui/number_box';
+import { GENDERS, AVOID_OPTIONS, PREF_ITEMS, MAX_PRIORITIES, SERIOUSNESS, AGE_GAP } from '@shared/constants/codes';
 import { api } from '@/api';
 import { options, rank } from '@/stores/codes';
-import { RULES, ageOf } from '@/utils/applicationRules';
+import { RULES, ageOf, birthYearRange } from '@shared/utils/applicationRules';
+import { SECTIONS } from '@shared/utils/applicationModel';
 import PriorityPicker from './PriorityPicker.vue';
 import ChipSelect from './ChipSelect.vue';
 
@@ -29,7 +34,23 @@ const props = defineProps({
   readOnly: { type: Boolean, default: false },
   /** 관리자 화면: 동의 항목과 안내 문구를 숨긴다 */
   admin: { type: Boolean, default: false },
+  /** 보여줄 페이지 번호(0~3). null 이면 모든 페이지를 한 화면에 */
+  page: { type: Number, default: null },
+  /** 선택 항목을 '더 보기' 뒤로 숨긴다 */
+  compact: { type: Boolean, default: false },
 });
+
+// ── 페이지 · 선택 항목 ──────────────────────────────────
+const show = (i) => props.page === null || props.page === i;
+/** 페이지 제목 — 한 화면에 모두 보일 때만 (한 페이지씩일 때는 위 진행 막대에 제목이 있다) */
+const cap = (i) => (props.page === null ? SECTIONS[i].title : undefined);
+const more = reactive({});
+const showOpt = (i) => show(i) && (!props.compact || Boolean(more[i]));
+const moreButton = (i) => props.compact && !props.readOnly && show(i) && SECTIONS[i].optional.length > 0;
+const moreText = (i) => (more[i] ? '선택 항목 접기' : `＋ 선택 항목 더 보기 (${SECTIONS[i].optional.length}개 · 채우면 추천이 더 정확해져요)`);
+const toggleMore = (i) => {
+  more[i] = !more[i];
+};
 const emit = defineEmits(['change']);
 
 const formRef = ref();
@@ -41,14 +62,20 @@ const select = (items, placeholder, extra = {}) => ({
   items, valueExpr: 'value', displayExpr: 'text', placeholder, ...extra,
 });
 const radios = (items) => ({ items, valueExpr: 'value', displayExpr: 'text', layout: 'horizontal' });
+/**
+ * 여러 개 고르는 칸 — DevExtreme 26.1 TagBox 는 체크박스(showSelectionControls) 없이 쓰면 하나 고를 때마다 목록을 닫는다.
+ * 여러 개를 이어서 고를 수 있게 목록을 열어 둔다 (예전 버그: 취미를 누르면 목록이 바로 사라짐)
+ */
+const keepOpen = (e) => {
+  e.component._shouldCloseOnItemClick = () => false;
+};
 const tags = (items, placeholder = '상관없어요', extra = {}) => ({
   items, valueExpr: 'value', displayExpr: 'text', placeholder, searchEnabled: items.length > 8, hideSelectedItems: true,
-  multiline: true, showDropDownButton: true, applyValueMode: 'instantly', showClearButton: true, ...extra,
+  multiline: true, showDropDownButton: true, applyValueMode: 'instantly', showClearButton: true, onInitialized: keepOpen, ...extra,
 });
 
-const today = new Date();
-const minBirth = new Date(today.getFullYear() - RULES.age.max - 1, today.getMonth(), today.getDate() + 1);
-const maxBirth = new Date(today.getFullYear() - RULES.age.min, today.getMonth(), today.getDate());
+/** 출생연도는 직접 입력 (개인정보 보호로 생년월일 대신 연도만 받는다) */
+const yearRange = birthYearRange();
 
 /** 고정 옵션 — 기준정보는 화면 진입 전에 불러오므로 한 번만 만든다.
  *  (값에 따라 바뀌는 옵션까지 한 computed에 넣으면 입력할 때마다 폼 전체가 다시 그려져 배치가 깨진다) */
@@ -57,12 +84,10 @@ const opt = {
   nickname: { placeholder: '예: 달빛고양이', maxLength: 5, inputAttr: { lang: 'ko', autocomplete: 'off' } },
   serious: { items: SERIOUSNESS, valueExpr: 'value', displayExpr: 'text', layout: 'horizontal' },
   gender: radios(GENDERS),
-  birthDate: {
-    type: 'date', displayFormat: 'yyyy.MM.dd', dateSerializationFormat: 'yyyy-MM-dd', useMaskBehavior: true,
-    min: minBirth, max: maxBirth, placeholder: '예: 1995.03.15', openOnFieldClick: false,
-    calendarOptions: { zoomLevel: 'decade' },
+  birthYear: {
+    placeholder: '예: 1995', showSpinButtons: false, showClearButton: false,
+    inputAttr: { inputmode: 'numeric', maxlength: 4, autocomplete: 'off', 'aria-label': '출생연도 4자리' },
   },
-  birthTimeUnknown: { text: '태어난 시간을 몰라요' },
   division: select(options('DIVISION'), '사업부를 골라주세요'),
   team: { placeholder: '예: DRAM설계팀', maxLength: 30 },
   campus: select(options('CAMPUS'), '선택 안 함', { showClearButton: true }),
@@ -109,7 +134,6 @@ const dyn = () => {
   const f = props.formData;
   const ro = props.readOnly;
   return {
-    birthTime: { disabled: f.birthTimeUnknown && !ro },
     religion: {
       placeholder: f.agreeSensitive ? '선택 안 함' : '아래 민감정보 동의 후 입력할 수 있어요',
       disabled: !f.agreeSensitive && !ro,
@@ -121,7 +145,6 @@ const dyn = () => {
   };
 };
 const init = dyn();
-const birthTimeOpt = { mask: '00:00', maskChar: '_', useMaskedValue: true, showMaskMode: 'onFocus', placeholder: '예: 14:30', ...init.birthTime };
 const buildingOpt = { placeholder: '예: 연구동, R&D센터 (직접 입력)', maxLength: 30, showClearButton: true };
 const religionOpt = select(options('RELIGION'), init.religion.placeholder, { showClearButton: true, disabled: init.religion.disabled });
 const prefReligionsOpt = tags(options('RELIGION'), init.prefReligions.placeholder, { disabled: init.prefReligions.disabled });
@@ -218,8 +241,8 @@ function checkPriorities() {
 defineExpose({
   /** @returns {{ isValid: boolean, count: number, focus: () => void }} */
   validate() {
-    const r = formRef.value.instance.validate();
-    const prOk = checkPriorities();
+    const r = formRef.value.instance.validate(); // 보이는 항목만 검사한다 (한 페이지씩일 때는 그 페이지)
+    const prOk = show(3) ? checkPriorities() : true;
     const first = r.brokenRules[0]?.validator;
     return {
       isValid: r.isValid && prOk,
@@ -232,12 +255,17 @@ defineExpose({
       },
     };
   },
+  /** 선택 항목 펼치기 ('채우러 갈게요') */
+  revealOptional(i) {
+    more[i] = true;
+  },
 });
 
 // ── 동적 도움말 ────────────────────────────────────────
 const ageHelp = computed(() => {
-  const age = ageOf(props.formData.birthDate);
-  return age != null ? `만 ${age}세 · 나이는 자동으로 계산돼요` : '나이는 생년월일로 자동 계산돼요.';
+  const age = ageOf(props.formData.birthYear);
+  const note = '개인정보 보호로 월·일은 받지 않아요';
+  return age != null ? `${age}세(올해 − 출생연도) · ${note}` : `나이는 출생연도로 계산해요 · ${note}`;
 });
 const commentHelp = computed(() => `${(props.formData.comment ?? '').trim().length}/${RULES.comment.max}자 · 후보 카드에 앞부분이 보여요`);
 const heightRangeOk = () => {
@@ -249,6 +277,7 @@ const heightRangeOk = () => {
 const LIMITS = { hobbies: RULES.hobbies.max };
 const countBetween = ({ min, max }) => (e) => Array.isArray(e.value) && e.value.length >= min && e.value.length <= max;
 const birthOk = (e) => {
+  if (!Number.isInteger(e.value)) return false;
   const a = ageOf(e.value);
   return a != null && a >= RULES.age.min && a <= RULES.age.max;
 };
@@ -259,13 +288,12 @@ function onFieldDataChanged(e) {
     form?.updateData('religion', null);
     form?.updateData('prefReligions', []);
   }
-  if (e.dataField === 'birthTimeUnknown' && e.value) form?.updateData('birthTime', null);
   const limit = LIMITS[e.dataField];
   if (limit && Array.isArray(e.value) && e.value.length > limit) {
     form?.updateData(e.dataField, e.value.slice(0, limit));
     notify({ message: `최대 ${limit}개까지 고를 수 있어요.`, type: 'warning', displayTime: 1800 });
   }
-  if (['birthTimeUnknown', 'campus', 'agreeSensitive'].includes(e.dataField)) syncDynamic();
+  if (['campus', 'agreeSensitive'].includes(e.dataField)) syncDynamic();
   prunePriorities();
   emit('change', e);
 }
@@ -285,8 +313,8 @@ function onFieldDataChanged(e) {
     @field-data-changed="onFieldDataChanged"
     @content-ready="syncDynamic"
   >
-    <!-- 나 -->
-    <DxGroupItem caption="나는 이런 사람" css-class="sec sec-basic" :col-count="2" :col-count-by-screen="{ xs: 1, sm: 2 }">
+    <!-- 1. 나는 이런 사람 -->
+    <DxGroupItem :visible="show(0)" :caption="cap(0)" css-class="sec sec-me" :col-count="2" :col-count-by-screen="{ xs: 1, sm: 2 }">
       <DxSimpleItem :visible="!admin && !readOnly" :col-span="2" template="basicNote" />
 
       <DxSimpleItem
@@ -302,6 +330,16 @@ function onFieldDataChanged(e) {
         <DxRequiredRule message="성별을 골라주세요." />
       </DxSimpleItem>
 
+      <DxSimpleItem data-field="birthYear" editor-type="dxNumberBox" :editor-options="opt.birthYear" :help-text="ageHelp">
+        <DxLabel text="출생연도" />
+        <DxRequiredRule message="출생연도 4자리를 적어주세요. (예: 1995)" />
+        <DxCustomRule :validation-callback="birthOk" :message="`${yearRange.min}~${yearRange.max}년생(${RULES.age.min}~${RULES.age.max}세)만 신청할 수 있어요.`" />
+      </DxSimpleItem>
+      <DxSimpleItem data-field="serious" editor-type="dxRadioGroup" :editor-options="opt.serious" help-text="같은 마음인 분을 우선 추천해요. 후보 카드에 함께 보여요.">
+        <DxLabel text="진지한 만남을 원하나요?" />
+        <DxRequiredRule message="진지한 만남 여부를 골라주세요." />
+      </DxSimpleItem>
+
       <DxSimpleItem data-field="nickname" :editor-options="opt.nickname" help-text="한글 2~5글자 · 후보 카드에 이름 대신 보여요.">
         <DxLabel text="닉네임" />
         <DxRequiredRule message="닉네임을 정해주세요. 오른쪽 '추천받기'도 있어요." />
@@ -310,29 +348,6 @@ function onFieldDataChanged(e) {
       <DxSimpleItem :visible="!readOnly" template="nickTpl">
         <DxLabel text="닉네임 추천" />
       </DxSimpleItem>
-
-      <DxSimpleItem data-field="serious" editor-type="dxRadioGroup" :editor-options="opt.serious" :col-span="2" help-text="같은 마음인 분을 우선 추천해요. 후보 카드에 함께 보여요.">
-        <DxLabel text="진지한 만남을 원하나요?" />
-        <DxRequiredRule message="진지한 만남 여부를 골라주세요." />
-      </DxSimpleItem>
-
-      <DxSimpleItem data-field="birthDate" editor-type="dxDateBox" :editor-options="opt.birthDate" :help-text="ageHelp">
-        <DxLabel text="생년월일" />
-        <DxRequiredRule message="생년월일을 입력해 주세요." />
-        <DxCustomRule :validation-callback="birthOk" :message="`만 ${RULES.age.min}~${RULES.age.max}세만 신청할 수 있어요.`" />
-      </DxSimpleItem>
-      <DxGroupItem :col-count="2" css-class="birth-time" :col-count-by-screen="{ xs: 2, sm: 2 }">
-        <DxSimpleItem data-field="birthTime" :editor-options="birthTimeOpt" help-text="사주 궁합 참고용">
-          <DxLabel text="태어난 시간" />
-          <DxCustomRule
-            :validation-callback="(e) => formData.birthTimeUnknown || RULES.birthTime.pattern.test(e.value ?? '')"
-            message="00:00~23:59 형식으로 적거나 '몰라요'를 체크해 주세요."
-          />
-        </DxSimpleItem>
-        <DxSimpleItem data-field="birthTimeUnknown" editor-type="dxCheckBox" :editor-options="opt.birthTimeUnknown" css-class="time-unknown">
-          <DxLabel :visible="false" />
-        </DxSimpleItem>
-      </DxGroupItem>
 
       <DxSimpleItem data-field="division" editor-type="dxSelectBox" :editor-options="opt.division">
         <DxLabel text="사업부" />
@@ -344,14 +359,18 @@ function onFieldDataChanged(e) {
         <DxPatternRule :pattern="RULES.team.pattern" :message="RULES.team.message" />
       </DxSimpleItem>
 
-      <DxSimpleItem data-field="campus" editor-type="dxSelectBox" :editor-options="opt.campus">
+      <DxSimpleItem :visible="moreButton(0)" :col-span="2" template="more0" />
+      <DxSimpleItem :visible="showOpt(0)" data-field="campus" editor-type="dxSelectBox" :editor-options="opt.campus">
         <DxLabel text="캠퍼스" />
       </DxSimpleItem>
-      <DxSimpleItem data-field="building" :editor-options="buildingOpt" help-text="같은 캠퍼스·같은 건물 이름이면 '같은 건물 피하기'에 쓰여요. 상대에게는 보이지 않아요.">
+      <DxSimpleItem :visible="showOpt(0)" data-field="building" :editor-options="buildingOpt" help-text="같은 캠퍼스·같은 건물 이름이면 '같은 건물 피하기'에 쓰여요. 상대에게는 보이지 않아요.">
         <DxLabel text="건물 위치" />
         <DxPatternRule :pattern="RULES.building.pattern" :message="RULES.building.message" />
       </DxSimpleItem>
+    </DxGroupItem>
 
+    <!-- 2. 나의 모습 -->
+    <DxGroupItem :visible="show(1)" :caption="cap(1)" css-class="sec sec-look" :col-count="2" :col-count-by-screen="{ xs: 1, sm: 2 }">
       <DxSimpleItem data-field="heightBand" editor-type="dxSelectBox" :editor-options="opt.heightBand">
         <DxLabel text="키" />
         <DxRequiredRule message="키를 골라주세요." />
@@ -369,37 +388,39 @@ function onFieldDataChanged(e) {
         <DxLabel text="외모" />
         <DxRequiredRule message="외모를 골라주세요." />
       </DxSimpleItem>
+    </DxGroupItem>
 
+    <!-- 3. 나의 일상 -->
+    <DxGroupItem :visible="show(2)" :caption="cap(2)" css-class="sec sec-life" :col-count="2" :col-count-by-screen="{ xs: 1, sm: 2 }">
       <DxSimpleItem data-field="mbti" editor-type="dxSelectBox" :editor-options="opt.mbti">
         <DxLabel text="MBTI" />
         <DxRequiredRule message="MBTI를 골라주세요." />
       </DxSimpleItem>
-      <DxSimpleItem data-field="residence" :editor-options="opt.residence" help-text="시·구 정도면 충분해요.">
-        <DxLabel text="사는 곳" />
-      </DxSimpleItem>
-
       <DxSimpleItem data-field="drinking" editor-type="dxRadioGroup" :editor-options="opt.drinking">
         <DxLabel text="음주" />
         <DxRequiredRule message="음주 스타일을 골라주세요." />
-      </DxSimpleItem>
-      <DxSimpleItem data-field="smoking" editor-type="dxRadioGroup" :editor-options="opt.smoking">
-        <DxLabel text="흡연" />
-        <DxRequiredRule message="흡연 여부를 골라주세요." />
       </DxSimpleItem>
 
       <DxSimpleItem
         data-field="hobbies"
         editor-type="dxTagBox"
         :editor-options="opt.hobbies"
-        :col-span="2"
         :help-text="`${RULES.hobbies.min}~${RULES.hobbies.max}개 · 후보 카드에 3개까지 보여요.`"
       >
         <DxLabel text="취미" />
         <DxRequiredRule message="취미를 1개 이상 골라주세요." />
         <DxCustomRule :validation-callback="countBetween(RULES.hobbies)" message="취미는 1~5개까지 고를 수 있어요." />
       </DxSimpleItem>
+      <DxSimpleItem data-field="smoking" editor-type="dxRadioGroup" :editor-options="opt.smoking">
+        <DxLabel text="흡연" />
+        <DxRequiredRule message="흡연 여부를 골라주세요." />
+      </DxSimpleItem>
 
-      <DxSimpleItem data-field="religion" editor-type="dxSelectBox" :editor-options="religionOpt">
+      <DxSimpleItem :visible="moreButton(2)" :col-span="2" template="more2" />
+      <DxSimpleItem :visible="showOpt(2)" data-field="residence" :editor-options="opt.residence" help-text="시·구 정도면 충분해요.">
+        <DxLabel text="사는 곳" />
+      </DxSimpleItem>
+      <DxSimpleItem :visible="showOpt(2)" data-field="religion" editor-type="dxSelectBox" :editor-options="religionOpt">
         <DxLabel text="종교" />
         <DxCustomRule
           :validation-callback="(e) => !e.value || formData.agreeSensitive"
@@ -407,7 +428,7 @@ function onFieldDataChanged(e) {
         />
       </DxSimpleItem>
       <DxSimpleItem
-        :visible="!admin"
+        :visible="!admin && showOpt(2)"
         data-field="agreeSensitive"
         editor-type="dxCheckBox"
         :editor-options="opt.agreeSensitive"
@@ -416,72 +437,72 @@ function onFieldDataChanged(e) {
       >
         <DxLabel :visible="false" />
       </DxSimpleItem>
-
-      <DxSimpleItem data-field="comment" editor-type="dxTextArea" :editor-options="opt.comment" :col-span="2" :help-text="commentHelp">
+      <DxSimpleItem :visible="showOpt(2)" data-field="comment" editor-type="dxTextArea" :editor-options="opt.comment" :col-span="2" :help-text="commentHelp">
         <DxLabel text="코멘트" />
         <DxStringLengthRule :max="RULES.comment.max" :message="`${RULES.comment.max}자까지 적을 수 있어요.`" />
       </DxSimpleItem>
     </DxGroupItem>
 
-    <!-- 선호 -->
-    <DxGroupItem caption="이런 분이면 좋겠어요" css-class="sec sec-pref" :col-count="2" :col-count-by-screen="{ xs: 1, sm: 2 }">
+    <!-- 4. 이런 분이면 좋겠어요 -->
+    <DxGroupItem :visible="show(3)" :caption="cap(3)" css-class="sec sec-pref" :col-count="2" :col-count-by-screen="{ xs: 1, sm: 2 }">
       <DxSimpleItem :visible="!readOnly" :col-span="2" template="prefNote" />
 
-      <DxSimpleItem data-field="prefAge" editor-type="dxRangeSlider" :editor-options="opt.prefAge" :col-span="2" help-text="만 나이 기준. 양 끝 손잡이를 끌어 조절해 주세요." css-class="age-slider">
+      <DxSimpleItem data-field="prefAge" editor-type="dxRangeSlider" :editor-options="opt.prefAge" :col-span="2" help-text="나이(올해 − 출생연도) 기준. 양 끝 손잡이를 끌어 조절해 주세요." css-class="age-slider">
         <DxLabel text="나이" />
         <DxRequiredRule message="선호 나이를 정해주세요." />
       </DxSimpleItem>
 
-      <DxSimpleItem data-field="prefAgeGap" template="gapTpl" :col-span="2" help-text="출생연도 기준이에요. 여러 개 고를 수 있어요.">
+      <DxSimpleItem :visible="moreButton(3)" :col-span="2" template="more3" />
+      <DxSimpleItem :visible="showOpt(3)" data-field="prefAgeGap" template="gapTpl" :col-span="2" help-text="출생연도 기준이에요. 여러 개 고를 수 있어요.">
         <DxLabel text="연상·연하·동갑" />
       </DxSimpleItem>
 
-      <DxSimpleItem data-field="prefFaces" template="faceTpl" :col-span="2" help-text="여러 개 고를 수 있어요. 고르지 않으면 '상관없어요'로 볼게요.">
+      <DxSimpleItem :visible="showOpt(3)" data-field="prefFaces" template="faceTpl" :col-span="2" help-text="여러 개 고를 수 있어요. 고르지 않으면 '상관없어요'로 볼게요.">
         <DxLabel text="얼굴상" />
       </DxSimpleItem>
 
-      <DxSimpleItem data-field="prefHeightMin" editor-type="dxSelectBox" :editor-options="opt.prefHeightMin">
+      <DxSimpleItem :visible="showOpt(3)" data-field="prefHeightMin" editor-type="dxSelectBox" :editor-options="opt.prefHeightMin">
         <DxLabel text="키 (부터)" />
         <DxCustomRule :validation-callback="heightRangeOk" :reevaluate="true" message="키 범위를 둘 다 고르거나 둘 다 비워주세요. 시작이 끝보다 클 수 없어요." />
       </DxSimpleItem>
-      <DxSimpleItem data-field="prefHeightMax" editor-type="dxSelectBox" :editor-options="opt.prefHeightMax">
+      <DxSimpleItem :visible="showOpt(3)" data-field="prefHeightMax" editor-type="dxSelectBox" :editor-options="opt.prefHeightMax">
         <DxLabel text="키 (까지)" />
         <DxCustomRule :validation-callback="heightRangeOk" :reevaluate="true" message="키 범위를 둘 다 고르거나 둘 다 비워주세요." />
       </DxSimpleItem>
 
-      <DxSimpleItem data-field="avoid" editor-type="dxTagBox" :editor-options="opt.avoid" :col-span="2" help-text="고른 범위의 분은 후보에서 빼드려요. 상대가 나를 피하도록 고른 경우에도 빠져요.">
+      <DxSimpleItem :visible="showOpt(3)" data-field="avoid" editor-type="dxTagBox" :editor-options="opt.avoid" :col-span="2" help-text="고른 범위의 분은 후보에서 빼드려요. 상대가 나를 피하도록 고른 경우에도 빠져요. (기본: 같은 팀)">
         <DxLabel text="피하고 싶은 범위" />
       </DxSimpleItem>
 
-      <DxSimpleItem data-field="prefDivisions" editor-type="dxTagBox" :editor-options="opt.prefDivisions">
+      <DxSimpleItem :visible="showOpt(3)" data-field="prefDivisions" editor-type="dxTagBox" :editor-options="opt.prefDivisions">
         <DxLabel text="사업부" />
       </DxSimpleItem>
-      <DxSimpleItem data-field="prefHobbies" editor-type="dxTagBox" :editor-options="opt.prefHobbies">
+      <DxSimpleItem :visible="showOpt(3)" data-field="prefHobbies" editor-type="dxTagBox" :editor-options="opt.prefHobbies">
         <DxLabel text="취미" />
       </DxSimpleItem>
-      <DxSimpleItem data-field="prefDrinking" editor-type="dxTagBox" :editor-options="opt.prefDrinking">
+      <DxSimpleItem :visible="showOpt(3)" data-field="prefDrinking" editor-type="dxTagBox" :editor-options="opt.prefDrinking">
         <DxLabel text="음주" />
       </DxSimpleItem>
-      <DxSimpleItem data-field="prefMbtis" editor-type="dxTagBox" :editor-options="opt.prefMbtis">
+      <DxSimpleItem :visible="showOpt(3)" data-field="prefMbtis" editor-type="dxTagBox" :editor-options="opt.prefMbtis">
         <DxLabel text="MBTI" />
       </DxSimpleItem>
-      <DxSimpleItem data-field="prefSmoking" editor-type="dxTagBox" :editor-options="opt.prefSmoking">
+      <DxSimpleItem :visible="showOpt(3)" data-field="prefSmoking" editor-type="dxTagBox" :editor-options="opt.prefSmoking">
         <DxLabel text="흡연" />
       </DxSimpleItem>
-      <DxSimpleItem data-field="prefBodies" editor-type="dxTagBox" :editor-options="opt.prefBodies">
+      <DxSimpleItem :visible="showOpt(3)" data-field="prefBodies" editor-type="dxTagBox" :editor-options="opt.prefBodies">
         <DxLabel text="체형" />
       </DxSimpleItem>
-      <DxSimpleItem data-field="prefReligions" editor-type="dxTagBox" :editor-options="prefReligionsOpt">
+      <DxSimpleItem :visible="showOpt(3)" data-field="prefReligions" editor-type="dxTagBox" :editor-options="prefReligionsOpt">
         <DxLabel text="종교" />
       </DxSimpleItem>
 
-      <DxSimpleItem data-field="priorities" template="priorityTpl" :col-span="2" :help-text="`위에서 고른 선호 중 중요한 순서대로 최대 ${MAX_PRIORITIES}개. 1순위일수록 후보 추천에 크게 반영돼요.`">
+      <DxSimpleItem data-field="priorities" template="priorityTpl" :col-span="2" :help-text="`고른 선호 중 중요한 순서대로 최대 ${MAX_PRIORITIES}개. 1순위일수록 후보 추천에 크게 반영돼요.`">
         <DxLabel text="선호 우선순위" :show-colon="false" />
       </DxSimpleItem>
     </DxGroupItem>
 
-    <!-- 동의 -->
-    <DxGroupItem :visible="!admin" caption="동의" css-class="sec sec-consent">
+    <!-- 동의 (4페이지 아래) -->
+    <DxGroupItem :visible="!admin && show(3)" caption="동의" css-class="sec sec-consent">
       <DxSimpleItem template="privacyNotice" />
       <DxSimpleItem data-field="agreePrivacy" editor-type="dxCheckBox" :editor-options="opt.agreePrivacy">
         <DxLabel :visible="false" />
@@ -492,6 +513,16 @@ function onFieldDataChanged(e) {
         <DxRequiredRule message="정보 전달에 동의해야 매칭을 진행할 수 있어요." />
       </DxSimpleItem>
     </DxGroupItem>
+
+    <template #more0>
+      <button type="button" class="more" @click="toggleMore(0)">{{ moreText(0) }}</button>
+    </template>
+    <template #more2>
+      <button type="button" class="more" @click="toggleMore(2)">{{ moreText(2) }}</button>
+    </template>
+    <template #more3>
+      <button type="button" class="more" @click="toggleMore(3)">{{ moreText(3) }}</button>
+    </template>
 
     <template #basicNote>
       <p class="form-note">사내 계정 정보로 이름·성별·사업부·팀을 미리 채웠어요. 다르면 고쳐주세요.</p>
@@ -534,13 +565,13 @@ function onFieldDataChanged(e) {
     <template #privacyNotice>
       <dl class="privacy">
         <dt>필수 수집</dt>
-        <dd>사번·이름(사내 인사정보), 성별, 생년월일, 사업부·팀, 키·체형·얼굴상·외모·MBTI·취미·음주·흡연, 선호 나이·우선순위</dd>
+        <dd>사번·이름(사내 인사정보), 성별, 출생연도(월·일은 받지 않아요), 사업부·팀, 키·체형·얼굴상·외모·MBTI·취미·음주·흡연, 선호 나이·우선순위</dd>
         <dt>선택 수집</dt>
-        <dd>태어난 시간, 캠퍼스·건물, 사는 곳, 코멘트, 그 밖의 선호 항목 · 종교(민감정보, 별도 동의)</dd>
+        <dd>캠퍼스·건물, 사는 곳, 코멘트, 그 밖의 선호 항목 · 종교(민감정보, 별도 동의)</dd>
         <dt>이용 목적</dt>
         <dd>사내 소개팅 후보 추천·매칭, 매칭 결과 안내, 서비스 품질 관리(후기)</dd>
         <dt>상대에게 보이는 것</dt>
-        <dd>후보 카드: 이름 초성, 만 나이, 사업부, 캠퍼스, 키·체형·얼굴상, MBTI, 음주·흡연, 취미 3개, 코멘트 앞부분<br />보이지 않는 것: 이름 원문, 사번, 팀, 건물, 생년월일, 외모, 종교, 사는 곳, 받은 평가</dd>
+        <dd>후보 카드: 이름 초성, 나이, 사업부, 캠퍼스, 키·체형·얼굴상, MBTI, 음주·흡연, 취미 3개, 코멘트 앞부분<br />보이지 않는 것: 이름 원문, 사번, 팀, 건물, 출생연도, 외모, 종교, 사는 곳, 받은 평가</dd>
         <dt>제3자 제공</dt>
         <dd>없음 · 사내 다른 시스템이나 소속 조직에 전달하지 않아요</dd>
         <dt>보관·파기</dt>
@@ -626,6 +657,22 @@ function onFieldDataChanged(e) {
   color: var(--c-mute);
   font-size: 12.5px;
 }
+.more {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px dashed var(--c-line-strong);
+  border-radius: var(--r-md);
+  background: var(--c-paper);
+  color: var(--c-indigo);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.more:hover {
+  border-color: var(--c-indigo);
+}
 :deep(.age-slider .dx-rangeslider) {
   margin-top: 34px; /* 항상 보이는 툴팁 자리 */
 }
@@ -635,10 +682,6 @@ function onFieldDataChanged(e) {
 :deep(.name-locked input) {
   color: var(--c-ink-2);
   cursor: not-allowed;
-}
-:deep(.time-unknown) {
-  align-self: end;
-  padding-bottom: 30px;
 }
 @media (max-width: 575px) {
   .privacy {

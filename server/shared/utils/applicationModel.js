@@ -1,7 +1,8 @@
 /**
  * 신청서 화면 모델 ↔ API 모델 변환
- * - 화면: 선호 나이를 RangeSlider용 prefAge: [min, max], 태어난 시간 모름을 birthTimeUnknown 으로 다룬다
- * - API/DB: prefAgeMin/prefAgeMax, birthTime(null = 모름)
+ * - 화면: 선호 나이를 RangeSlider용 prefAge: [min, max] 로 다룬다
+ * - API/DB: prefAgeMin/prefAgeMax
+ * - 생년월일은 개인정보 보호로 저장하지 않고 출생연도(birthYear, 숫자)만 받는다
  */
 import { PREF_ITEMS } from '../constants/codes.js';
 
@@ -14,9 +15,7 @@ export function emptyForm(user = {}) {
     nickname: '',
     gender: user.gender ?? null,
     serious: null,
-    birthDate: null,
-    birthTime: null,
-    birthTimeUnknown: true,
+    birthYear: null,
     heightBand: null,
     hobbies: [],
     mbti: null,
@@ -39,7 +38,7 @@ export function emptyForm(user = {}) {
     prefHeightMax: null,
     avoid: ['TEAM'],
     ...Object.fromEntries(MULTI_PREF_KEYS.map((k) => [k, []])),
-    priorities: [],
+    priorities: ['AGE'], // 처음에는 '나이'를 1순위로 — 선호를 더 고르면 바꿀 수 있다
 
     agreePrivacy: false,
     agreeShare: false,
@@ -52,17 +51,16 @@ export function toFormModel(app) {
   const form = emptyForm();
   for (const k of FORM_KEYS) if (k in app) form[k] = Array.isArray(app[k]) ? [...app[k]] : app[k];
   form.prefAge = [app.prefAgeMin, app.prefAgeMax];
-  form.birthTimeUnknown = !app.birthTime;
   return form;
 }
 
 export function fromFormModel(form) {
-  const { prefAge, birthTimeUnknown, ...rest } = form;
+  const { prefAge, ...rest } = form;
   const out = {
     ...rest,
     prefAgeMin: prefAge[0],
     prefAgeMax: prefAge[1],
-    birthTime: birthTimeUnknown ? null : rest.birthTime || null,
+    birthYear: rest.birthYear == null || rest.birthYear === '' ? null : Number(rest.birthYear),
     name: rest.name.trim(),
     team: rest.team.trim(),
     nickname: (rest.nickname ?? '').trim(),
@@ -86,7 +84,7 @@ export function fromFormModel(form) {
 
 /** 신청서 항목 이름 — 관리자 수정 기록에 '무엇을 바꿨는지'를 남길 때 쓴다 (값은 남기지 않는다) */
 export const FIELD_LABELS = {
-  name: '이름', nickname: '닉네임', serious: '진지한 만남 여부', gender: '성별', birthDate: '생년월일', birthTime: '태어난 시간', heightBand: '키', hobbies: '취미',
+  name: '이름', nickname: '닉네임', serious: '진지한 만남 여부', gender: '성별', birthYear: '출생연도', heightBand: '키', hobbies: '취미',
   mbti: 'MBTI', religion: '종교', agreeSensitive: '민감정보 동의', residence: '사는 곳', division: '사업부', team: '팀',
   campus: '캠퍼스', building: '건물 위치', comment: '코멘트', face: '얼굴상', body: '체형', looks: '외모',
   drinking: '음주', smoking: '흡연',
@@ -99,15 +97,25 @@ export const FIELD_LABELS = {
 /** 진행률 계산용: 섹션별 필수 항목 */
 const filled = (v) => (Array.isArray(v) ? v.length > 0 : v !== null && v !== undefined && String(v).trim() !== '');
 
+/**
+ * 신청서 페이지 — 처음 신청할 때는 설문처럼 한 페이지씩(정규 신청·인연 사주 신청 같은 양식),
+ * 신청 후 수정할 때는 한 화면에 모두 보여준다. fields 는 그 페이지의 필수 항목(진행률 계산용),
+ * optional 은 '선택 항목 더 보기'를 눌러야 보이는 항목이다.
+ */
 export const SECTIONS = [
+  { key: 'me', title: '나는 이런 사람', short: '기본 정보', fields: ['gender', 'birthYear', 'nickname', 'serious', 'division', 'team'], optional: ['campus', 'building'] },
+  { key: 'look', title: '나의 모습', short: '모습', fields: ['heightBand', 'body', 'face', 'looks'], optional: [] },
+  { key: 'life', title: '나의 일상', short: '일상', fields: ['mbti', 'hobbies', 'drinking', 'smoking'], optional: ['residence', 'religion', 'comment'] },
   {
-    key: 'basic',
-    title: '나는 이런 사람',
-    fields: ['nickname', 'gender', 'serious', 'birthDate', 'division', 'team', 'heightBand', 'body', 'face', 'looks', 'mbti', 'hobbies', 'drinking', 'smoking'],
+    key: 'pref',
+    title: '이런 분이면 좋겠어요',
+    short: '선호 · 동의',
+    fields: ['prefAge', 'priorities', 'agreePrivacy', 'agreeShare'],
+    optional: ['prefAgeGap', 'prefFaces', 'prefHeightMin', 'avoid', 'prefDivisions', 'prefHobbies', 'prefDrinking', 'prefMbtis', 'prefSmoking', 'prefBodies', 'prefReligions'],
   },
-  { key: 'pref', title: '이런 분이면 좋겠어요', fields: ['prefAge', 'priorities'] },
-  { key: 'consent', title: '동의', fields: ['agreePrivacy', 'agreeShare'] },
 ];
+/** 항목 → 페이지 번호 (선택 항목을 채우러 갈 때) */
+export const pageOfField = (key) => Math.max(0, SECTIONS.findIndex((s) => s.fields.includes(key) || s.optional.includes(key)));
 
 export function sectionProgress(form) {
   return SECTIONS.map((s) => {
@@ -128,7 +136,6 @@ export const OPTIONAL_BOOSTERS = [
   { key: 'campus', label: '캠퍼스', nudge: '캠퍼스를 알려주셔서 가까운 분을 먼저 찾아드릴게요.' },
   { key: 'building', label: '건물 위치', nudge: '같은 건물 피하기가 정확해졌어요.' },
   { key: 'comment', label: '코멘트', nudge: '코멘트가 있는 카드는 하트를 받을 가능성이 높아요.' },
-  { key: 'birthTime', label: '태어난 시간', nudge: '인연 사주 궁합이 더 정확해져요.', filled: (f) => !f.birthTimeUnknown && Boolean(f.birthTime) },
   { key: 'prefAgeGap', label: '연상·연하', nudge: '연상·연하 취향까지 알려주셔서 나이 궁합이 맞는 분을 찾기 쉬워졌어요.' },
   { key: 'prefFaces', label: '선호 얼굴상', nudge: '좋아하는 얼굴상을 알려주셔서 첫인상이 맞는 분을 찾기 쉬워졌어요.' },
   { key: 'prefHeightMin', label: '선호 키', nudge: '키 선호가 반영돼 추천이 더 정교해졌어요.', filled: (f) => Boolean(f.prefHeightMin && f.prefHeightMax) },

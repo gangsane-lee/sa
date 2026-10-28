@@ -8,9 +8,10 @@ import express from 'express';
 import session from 'express-session';
 import createMemoryStore from 'memorystore';
 import helmet from 'helmet';
-import { configureService } from '../../client/src/api/core/service.js';
+import { configureService } from '../shared/api/core/service.js';
 import { currentReq } from './context.js';
-import { apiRouter } from './routes.js';
+import { clientIpOf } from './clientIp.js';
+import { apiRouter } from '../routes/index.js';
 
 const MemoryStore = createMemoryStore(session);
 
@@ -33,7 +34,7 @@ export async function createApp({ config, store, directory, admin }) {
         if (req?.session) req.session.sa = s;
       },
     },
-    clientIp: () => currentReq()?.ip ?? '-',
+    clientIp: () => currentReq()?.clientIp ?? '-',
     directory,
     admin: { isAdmin: (emp) => admin.isAdmin(emp), verify: (password) => admin.verify(password) },
     allowDev: false,
@@ -42,8 +43,11 @@ export async function createApp({ config, store, directory, admin }) {
 
   const app = express();
   app.disable('x-powered-by');
-  // Web 서버(IIS)에서 온 요청이면 X-Forwarded-For 의 사용자 IP 를 req.ip 로 쓴다
-  if (config.trustedProxies?.length) app.set('trust proxy', config.trustedProxies);
+  // 사용자 IP — iisnode 의 x-iisnode-remote_addr · Web 서버가 붙인 X-Forwarded-For (src/clientIp.js)
+  app.use((req, res, next) => {
+    req.clientIp = clientIpOf(req);
+    next();
+  });
 
   app.use(
     helmet({
@@ -85,10 +89,14 @@ export async function createApp({ config, store, directory, admin }) {
     }),
   );
 
-  // 화면 운영 설정 — .env 값으로 만들어 내려준다 (캐시 금지)
+  // 화면 설정 — servers.config.mjs 값으로 만들어 내려준다 (캐시 금지, CLIENT_DIST 로 화면을 직접 낼 때만)
   app.get('/sayeon.config.js', (req, res) => {
     res.set('Cache-Control', 'no-store').type('application/javascript');
-    const runtime = { mode: config.serviceMode, adminPath: config.adminPath, ...(config.sso.loginPage && { ssoLoginPage: config.sso.loginPage }) };
+    const runtime = {
+      adminPath: config.adminPath,
+      ...(config.sso.mode === 'browser' && { employeeApi: config.sso.employeeApi }),
+      ...(config.sso.loginPage && { ssoLoginPage: config.sso.loginPage }),
+    };
     res.send(`window.SAYEON_CONFIG = ${JSON.stringify(runtime)};\n`);
   });
 

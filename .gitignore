@@ -26,3 +26,6 @@ server/logs/
 
 # 배포 패키지 (npm run release)
 release/
+
+# iisnode 로그 (API 서버 폴더 안에 생긴다)
+server/iisnode/

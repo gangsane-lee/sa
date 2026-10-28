@@ -4,7 +4,7 @@
  */
 import { reactive } from 'vue';
 import { api } from '@/api';
-import { activeItems, codeText, codeTexts, sortedItems, rankOf } from '@/utils/codeHelpers';
+import { activeItems, codeText, codeTexts, sortedItems, rankOf } from '@shared/utils/codeHelpers';
 
 export const codeStore = reactive({ codes: {}, loaded: false });
 let pending = null;

@@ -1,6 +1,6 @@
 /**
  * 시작 전 확인 — Node.js 기본 모듈만 쓴다 (라이브러리를 불러오기 전에 돌아야 하므로)
- *  start.cjs(PM2) · npm run check · npm run db:setup 이 가장 먼저 부른다.
+ *  main.js(IIS + iisnode) · npm run check · npm run db:setup 이 가장 먼저 부른다.
  *
  *  - Node.js 22.12.0 이상인지
  *  - Windows 에서 설치 경로에 한글 등 영문이 아닌 글자가 있는지

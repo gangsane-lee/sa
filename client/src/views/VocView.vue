@@ -10,7 +10,7 @@ import { DxTextArea } from 'devextreme-vue/text-area';
 import { DxButton } from 'devextreme-vue/button';
 import notify from 'devextreme/ui/notify';
 import { api } from '@/api';
-import { VOC_CATEGORIES } from '@/constants/codes';
+import { VOC_CATEGORIES } from '@shared/constants/codes';
 
 const f = reactive({ category: 'FEATURE', title: '', content: '' });
 const busy = ref(false);

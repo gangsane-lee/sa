@@ -10,7 +10,7 @@
  * 3) 최종 점수 = (내 선호 적합도 + 상대 선호 적합도) / 2  → 서로에게 맞는 사람이 위로
  */
 import { ACTIVE_MATCH_STATUS, PREF_ITEMS, RECOMMENDABLE_STATUS } from '../../constants/codes.js';
-import { ageOf, prefIsSet } from '../../utils/applicationRules.js';
+import { ageOf, yearOf, prefIsSet } from '../../utils/applicationRules.js';
 import { rankOf, findCode } from '../../utils/codeHelpers.js';
 
 const PRIORITY_WEIGHTS = [5, 4, 3, 2, 1];
@@ -37,11 +37,11 @@ function avoids(a, b) {
 const inPrefAge = (age, who) => age >= who.prefAgeMin && age <= who.prefAgeMax;
 
 function satisfies(me, other, item, codes) {
-  if (item === 'AGE') return inPrefAge(ageOf(other.birthDate), me);
+  if (item === 'AGE') return inPrefAge(ageOf(other.birthYear), me);
   if (item === 'AGEGAP') {
     // 출생연도 기준: 상대가 먼저 태어났으면 연상, 같으면 동갑
-    const my = Number(String(me.birthDate).slice(0, 4));
-    const their = Number(String(other.birthDate).slice(0, 4));
+    const my = yearOf(me.birthYear);
+    const their = yearOf(other.birthYear);
     const gap = their < my ? 'OLDER' : their === my ? 'SAME' : 'YOUNGER';
     return (me.prefAgeGap ?? []).includes(gap);
   }
@@ -82,8 +82,8 @@ export function fitScore(me, other, codes) {
 export function isEligiblePair(a, b) {
   if (a.id === b.id || a.gender === b.gender) return false;
   if (avoids(a, b) || avoids(b, a)) return false;
-  const aAge = ageOf(a.birthDate);
-  const bAge = ageOf(b.birthDate);
+  const aAge = ageOf(a.birthYear);
+  const bAge = ageOf(b.birthYear);
   return inPrefAge(bAge, a) || inPrefAge(aAge, b);
 }
 
@@ -129,7 +129,7 @@ export function scoreCandidates(target, pool, matches, codes, { exclude = new Se
 
     // 동점이면 가까운 캠퍼스 → 겹치는 취미 순
     const tie = (near ? 2 : 0) + Math.min(common.length, 3) * 0.1;
-    out.push({ applicant: c, age: ageOf(c.birthDate), score, myScore: mine.score, theirScore: theirs.score, reasons, tie });
+    out.push({ applicant: c, age: ageOf(c.birthYear), score, myScore: mine.score, theirScore: theirs.score, reasons, tie });
   }
 
   return out.sort((x, y) => y.score - x.score || y.tie - x.tie).slice(0, limit);

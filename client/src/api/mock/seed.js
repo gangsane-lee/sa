@@ -2,14 +2,14 @@
  * mock 모드 가비지 데이터 (삼성전자 DS부문 기준의 가상 인물)
  * - 고정 시드 난수라 매번 같은 데이터가 만들어진다
  * - 실제 인물·연락처와 무관하며, 메일은 수신 불가능한 .test 도메인을 쓴다
- * - 운영 모드 test(sayeon.config.js)에서만 쓰인다. VITE_INCLUDE_MOCK=false 빌드에는 포함되지 않는다
+ * - 개발 모드(npm run dev)에서만 쓰인다. 빌드(npm run build)에는 포함되지 않는다
  */
-import { DEFAULT_CODES } from '../../constants/defaultCodes.js';
-import { PREF_ITEMS, MAX_PRIORITIES, DEFAULT_SETTINGS } from '../../constants/codes.js';
-import { THIS_YEAR, prefIsSet } from '../../utils/applicationRules.js';
-import { initials } from '../../utils/format.js';
-import { nicknameAt, NICKNAME_POOL_SIZE } from '../../utils/nickname.js';
-import { scoreCandidates } from '../core/matching.js';
+import { DEFAULT_CODES } from '@shared/constants/defaultCodes.js';
+import { PREF_ITEMS, MAX_PRIORITIES, DEFAULT_SETTINGS } from '@shared/constants/codes.js';
+import { THIS_YEAR, prefIsSet } from '@shared/utils/applicationRules.js';
+import { initials } from '@shared/utils/format.js';
+import { nicknameAt, NICKNAME_POOL_SIZE } from '@shared/utils/nickname.js';
+import { scoreCandidates } from '@shared/api/core/matching.js';
 
 /** 테스트 계정은 accounts.js 한 곳에서 관리한다 (여기서는 다시 내보내기만) */
 import { TEST_ACCOUNTS, ADMIN_ACCOUNTS } from './accounts.js';
@@ -84,7 +84,6 @@ const COMMENTS = [
 const ADMIN_MEMOS = ['10/1 통화 — 주말 일정 선호', '코멘트 보완 요청 예정', '이전 매칭 불발 후 재신청', '교대 근무 일정 확인 필요'];
 
 const DAY = 86400000;
-const pad = (n) => String(n).padStart(2, '0');
 const codeValues = (group) => DEFAULT_CODES[group].map((c) => c.value);
 
 export function createSeed() {
@@ -105,7 +104,6 @@ export function createSeed() {
     return out;
   };
   const iso = (t) => new Date(t).toISOString();
-  const birth = (year) => `${year}-${pad(int(1, 12))}-${pad(int(1, 28))}`;
   const codes = structuredClone(DEFAULT_CODES);
   const HEIGHTS = codeValues('HEIGHT');
   const heightIdx = (cm) => (cm < 150 ? 0 : cm >= 190 ? HEIGHTS.length - 1 : 1 + (Math.floor(cm / 10) - 15) * 3 + Math.min(2, Math.floor((cm % 10) / 3.4)));
@@ -128,7 +126,7 @@ export function createSeed() {
   };
   const person = (name, gender, year, division, team, given, sur, extra = {}) => {
     const adId = adIdOf(given, sur);
-    return { empNo: empNoOf(), adId, name, gender, birthDate: birth(year), division, team, email: `${adId}@samsung.test`, retired: false, ...extra };
+    return { empNo: empNoOf(), adId, name, gender, birthYear: year, division, team, email: `${adId}@samsung.test`, retired: false, ...extra };
   };
 
   const employees = [
@@ -164,7 +162,7 @@ export function createSeed() {
   };
   const BUILDING_NAMES = ['연구동', '사무동', '생산동(FAB)', '복지동', '부품동', 'R&D센터'];
   const makeApplication = (emp, id, createdAt) => {
-    const year = Number(emp.birthDate.slice(0, 4));
+    const year = emp.birthYear;
     const age = THIS_YEAR - year;
     const male = emp.gender === 'M';
     const campus = weighted(SITES[emp.division]);
@@ -181,8 +179,7 @@ export function createSeed() {
       nickname: nick(),
       serious: weighted([['Y', 65], ['N', 35]]),
       gender: emp.gender,
-      birthDate: emp.birthDate,
-      birthTime: chance(0.45) ? `${pad(int(0, 23))}:${pick(['00', '10', '30', '45'])}` : null,
+      birthYear: emp.birthYear, // 생년월일(월·일)은 저장하지 않는다
       heightBand: HEIGHTS[heightIdx(cm)],
       hobbies: prefPool('HOBBY', int(2, 5)),
       mbti: pick(codeValues('MBTI')),

@@ -9,8 +9,8 @@
 
 ```
 servers.config.mjs  ★ 서버 기준정보(마스터) — Web·API·DB·개발 서버 주소, 포트, DB 이름, 관리자 주소, 로그인 방식
-client/   화면 (Vue 3 + DevExtreme) + 업무 규칙(client/src/api/core/service.js — 서버와 함께 씀)
-server/   API 서버 (Node.js + Express + MSSQL, PM2 내장)
+client/   화면 (Vue 3 + DevExtreme) — 업무 규칙은 server/shared 를 함께 씀 (@shared)
+server/   API 서버 = IIS 사이트 폴더 (main.js · web.config · routes/ · src/ · shared/ — IIS + iisnode)
 tools/    기준정보 읽기(topology.mjs) · 배포 패키지 만들기(release.mjs)
 docs/     운영 가이드 · 설계서
 ```
@@ -20,8 +20,8 @@ docs/     운영 가이드 · 설계서
 | 역할 | 주소 (`servers.config.mjs`) | 하는 일 |
 |---|---|---|
 | 개발 서버 (인터넷 됨) | `12.123.321.13` | 개발·시험, 빌드와 배포 패키지 만들기 |
-| Web 배포 운영 서버 | `10.123.321.12:8282` | IIS — 화면 · Windows 인증(AD SSO) · `/api` 를 API 서버로 |
-| API 배포 운영/개발 서버 | `12.83.18.17:8292` (개발 `:8293`) | Node.js + PM2 — AD 조회 · 사내 인사 API · DB |
+| Web 배포 운영 서버 | `10.123.321.12:8282` | IIS — 화면 · `/api` 를 API 서버로 |
+| API 배포 운영/개발 서버 | `12.83.18.17:8292` (개발 `:8293`) | IIS + iisnode — 업무 · (권장) 사내 인사 API 로 사번 재확인 · DB |
 | DB 서버 | `10.166.101.127` | MSSQL `sasystem` (개발 `sasystem_dev`) |
 
 지금 IP 는 가짜다(`321` 은 IP 로 쓸 수 없음 — 서버·빌드·점검이 막는다). 운영 표준: Node.js **22.12.0** · npm **10.9.0** · PM2 **5.3.0**(서버 패키지에 포함). 설치 경로는 **영문만**(예: `C:\apps\sa`).
@@ -47,25 +47,26 @@ npm run sso:test -- --user 회사아이디   # AD 조회 → 사내 인사 API �
 
 | 바꾸고 싶은 것 | 파일 |
 |---|---|
-| 서버 IP·포트, DB 서버·이름, 관리자 주소, 정식/시연, 사내 로그인 방식·인사 API | **`servers.config.mjs`** (개발 서버에서 고쳐 커밋 → `npm run release` → 배포) |
+| 서버 IP·포트, DB 서버·이름, 관리자 주소, 사내 로그인 방식·**사내 인사정보 URL**·서버 재확인 인사 API | **`servers.config.mjs`** (개발 서버에서 고쳐 커밋 → `npm run release` → 배포) |
 | DB 계정·비밀번호, 세션·암호화 키, 인사 API 키 | API 서버 **`server/.env`** (설명: `server/.env.example`) |
 | 관리자 계정(사번·사내 계정 ID)과 관리자 비밀번호 | API 서버 **`server/config/admins.js`** (예시: `admins.example.js`) — 고치면 3초 안에 반영 |
-| AD·인사 API 응답 필드 이름, 사업부 이름 → 코드 | `server/src/sso.js` 의 `FIELD`·`DIVISION_MAP` |
+| 인사정보 응답 필드 이름, 사업부 이름 → 코드, 재직 아님 값 | `server/shared/utils/employeeInfo.js` 의 `FIELD`·`DIVISION_MAP`·`INACTIVE` (화면·서버 같이 씀) |
 | DB 준비 (DB 담당자가 직접 할 때) | `server/sql/setup.sql` |
-| 사업부·캠퍼스 등 기준정보·설정 | 관리자 화면 '기준정보' — 한 건씩 또는 **엑셀로 일괄 변경** (기본값: `client/src/constants/defaultCodes.js`) |
-| PM2 실행 방식 | `server/ecosystem.config.cjs` |
-| test 모드 테스트 계정 | `client/src/api/mock/accounts.js` |
+| 사업부·캠퍼스 등 기준정보·설정 | 관리자 화면 '기준정보' — 한 건씩 또는 **엑셀로 일괄 변경** (기본값: `server/shared/constants/defaultCodes.js`) |
+| API 서버 환경·포트·DB 서버 | API 서버 사이트 폴더의 `web.config` (`npm run webconfig` 로 다시 만들기) |
+| 개발 모드 테스트 계정 | `client/src/api/mock/accounts.js` |
 
 `server/.env`, `server/config/admins.js`, DevExtreme 라이선스 키(`client/src/.devextreme/`)는 git·배포 패키지에 들어가지 않는다.
 
 ## 로그인과 역할
 
-- **정식 운영**: 로그인 화면이 없다. Web 서버 IIS 가 Windows 인증으로 `SECDS\아이디` 를 확인 → API 서버가 AD·사내 인사 API 로 재직 확인 → 바로 홈. 안 되면 "AD SSO로 확인된 임직원만 이용할 수 있어요" 안내 화면
-- **test 모드**: 입구에서 테스트 계정(만능·신청 전·신청 완료·매칭 담당자·퇴직자)을 골라 바로 들어간다
+- **운영 모드** (`npm run build`): 로그인 화면이 없다. 화면을 열 때 라우터가 **사내 인사정보 URL** 을 불러 → 응답을 localStorage(`sayeon.employee`)에 저장 → 사번·재직 여부 확인 → 임직원이면 API 서버로 넘겨 바로 홈. 아니면 "임직원만 이용할 수 있어요" 안내 화면 (자세히: [GO-LIVE 4장](docs/GO-LIVE.md#4-사내-로그인-구조))
+- **개발 모드** (`npm run dev`): 로그인 화면 없이 만능 테스트 계정으로 바로 홈. 로그아웃하면 다른 테스트 계정을 고를 수 있다
+- **개인정보**: 생년월일은 **출생연도만** 저장한다. 인연 사주에 입력한 월·일·태어난 시간은 저장하지 않는다
 - 서버가 로그인 정보에 역할을 담아 준다 — `role`: `ADMIN`(관리자 계정) · `APPLICANT`(신청서 있음) · `GUEST`(신청 전), `applicant.userStatus`: 매칭 대기 중 / 매칭 중 / 커플 성사
 - **관리자 화면**(`/changeme`, `servers.config.mjs` 의 `adminPath`): 사용자 화면에는 들어가는 버튼이 없다. 사내 SSO 확인 → `admins.js`에 있는 계정인지 → 관리자 비밀번호 (5회 틀리면 10분 잠금, 30분 무활동 시 종료)
 
-## 개발 · 시연 (test 모드, 내 PC)
+## 개발 모드 (내 PC · 개발 서버)
 
 ```bash
 cd client
@@ -73,7 +74,7 @@ npm ci
 npm run dev
 ```
 
-`http://localhost:5173` — 서버 없이 브라우저 안의 가짜 DB로 모든 기능이 동작한다(맨 위 '테스트 운영 중' 띠).
+`http://localhost:5173` — 서버 없이 브라우저 안의 가짜 DB로 모든 기능이 동작하고, **만능 계정으로 바로 홈**이 열린다(맨 위 '개발 모드' 띠). 다른 계정은 로그아웃 → 계정 고르기.
 
 | 용도 | 사내 계정 ID | 비고 |
 |---|---|---|
@@ -83,10 +84,10 @@ npm run dev
 | 신청 완료 + 받은 하트 1 | `doyun.lee` | |
 | 퇴직자 | `seojin.park` | 로그인 거절 확인용 |
 
-- 입구 화면에서 계정을 누르면 바로 들어간다. 관리자 비밀번호는 `client/src/api/mock/accounts.js` (`/changeme/login`의 '테스트 운영' 버튼으로 채울 수 있다)
+- 관리자 비밀번호는 `client/src/api/mock/accounts.js` (`/changeme/login`의 테스트 버튼으로 채울 수 있다)
 - 홈 "테스트 · 다음 날로 넘기기": 오늘의 후보·하트 제한 초기화 / 관리자 사이드바 "가짜 데이터 초기화": 처음 상태로
-- 실서버로 개발하려면 `server`에서 `npm run dev`, `client/public/sayeon.config.js`의 `mode`를 `'open'`으로 바꾸면 `/api`가 3000번 포트로 넘어간다
-- DevExtreme 라이선스 키 등록 방법은 [GO-LIVE 5-2](docs/GO-LIVE.md#5-2-devextreme-라이선스)
+- 실제 API 와 붙여 보려면 `npm run build` → `npm run preview` (`/api` 는 개발 API 서버 또는 `DEV_API_PROXY` 로) — [GO-LIVE 5장](docs/GO-LIVE.md#5-개발-환경)
+- DevExtreme 라이선스 키 등록 방법은 [GO-LIVE 8-1](docs/GO-LIVE.md#8-1-devextreme-라이선스)
 
 ## 주요 기능
 

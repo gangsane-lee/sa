@@ -4,14 +4,15 @@
  */
 import { reactive } from 'vue';
 import { api } from '@/api';
-import { ADMIN_IDLE_MS } from '@/constants/policy';
+import { ADMIN_IDLE_MS } from '@shared/constants/policy';
 import { isTestMode } from '@/config';
+import { fetchEmployee, clearEmployee } from '@/auth/employee';
 
 export const session = reactive({
   user: null,
   adminExpiresAt: 0,
   restored: false,
-  /** 운영: 마지막 SSO 확인이 안 된 이유 { code, message } — 안내 화면(SsoGateView)이 보여준다 */
+  /** 운영: 마지막 임직원 확인이 안 된 이유 { code, message } — 안내 화면(SsoGateView)이 보여준다 */
   ssoError: null,
   get isAdmin() {
     return this.adminExpiresAt > Date.now();
@@ -28,35 +29,68 @@ const pageQuery = () => {
 };
 
 /**
- * 운영(open): 사내 SSO로 임직원을 확인한다. 인사정보가 오면 바로 들어오고, 아니면 ssoError 에 이유를 남긴다
- * @returns {Promise<boolean>} 확인됐는지
+ * 운영 모드: 사내 인사정보 URL → localStorage 저장 → 임직원 확인 → API 서버 세션
+ * 임직원이면 true, 아니면 ssoError 에 이유를 남기고 false (라우터가 안내 화면으로 보낸다)
+ * @param {{ reuse?: boolean }} [opt] reuse: 같은 사번의 서버 세션이 살아 있으면 그대로 쓴다 (관리자 인증 유지)
+ * @returns {Promise<boolean>}
  */
-export async function ssoLogin() {
+export async function employeeLogin({ reuse = false } = {}) {
+  const r = await fetchEmployee();
+  if (!r.ok) {
+    session.user = null;
+    session.ssoError = { code: r.code, message: r.message };
+    return false;
+  }
+  if (reuse) {
+    const me = await api.auth.me().catch(() => null);
+    if (me?.user && me.user.empNo === r.profile.empNo) {
+      session.user = me.user;
+      session.adminExpiresAt = me.adminExpiresAt ?? 0;
+      session.ssoError = null;
+      return true;
+    }
+  }
   try {
-    const r = await api.auth.sso({ query: pageQuery() });
-    session.user = r.user;
+    const s = await api.auth.sso({ employee: r.user, query: pageQuery() });
+    session.user = s.user;
     session.adminExpiresAt = 0;
     session.ssoError = null;
     return true;
   } catch (e) {
     session.user = null;
-    session.ssoError = { code: e.code ?? (e.status === 0 ? 'NETWORK' : 'SSO_FAILED'), message: e.message };
+    // 코드 없는 404·5xx 는 API 서버가 꺼졌거나 Web 서버가 /api 를 넘기지 못한 것 — '임직원 아님'과 구분한다
+    const down = e.status === 0 || e.status === 404 || e.status >= 500;
+    session.ssoError = { code: e.code ?? (down ? 'NETWORK' : 'SSO_FAILED'), message: e.message };
     return false;
   }
 }
+/** 예전 이름 (안내 화면의 '다시 확인') */
+export const ssoLogin = employeeLogin;
 
+/** 개발 모드: 로그인 화면 없이 만능 테스트 계정으로 들어간다 */
+async function devLogin() {
+  // import.meta.env.DEV 를 직접 써야 운영 빌드에서 테스트 계정 파일이 빠진다
+  const seed = import.meta.env.DEV ? await import('@/api/mock/accounts.js') : null;
+  if (!seed) return;
+  await login(seed.TEST_ACCOUNTS.MASTER, seed.MOCK_PASSWORD);
+}
+
+/** 화면을 처음 열 때 한 번 — 라우터가 부른다 */
 export async function restoreSession() {
   if (session.restored) return;
   try {
-    const r = await api.auth.me();
-    session.user = r.user;
-    session.adminExpiresAt = r.adminExpiresAt ?? 0;
-  } catch {
-    session.user = null;
-    session.adminExpiresAt = 0;
-    // 정식 운영: 로그인 화면 없이 사내 SSO로만 들어온다. 확인되면 바로 홈, 아니면 안내 화면
-    // test 모드: 테스트 계정 로그인 화면
-    if (!isTestMode) await ssoLogin();
+    if (isTestMode) {
+      try {
+        const r = await api.auth.me();
+        session.user = r.user;
+        session.adminExpiresAt = r.adminExpiresAt ?? 0;
+      } catch {
+        await devLogin().catch(() => null);
+      }
+    } else {
+      // 운영: 화면을 열 때마다 사내 인사정보로 다시 확인한다 (퇴직·휴직이 바로 반영되게)
+      await employeeLogin({ reuse: true });
+    }
   } finally {
     session.restored = true;
   }
@@ -76,7 +110,7 @@ export async function refreshUser() {
   }
 }
 
-/** test 모드: 테스트 계정 로그인 (운영은 ssoLogin) */
+/** 개발 모드: 테스트 계정 로그인 (운영은 employeeLogin) */
 export async function login(account, password) {
   const r = await api.auth.login(account, password);
   session.user = r.user;
@@ -90,7 +124,9 @@ export async function logout() {
   } finally {
     session.user = null;
     session.adminExpiresAt = 0;
-    // 운영: 로그아웃한 뒤에는 SSO로 바로 다시 들어가지 않고 안내 화면에서 '다시 들어가기'를 누르게 한다
+    // 운영: 저장한 인사정보를 지우고, 바로 다시 들어가지 않고 안내 화면에서 '다시 들어가기'를 누르게 한다
+    // 개발: 테스트 계정 고르기 화면으로 (다른 계정으로 시험)
+    if (!isTestMode) clearEmployee();
     session.ssoError = isTestMode ? null : { code: 'LOGGED_OUT', message: '로그아웃했어요.' };
     // '곧 매칭이 시작돼요' 팝업은 로그인할 때마다 1번 — 같은 탭에서 다른 계정으로 다시 들어와도 보이게 표시를 지운다
     try {

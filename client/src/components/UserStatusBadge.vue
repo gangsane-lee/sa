@@ -1,7 +1,7 @@
 <script setup>
 /** 신청자 본인에게 보이는 상태 — 매칭 대기 중 / 매칭 중 두 가지뿐 */
 import { computed } from 'vue';
-import { USER_STATUS_MAP } from '@/constants/codes';
+import { USER_STATUS_MAP } from '@shared/constants/codes';
 
 const props = defineProps({
   status: { type: String, required: true },

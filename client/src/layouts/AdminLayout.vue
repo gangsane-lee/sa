@@ -10,8 +10,8 @@ import notify from 'devextreme/ui/notify';
 import { confirm } from 'devextreme/ui/dialog';
 import { api, isMock } from '@/api';
 import { session, exitAdmin } from '@/stores/session';
-import { ADMIN_IDLE_MINUTES } from '@/constants/policy';
-import { fmtRemain } from '@/utils/format';
+import { ADMIN_IDLE_MINUTES } from '@shared/constants/policy';
+import { fmtRemain } from '@shared/utils/format';
 import SaLogo from '@/components/SaLogo.vue';
 import { setOffice } from '@/stores/office';
 

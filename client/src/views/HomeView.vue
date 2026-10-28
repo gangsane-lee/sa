@@ -3,8 +3,8 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@/api';
 import { session } from '@/stores/session';
-import { DAILY_CARD_LIMIT, DAILY_HEART_LIMIT } from '@/constants/codes';
-import { ELEMENTS } from '@/utils/saju';
+import { DAILY_CARD_LIMIT, DAILY_HEART_LIMIT } from '@shared/constants/codes';
+import { ELEMENTS } from '@shared/utils/saju';
 import SaLogo from '@/components/SaLogo.vue';
 import BadgeScene from '@/components/BadgeScene.vue';
 import FaceIcon from '@/components/FaceIcon.vue';
@@ -109,7 +109,7 @@ const ELS = Object.values(ELEMENTS);
             <h2 id="saju-title" class="h2">내 사주 속 붉은 실,<br />어느 캠퍼스로 이어져 있을까요?</h2>
             <p class="saju__lead">
               생년월일만 넣으면 나의 오행, 자꾸 끌리는 사람의 기운, 오늘의 연애운까지 풀어드려요.
-              신청하지 않아도 볼 수 있어요.
+              신청하지 않아도 볼 수 있고, 입력한 생년월일은 저장하지 않아요.
             </p>
             <button type="button" class="cta cta--blue" @click="goSaju">무료로 내 인연 사주 보기</button>
           </div>

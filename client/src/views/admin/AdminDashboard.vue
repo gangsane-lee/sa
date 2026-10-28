@@ -6,9 +6,9 @@ import {
 } from 'devextreme-vue/chart';
 import notify from 'devextreme/ui/notify';
 import { adminApi } from '@/stores/session';
-import { GENDERS, textOf } from '@/constants/codes';
+import { GENDERS, textOf } from '@shared/constants/codes';
 import { ct } from '@/stores/codes';
-import { fmtDate } from '@/utils/format';
+import { fmtDate } from '@shared/utils/format';
 import { DxPieChart, DxSeries as DxPieSeries, DxLabel as DxPieLabel, DxConnector, DxLegend as DxPieLegend, DxTooltip as DxPieTooltip } from 'devextreme-vue/pie-chart';
 import { VIZ_THEME, SERIES, PIE_PALETTE } from '@/utils/vizTheme';
 import StatusBadge from '@/components/StatusBadge.vue';

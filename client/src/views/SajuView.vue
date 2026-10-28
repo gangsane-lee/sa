@@ -1,7 +1,8 @@
 <script setup>
 /**
  * 인연 사주 — 홈에서 들어오는 재미용 기능. 사緣을 알리고 신청으로 이어지게 하는 마케팅 장치.
- * 사주 풀이는 브라우저 안에서만 계산한다. '사주 인연 찾기'를 누를 때만 생년월일을 서버로 보내 궁합을 계산한다.
+ * 사주 풀이는 브라우저 안에서만 계산한다. '사주 인연 찾기'를 누를 때만 생년월일을 서버로 보내 궁합을 계산한다(저장하지 않음).
+ * 개인정보 보호: 신청서에는 출생연도만 저장한다 — 생년월일의 월·일과 태어난 시간은 어디에도 저장하지 않는다.
  * '사주 인연 찾기' → 사주 궁합이 가장 높은 대기자 1명 → [하트 보내기]
  *  - 신청 전: 팝업에서 필수 항목만 채우면 신청과 하트가 한 번에 처리된다
  *  - 신청 후: 바로 하트 (오늘의 하트 1개 사용, 답이 올 때까지 신청서 수정·새 후보 잠금)
@@ -15,9 +16,8 @@ import { DxButton } from 'devextreme-vue/button';
 import notify from 'devextreme/ui/notify';
 import { confirm } from 'devextreme/ui/dialog';
 import { session, refreshUser } from '@/stores/session';
-import QuickApplyForm from '@/components/QuickApplyForm.vue';
 import { api } from '@/api';
-import { ELEMENTS, readSaju } from '@/utils/saju';
+import { ELEMENTS, readSaju } from '@shared/utils/saju';
 import { DxPopup } from 'devextreme-vue/popup';
 import ProfileCard from '@/components/ProfileCard.vue';
 import GunghapPanel from '@/components/GunghapPanel.vue';
@@ -27,14 +27,11 @@ const router = useRouter();
 const input = reactive({ birthDate: null, birthTime: '', unknown: true });
 const result = ref(null);
 const applied = ref(null);
-const fromApp = ref(false);
 const resultEl = ref();
 const pick = ref(null); // { card } — 사주로 찾은 인연
 const pickEl = ref();
 const picking = ref(false);
 const pickNote = ref(''); // 하트를 보낼 수 없는 이유 (신청자)
-const formPopup = ref(false);
-const quickForm = ref();
 const sending = ref(false);
 const sentPopup = ref(false);
 const sentInfo = ref({ nickname: '', to: '', matched: false, created: false });
@@ -83,10 +80,20 @@ async function findPick() {
   }
 }
 
-/** 하트 보내기 — 신청 전이면 필수 항목 팝업, 신청 후면 바로 */
+/**
+ * 하트 보내기 — 신청 후면 바로.
+ * 신청 전이면 정규 신청과 같은 신청서(4페이지)로 간다. 신청하는 순간 이 분에게 하트가 함께 간다.
+ * 사주에 입력한 생년월일은 연도만 넘긴다 (월·일은 저장하지 않음)
+ */
+const SAJU_KEY = 'sayeon.sajuApply';
 async function heart() {
   if (!applied.value) {
-    formPopup.value = true;
+    try {
+      sessionStorage.setItem(SAJU_KEY, JSON.stringify({ to: pick.value.card.nickname, birthYear: Number(String(input.birthDate).slice(0, 4)) || null }));
+    } catch {
+      /* 저장소를 못 쓰면 빈 신청서로 시작 */
+    }
+    router.push({ name: 'apply', query: { from: 'saju' } });
     return;
   }
   const ok = await confirm(
@@ -106,60 +113,13 @@ async function heart() {
   }
 }
 
-/** 정식 신청서로 — 팝업에 적은 값은 그대로 가져가고, 신청을 마친 뒤 사주 인연에게 하트를 보낼 수 있다 */
-const DRAFT_KEY = 'sayeon.quickDraft';
-function goFullApply() {
-  try {
-    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(quickForm.value?.draft() ?? {}));
-  } catch {
-    /* 저장소를 못 쓰면 빈 신청서로 시작 */
-  }
-  formPopup.value = false;
-  router.push({ name: 'apply', query: { from: 'saju' } });
-}
-
-/** 팝업의 필수 항목으로 신청 + 하트 */
-async function submitQuick() {
-  const data = quickForm.value?.result();
-  if (!data) {
-    notify({ message: '빨갛게 표시된 필수 항목을 채워주세요.', type: 'warning', displayTime: 2400 });
-    return;
-  }
-  sending.value = true;
-  try {
-    const r = await api.saju.apply(data);
-    applied.value = true;
-    refreshUser();
-    formPopup.value = false;
-    sentInfo.value = { ...r, created: true };
-    sentPopup.value = true;
-  } catch (e) {
-    // 그새 다른 탭 등에서 이미 신청했다면 신청자 흐름(바로 하트)으로 바꿔준다
-    if (e.code === 'ALREADY_APPLIED') {
-      applied.value = true;
-      formPopup.value = false;
-      notify({ message: '이미 신청서가 있어요. 하트 보내기를 한 번 더 누르면 바로 보낼 수 있어요.', type: 'info', displayTime: 3500 });
-      return;
-    }
-    notify({ message: e.message, type: 'error', displayTime: 4000 });
-  } finally {
-    sending.value = false;
-  }
-}
-
 const today = new Date();
 const minDate = new Date(1940, 0, 1);
 
 onMounted(async () => {
-  // 신청서가 있으면 생년월일로 미리 채운다 (화면 안에서만 사용)
+  // 신청서에는 출생연도만 있어 생년월일을 미리 채우지 않는다 (월·일은 저장하지 않음)
   const mine = await api.application.getMine().catch(() => null);
   applied.value = Boolean(mine);
-  if (mine?.birthDate) {
-    input.birthDate = mine.birthDate;
-    input.birthTime = mine.birthTime ?? '';
-    input.unknown = !mine.birthTime;
-    fromApp.value = true;
-  }
 });
 
 const timeOk = computed(() => input.unknown || /^([01]\d|2[0-3]):[0-5]\d$/.test(input.birthTime ?? ''));
@@ -230,8 +190,7 @@ const elName = (el) => `${ELEMENTS[el].name}(${ELEMENTS[el].hanja})`;
             </label>
             <DxCheckBox v-model:value="input.unknown" text="시간 몰라요" class="form__unknown" />
           </div>
-          <p v-if="fromApp" class="form__hint">신청서의 생년월일로 채웠어요. 입력값은 저장하지 않고 이 화면 안에서만 계산해요.</p>
-          <p v-else class="form__hint">입력값은 저장하지 않고 이 화면 안에서만 계산해요.</p>
+          <p class="form__hint">🔒 입력한 생년월일·시간은 저장하지 않고 이 화면 안에서만 계산해요. 사주 인연으로 신청해도 <b>출생연도만 저장</b>되고 <b>월·일 정보는 저장되지 않아요.</b></p>
           <DxButton text="내 인연 사주 보기" type="default" :use-submit-behavior="true" class="form__go" />
         </form>
       </div>
@@ -342,7 +301,7 @@ const elName = (el) => `${ELEMENTS[el].name}(${ELEMENTS[el].hanja})`;
             </span>
           </button>
           <p v-if="pickNote" class="cta__state" role="status">{{ pickNote }}</p>
-          <p class="cta__note">찾기를 누르면 입력한 생년월일이 궁합 계산에 쓰여요 · 상시 접수</p>
+          <p class="cta__note">입력한 생년월일은 궁합 계산에만 쓰고 저장하지 않아요 · 신청하면 출생연도만 저장돼요(월·일 저장 안 함) · 상시 접수</p>
         </div>
 
         <!-- 사주로 찾은 인연 -->
@@ -371,38 +330,6 @@ const elName = (el) => `${ELEMENTS[el].name}(${ELEMENTS[el].hanja})`;
         </p>
       </div>
     </section>
-
-    <!-- 신청 전: 필수 항목만 받는 하트 팝업 -->
-    <DxPopup
-      v-if="formPopup"
-      :visible="true"
-      @hidden="formPopup = false"
-      :title="pick?.card ? `${pick.card.nickname}님에게 하트 보내기` : '하트 보내기'"
-      :width="640"
-      max-width="calc(100vw - 20px)"
-      height="auto"
-      :show-close-button="true"
-      :hide-on-outside-click="false"
-      :wrapper-attr="{ class: 'sa-popup tone-warm' }"
-    >
-      <div class="qp">
-        <p class="qp__lead">하트를 전하려면 <b>필수 항목</b>만 알려주세요. 1분이면 끝나요.</p>
-        <QuickApplyForm ref="quickForm" :user="session.user" :birth-date="input.birthDate" :birth-time="input.unknown ? null : input.birthTime" />
-        <div class="qp__actions">
-          <button type="button" class="qp__send" :disabled="sending" @click="submitQuick">
-            <span aria-hidden="true">♥</span> {{ sending ? '하트를 전하는 중…' : '하트 보내기' }}
-          </button>
-          <button type="button" class="qp__full" :disabled="sending" @click="goFullApply">
-            <b>정식으로 신청하기</b>
-            <small>이 분 말고도 매일 3명의 인연을 더 만나요</small>
-          </button>
-        </div>
-        <p class="qp__more">
-          <b>정식 신청</b>을 하면 선호·우선순위까지 반영해 <b>매일 3명</b>의 후보가 더 도착해요.
-          지금 적은 내용은 그대로 옮겨 가고, 신청을 마친 뒤 이 분에게도 하트를 보낼 수 있어요.
-        </p>
-      </div>
-    </DxPopup>
 
     <DxPopup
       v-model:visible="sentPopup"
@@ -816,58 +743,7 @@ const elName = (el) => `${ELEMENTS[el].name}(${ELEMENTS[el].hanja})`;
   align-items: start;
 }
 /* 하트 보내기 | 정식으로 신청하기 */
-.qp__actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  gap: 10px;
-  margin-top: 14px;
-}
-.qp__full {
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 2px;
-  padding: 10px 12px;
-  border: 1.5px solid var(--c-crimson);
-  border-radius: 14px;
-  background: var(--c-surface);
-  color: var(--c-crimson-deep);
-  font: inherit;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.qp__full b {
-  font-size: 16px;
-}
-.qp__full small {
-  color: var(--c-ink-2);
-  font-size: 12px;
-}
-.qp__full:hover {
-  background: var(--c-blush-soft);
-}
-.qp__full:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-.qp__more {
-  margin-top: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--c-blush-soft);
-  color: var(--c-ink-2);
-  font-size: 13px;
-}
-.qp__more b {
-  color: var(--c-crimson-deep);
-}
-@media (max-width: 560px) {
-  .qp__actions {
-    grid-template-columns: 1fr;
-  }
-}
-.pick__heart,
-.qp__send {
+.pick__heart {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -888,13 +764,11 @@ const elName = (el) => `${ELEMENTS[el].name}(${ELEMENTS[el].hanja})`;
 .pick__heart {
   margin-top: 14px;
 }
-.pick__heart span,
-.qp__send span {
+.pick__heart span {
   display: inline-block;
   animation: beat 1.4s ease-in-out infinite;
 }
-.pick__heart:disabled,
-.qp__send:disabled {
+.pick__heart:disabled {
   opacity: 0.6;
   cursor: default;
   animation: none;
@@ -906,18 +780,6 @@ const elName = (el) => `${ELEMENTS[el].name}(${ELEMENTS[el].hanja})`;
   background: #f6edd6;
   color: var(--c-moon-ink);
   font-size: 14px;
-}
-.qp {
-  max-height: calc(92vh - 110px);
-  overflow-y: auto;
-  padding-right: 6px;
-}
-.qp__lead {
-  margin-bottom: 12px;
-  color: var(--c-ink-2);
-}
-.qp__lead b {
-  color: var(--c-crimson-deep);
 }
 .pick__note {
   margin-top: 8px;

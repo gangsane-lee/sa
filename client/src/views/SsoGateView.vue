@@ -1,10 +1,10 @@
 <script setup>
 /**
- * 정식 운영 입구 — 로그인 화면이 없다. 사내 SSO(AD)로 확인되면 바로 홈, 아니면 이 안내 화면.
- *  - 화면을 열 때 라우터가 이미 SSO 확인을 해 본다(restoreSession). 여기서는 결과를 보여주고 '다시 확인'을 받는다
+ * 운영 모드 입구 — 로그인 화면이 없다. 사내 인사정보로 임직원이 확인되면 바로 홈, 아니면 이 안내 화면.
+ *  - 화면을 열 때 라우터가 이미 사내 인사정보 URL 로 확인을 해 본다(restoreSession). 여기서는 결과를 보여주고 '다시 확인'을 받는다
  *  - 실패 이유(session.ssoError.code)에 따라 문구를 나눈다
  *  - 사내 SSO 로그인 페이지(SSO_LOGIN_PAGE, url 방식에서만)가 있으면 '사내 SSO 로그인' 버튼을 보여준다
- * (test 모드는 이 화면 대신 LoginView — 테스트 계정 고르기)
+ * (개발 모드는 이 화면 대신 LoginView — 테스트 계정 고르기)
  */
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -25,13 +25,13 @@ const goInside = () => router.replace(redirect.value);
 const STATES = {
   LOGGED_OUT: {
     title: '로그아웃했어요',
-    lead: '사緣은 사내 AD SSO로 확인된 임직원만 이용할 수 있어요. 다시 들어가려면 아래 버튼을 눌러 주세요.',
+    lead: '사緣은 사내 인사정보로 확인된 임직원만 이용할 수 있어요. 다시 들어가려면 아래 버튼을 눌러 주세요.',
     retry: '다시 들어가기',
   },
   SSO_FAILED: {
-    title: 'AD SSO로 확인된 임직원만 이용할 수 있어요',
-    lead: '지금 접속한 환경에서 사내 AD 계정 정보가 확인되지 않았어요.',
-    tips: ['회사 계정으로 Windows에 로그인한 회사 PC에서 접속했는지', '공지된 사緣 주소로 접속했는지 (즐겨찾기·주소 확인)', '브라우저가 사내 계정 확인 창을 띄웠다면 회사 계정으로 확인한 뒤 [다시 확인하기]'],
+    title: '임직원만 이용할 수 있어요',
+    lead: '사緣은 DS부문 임직원 전용이에요. 지금 접속한 환경에서 사내 인사정보가 확인되지 않았어요.',
+    tips: ['회사 PC에서 사내 포털(SSO)에 로그인한 상태인지', '공지된 사緣 주소로 접속했는지 (즐겨찾기·주소 확인)', '사내 포털에 다시 로그인한 뒤 [다시 확인하기]'],
     retry: '다시 확인하기',
   },
   NOT_ACTIVE_EMPLOYEE: {
@@ -40,14 +40,14 @@ const STATES = {
     retry: '다시 확인하기',
   },
   SSO_UNAVAILABLE: {
-    title: '사내 인증 서버에 연결하지 못했어요',
+    title: '사내 인사정보 서버에 연결하지 못했어요',
     lead: '잠시 뒤 다시 확인해 주세요. 계속 안 되면 매칭 담당자에게 알려 주세요.',
     retry: '다시 확인하기',
   },
   SSO_NOT_CONFIGURED: {
     title: '서비스를 준비하고 있어요',
-    lead: '사내 SSO 연결을 마무리하는 중이에요. 잠시 뒤 다시 접속해 주세요.',
-    note: '운영 담당자: servers.config.mjs 의 sso 설정을 확인한 뒤 API 서버에서  npm run sso:test -- --user 회사아이디  로 확인해 주세요.',
+    lead: '사내 인사정보 연결을 마무리하는 중이에요. 잠시 뒤 다시 접속해 주세요.',
+    note: '운영 담당자: servers.config.mjs 의 sso.employeeApi.url 을 채우고 다시 빌드해 주세요.',
     retry: '다시 확인하기',
   },
   SSO_TOO_MANY: {
@@ -100,10 +100,10 @@ onMounted(() => {
 
     <section class="panel">
       <div class="card" aria-live="polite">
-        <p class="card__eyebrow">임직원 전용 · 사내 AD SSO</p>
+        <p class="card__eyebrow">임직원 전용 · 사내 인사정보 확인</p>
 
         <template v-if="busy && !session.ssoError">
-          <h2 class="card__title">사내 계정을 확인하고 있어요</h2>
+          <h2 class="card__title">사내 인사정보를 확인하고 있어요</h2>
           <p class="card__lead">잠시만 기다려 주세요.</p>
         </template>
 
@@ -120,7 +120,7 @@ onMounted(() => {
         </template>
 
         <p class="card__privacy">
-          사내 계정 정보는 재직 확인에만 쓰고, 비밀번호는 받지 않아요. 사緣에 들어왔다는 사실도 다른 임직원에게 알려지지 않아요.
+          사내 인사정보는 임직원·재직 확인에만 쓰고, 비밀번호는 받지 않아요. 사緣에 들어왔다는 사실도 다른 임직원에게 알려지지 않아요.
         </p>
       </div>
     </section>

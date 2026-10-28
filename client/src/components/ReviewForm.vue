@@ -6,7 +6,7 @@
 import { reactive, computed, watch } from 'vue';
 import { DxButton } from 'devextreme-vue/button';
 import { DxTextArea } from 'devextreme-vue/text-area';
-import { REVIEW_OUTCOMES, REVIEW_RATINGS } from '@/constants/codes';
+import { REVIEW_OUTCOMES, REVIEW_RATINGS } from '@shared/constants/codes';
 
 const props = defineProps({
   initial: { type: Object, default: null },

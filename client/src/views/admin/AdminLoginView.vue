@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 관리자 로그인 — 사용자 화면과 다른 주소(기본 /changeme/login)로만 들어온다.
- *  1) 사내 계정 확인 — 정식 운영: 사내 AD SSO(로그인 화면 없음) · test 모드: 테스트 계정 ID
+ *  1) 사내 계정 확인 — 운영 모드: 사내 인사정보 확인(로그인 화면 없음) · 개발 모드: 테스트 계정 ID
  *  2) 관리자 계정인지 서버가 판단 (운영: server/config/admins.js · test: api/mock/accounts.js)
  *  3) 관리자 비밀번호 확인 → 관리자 화면
  * 비밀번호 검증·실패 횟수 제한·잠금은 서버가 하고, 이 화면은 결과만 보여준다.
@@ -66,10 +66,10 @@ const submitAdmin = () =>
     goInside();
   });
 
-/** 정식 운영: 사내 SSO 다시 확인 */
+/** 운영 모드: 사내 인사정보 다시 확인 */
 const retrySso = () =>
   run(async () => {
-    if (!(await ssoLogin())) throw new Error(session.ssoError?.message ?? '사내 AD SSO로 확인되지 않았어요.');
+    if (!(await ssoLogin())) throw new Error(session.ssoError?.message ?? '사내 인사정보로 확인되지 않았어요.');
     if (session.user?.isAdmin && session.isAdmin) goInside();
   });
 
@@ -79,8 +79,8 @@ const switchAccount = () =>
     account.value = '';
   });
 
-/** test 모드 계정 채우기 — VITE_INCLUDE_MOCK=false 빌드에서는 import 자체가 사라진다 */
-const loadAccounts = () => (import.meta.env.VITE_INCLUDE_MOCK !== 'false' ? import('@/api/mock/accounts.js') : Promise.resolve(null));
+/** 개발 모드 계정 채우기 — 빌드(npm run build)에서는 import 자체가 사라진다 */
+const loadAccounts = () => (import.meta.env.DEV ? import('@/api/mock/accounts.js') : Promise.resolve(null));
 async function fillTest() {
   const a = isTestMode ? await loadAccounts() : null;
   if (!a) return;
@@ -103,15 +103,15 @@ async function fillTest() {
           <span class="card__tag mono">ADMIN</span>
         </div>
 
-        <!-- 1) 사내 계정 — 정식 운영: SSO 로 확인되지 않음 -->
+        <!-- 1) 사내 계정 — 운영 모드: 사내 인사정보로 확인되지 않음 -->
         <div v-if="step === 'account' && !isTestMode" class="card__form">
           <h1 class="card__title">관리자 로그인</h1>
-          <p class="card__sub">사내 AD SSO로 확인된 관리자 계정만 들어올 수 있어요. 지금 접속한 환경에서는 사내 계정 정보가 확인되지 않았어요.</p>
+          <p class="card__sub">사내 인사정보로 확인된 관리자 계정만 들어올 수 있어요. 지금 접속한 환경에서는 사내 인사정보가 확인되지 않았어요.</p>
           <p v-if="error || session.ssoError" class="card__error" role="alert">{{ error || session.ssoError.message }}</p>
           <DxButton text="다시 확인하기" type="default" width="100%" class="card__submit" :disabled="busy" @click="retrySso" />
         </div>
 
-        <!-- 1) 사내 계정 — test 모드: 테스트 계정 ID -->
+        <!-- 1) 사내 계정 — 개발 모드: 테스트 계정 ID -->
         <form v-else-if="step === 'account'" class="card__form" novalidate @submit.prevent="submitAccount">
           <h1 class="card__title">관리자 로그인</h1>
           <p class="card__sub">먼저 사내 계정으로 본인을 확인해요. 관리자로 등록된 계정만 다음 단계로 넘어가요.</p>
@@ -147,7 +147,7 @@ async function fillTest() {
         </div>
 
         <button v-if="isTestMode && step !== 'denied'" type="button" class="card__dev" @click="fillTest">
-          테스트 운영 · {{ step === 'account' ? '관리자 계정 채우기' : '관리자 비밀번호 채우기' }}
+          개발 모드 · {{ step === 'account' ? '관리자 계정 채우기' : '관리자 비밀번호 채우기' }}
         </button>
       </div>
     </main>

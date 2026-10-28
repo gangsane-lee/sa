@@ -2,17 +2,17 @@
   "name": "sayeon-server",
   "private": true,
   "version": "1.0.0",
-  "description": "사緣 API 서버 — Express + MSSQL, PM2로 실행",
+  "description": "사緣 API 서버 — Express + MSSQL, IIS + iisnode 로 실행 (main.js · web.config)",
   "type": "module",
-  "main": "src/index.js",
+  "main": "main.js",
   "scripts": {
-    "start": "node start.cjs",
-    "dev": "node --watch src/index.js",
+    "start": "node main.js",
+    "dev": "node --watch main.js",
     "check": "node scripts/run.mjs check",
     "db:setup": "node scripts/run.mjs db-setup",
     "sso:test": "node scripts/run.mjs sso-test",
+    "webconfig": "node scripts/webconfig.js",
     "hash-password": "node scripts/hash-password.js",
-    "pm2": "pm2",
     "release": "node ../tools/release.mjs"
   },
   "engines": {
@@ -25,8 +25,8 @@
     "express": "^5.3.0",
     "express-session": "^1.19.0",
     "helmet": "^8.3.0",
+    "lunar-javascript": "1.7.7",
     "memorystore": "^1.6.8",
-    "mssql": "^12.7.4",
-    "pm2": "5.3.0"
+    "mssql": "^12.7.4"
   }
 }

@@ -4,14 +4,20 @@ import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DxButton } from 'devextreme-vue/button';
 import { api } from '@/api';
-import { DAILY_CARD_LIMIT, DAILY_HEART_LIMIT, USER_STATUS_MAP } from '@/constants/codes';
-import { fmtDate } from '@/utils/format';
+import { DAILY_CARD_LIMIT, DAILY_HEART_LIMIT, USER_STATUS_MAP } from '@shared/constants/codes';
+import { fmtDate } from '@shared/utils/format';
 import SaLogo from '@/components/SaLogo.vue';
 import UserStatusBadge from '@/components/UserStatusBadge.vue';
 
 const router = useRouter();
-/** 사주 하트 팝업에서 정식 신청으로 왔으면, 사주 인연에게 하트를 보내러 가는 버튼을 먼저 보여준다 */
-const fromSaju = useRoute().query.from === 'saju';
+/**
+ * 인연 사주에서 왔으면: 신청과 함께 하트를 보냈는지(heart = 받은 사람 닉네임, matched = 바로 매칭) 보여준다.
+ * 하트를 못 보냈으면 사주 인연에게 하트를 보내러 가는 버튼을 먼저 보여준다
+ */
+const q = useRoute().query;
+const fromSaju = q.from === 'saju';
+const heartTo = typeof q.heart === 'string' ? q.heart : '';
+const matched = q.matched === '1';
 const mine = ref(null);
 
 onMounted(async () => {
@@ -28,6 +34,11 @@ onMounted(async () => {
         <p class="sheet__eyebrow mono">No.{{ String(mine.id).padStart(4, '0') }} · {{ fmtDate(mine.createdAt) }} 접수</p>
         <h1 class="sheet__title display">신청이 완료되었어요</h1>
         <p class="sheet__body">두근거리는 마음, 사緣이 소중히 간직할게요.</p>
+        <p v-if="heartTo" class="heart" role="status">
+          <span aria-hidden="true">♥</span>
+          <template v-if="matched"><b>{{ heartTo }}</b>님도 이미 하트를 보냈었어요. <b>바로 매칭됐어요!</b> 쪽지함에서 인사를 나눠 보세요.</template>
+          <template v-else><b>{{ heartTo }}</b>님에게 하트를 보냈어요. 상대도 하트를 보내면 바로 매칭돼요.</template>
+        </p>
 
         <div class="state">
           <span class="state__label">지금 상태</span>
@@ -43,7 +54,14 @@ onMounted(async () => {
 
         <div class="actions">
           <DxButton
-            v-if="fromSaju"
+            v-if="matched"
+            text="쪽지함에서 인사하기"
+            type="default"
+            class="actions__main"
+            @click="router.push({ name: 'messages' })"
+          />
+          <DxButton
+            v-if="fromSaju && !heartTo"
             text="사주 인연에게 하트 보내러 가기 ♥"
             type="default"
             class="actions__main"
@@ -51,8 +69,8 @@ onMounted(async () => {
           />
           <DxButton
             text="홈에서 오늘의 인연 보기"
-            :type="fromSaju ? 'normal' : 'default'"
-            :styling-mode="fromSaju ? 'outlined' : 'contained'"
+            :type="(fromSaju && !heartTo) || matched ? 'normal' : 'default'"
+            :styling-mode="(fromSaju && !heartTo) || matched ? 'outlined' : 'contained'"
             class="actions__main"
             @click="router.push({ name: 'home' })"
           />
@@ -66,6 +84,21 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.heart {
+  margin-top: 14px;
+  padding: 12px 16px;
+  border-radius: var(--r-md);
+  background: var(--c-blush-soft);
+  color: var(--c-ink-2);
+  text-align: left;
+}
+.heart span {
+  color: var(--c-crimson);
+  margin-right: 4px;
+}
+.heart b {
+  color: var(--c-crimson-deep);
+}
 .done {
   padding: clamp(32px, 6vw, 72px) 0 80px;
 }

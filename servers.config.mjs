@@ -3,7 +3,7 @@
  *
  * 이 파일을 읽어 자동으로 맞춰지는 곳
  *  - API 서버 설정 (server/src/config.js)     : 포트 · 접속 주소 · DB 서버/이름 · 믿을 수 있는 Web 서버 IP
- *  - 화면 빌드 (client)                        : Web 서버용 IIS 설정(web.config) · 화면 설정(sayeon.config.js) · 개발 프록시
+ *  - 화면 빌드 (client, npm run build)         : Web 서버용 IIS 설정(web.config) · 화면 설정(sayeon.config.js: 관리자 주소·사내 인사정보 URL)
  *  - 배포 패키지 (npm run release)             : Web·API 서버에 복사할 폴더와 점검 스크립트
  *  - 점검 (npm run check · check-web.ps1)      : 각 서버 연결 확인
  *
@@ -17,19 +17,17 @@ export default {
   environments: {
     // ── 운영 ─────────────────────────────────────────
     production: {
-      /** Web 배포 운영 서버 — IIS. 빌드한 화면 파일을 두고, /api 는 API 서버로 넘긴다 (Windows 인증) */
+      /** Web 배포 운영 서버 — IIS. 빌드한 화면 파일을 두고, /api 는 API 서버로 넘긴다 */
       web: {
         host: '10.123.321.12',
         port: 8282,
-        /** 사용자가 접속할 사내 DNS 이름 (있으면). 비우면 IP 로 접속 — Windows 자동 로그인에는 DNS 이름이 좋다 */
+        /** 사용자가 접속할 사내 DNS 이름 (있으면). 비우면 IP 로 접속 */
         dnsName: '',
       },
       /** API 배포 운영 서버 — Node.js + PM2 */
       api: { host: '12.83.18.17', port: 8292 },
       /** DB 서버 — MSSQL */
       db: { host: '10.166.101.127', port: 1433, name: 'sasystem' },
-      /** 화면 운영 방식: open = 정식(DB 사용) / test = 시연(각자 브라우저의 가짜 데이터) */
-      serviceMode: 'open',
     },
 
     // ── 개발 ─────────────────────────────────────────
@@ -39,7 +37,6 @@ export default {
       web: { host: '12.123.321.13', port: 5173, dnsName: '' }, // 개발 서버의 개발 화면 (npm run dev)
       api: { host: '12.83.18.17', port: 8293 },
       db: { host: '10.166.101.127', port: 1433, name: 'sasystem_dev' },
-      serviceMode: 'open',
     },
   },
 
@@ -50,27 +47,52 @@ export default {
   adminPath: '/changeme',
 
   /**
-   * 사내 로그인 — Web 서버 IIS 의 Windows 인증(AD SSO) → 사내 계정 ID → AD 정보 → 사내 인사 API
-   *  1) IIS 가 Windows 로그인으로 사용자를 확인하고 'SECDS\아이디' 를 헤더(header)에 담아 API 서버로 넘긴다
-   *     API 서버는 이 헤더를 Web 서버 IP 에서 온 요청일 때만 믿는다 (사내 PC 가 직접 꾸며 보내면 무시)
-   *  2) adLookup: API 서버가 AD 에서 그 아이디의 사번·이름·부서·메일·사용 여부를 읽는다 (API 서버가 도메인에 가입돼 있어야 함)
-   *  3) hrApi: 사내 인사 API 에 아이디·사번을 넣어 인사정보(재직 상태 등)를 받는다 (비우면 AD 정보만 쓴다)
+   * 사내 로그인 — 로그인 화면은 없다
+   *
+   * browser 방식 (기본)
+   *  1) 화면을 열 때 브라우저가 아래 employeeApi.url(사내 인사정보 URL)을 부른다 (사내 SSO 쿠키를 함께 보냄)
+   *  2) 정상 회신이면 응답을 localStorage 에 저장하고, 사번·재직 여부를 읽는다 (client/src/utils/employeeInfo.js)
+   *  3) 임직원이면 API 서버에 그 정보를 넘겨 로그인 → 홈 / 아니면 '임직원만 이용할 수 있어요' 안내
+   *  ※ 사내 인사정보 서버가 사緣 화면 주소(Web 서버)에 CORS 를 허용해야 브라우저가 응답을 읽을 수 있다
+   *  ※ 브라우저가 보낸 정보는 사용자가 꾸밀 수 있다 — 아래 hrApi.url 을 채우면 API 서버가 그 사번을 인사 API 로 한 번 더 확인한다
+   *
+   * iis 방식 — Web 서버 IIS 의 Windows 인증 → AD → 사내 인사 API (Web 서버 도메인 가입·Windows 인증 필요)
+   * 개발 모드(npm run dev)는 로그인 없이 만능 테스트 계정으로 바로 들어가므로 이 설정을 쓰지 않는다
    */
   sso: {
-    mode: 'iis', // iis = 위 방식 / off = 연결 안 함
-    domain: 'SECDS',
-    header: 'x-sayeon-user',
-    adLookup: true,
-    /** AD 조회 위치 — 비우면 API 서버가 가입된 도메인 (예: 'LDAP://DC=secds,DC=example,DC=net') */
-    adPath: '',
+    mode: 'browser', // browser | iis | off
+    /** 브라우저가 부를 사내 인사정보 URL — 바꾸면 다시 빌드 (또는 Web 서버의 sayeon.config.js 만 고쳐도 반영) */
+    employeeApi: {
+      url: '', // 예: 'http://10.x.x.x:8080/api/me'
+      method: 'GET', // GET | POST
+      /** POST 본문 — {ls:키} = 브라우저 localStorage 값 (예: { sabun: '{ls:sabun}' }), {query:이름} = 주소창 값 */
+      body: null,
+      /** 응답에서 사용자 정보 위치 (예: 'data.user'). 비우면 사번이 든 객체를 자동으로 찾는다 */
+      resultPath: '',
+      /** 사내 SSO 쿠키를 함께 보낸다 (인사정보 서버가 쿠키로 사용자를 알아볼 때) */
+      withCredentials: true,
+      timeoutMs: 8000,
+      /** 받아 온 인사정보를 저장할 localStorage 키 */
+      storageKey: 'sayeon.employee',
+    },
+
+    // ── API 서버가 쓰는 값 ──
+    /** (선택, 권장) API 서버가 사번으로 인사정보를 한 번 더 확인할 사내 인사 API. 비우면 브라우저가 넘긴 정보만 쓴다 */
     hrApi: {
       url: '', // 예: 'http://10.x.x.x:8080/api/employee'
       method: 'POST', // POST | GET
-      /** 보낼 본문 — {id} 사내 계정 ID · {empNo} AD 의 사번 · {domain} 도메인 */
+      /** 보낼 본문 — {empNo} 사번 · {id} 사내 계정 ID · {domain} 도메인 */
       body: { sabun: '{empNo}' },
       /** API 키가 필요하면 server/.env 의 SSO_API_KEY (헤더 이름은 아래) */
       apiKeyHeader: 'x-api-key',
       timeoutMs: 5000,
     },
+
+    // ── iis 방식일 때만 ──
+    domain: 'SECDS',
+    header: 'x-sayeon-user',
+    adLookup: true,
+    /** AD 조회 위치 — 비우면 API 서버가 가입된 도메인 (예: 'LDAP://DC=secds,DC=example,DC=net') */
+    adPath: '',
   },
 };

@@ -5,12 +5,14 @@ import { setPageTitle } from '@/stores/office';
 import { ADMIN_PATH, isTestMode } from '@/config';
 
 const routes = [
-  // 입구 — 정식 운영: 사내 SSO 확인 안내(로그인 화면 없음) / test 모드: 테스트 계정 고르기
+  // 입구
+  //  운영 모드: '임직원만 이용할 수 있어요' 안내 (인사정보 확인이 안 됐을 때만 온다)
+  //  개발 모드: 테스트 계정 고르기 (처음에는 만능 계정으로 바로 들어가고, 로그아웃하면 여기로 온다)
   {
     path: '/login',
     name: 'login',
     component: isTestMode ? () => import('@/views/LoginView.vue') : () => import('@/views/SsoGateView.vue'),
-    meta: { public: true, title: isTestMode ? '테스트 계정 로그인' : '임직원 확인' },
+    meta: { public: true, title: isTestMode ? '테스트 계정 고르기' : '임직원 확인' },
   },
   {
     path: '/',
@@ -59,6 +61,13 @@ const router = createRouter({
   scrollBehavior: (to, from, saved) => saved ?? (to.hash ? { el: to.hash, behavior: 'smooth' } : { top: 0 }),
 });
 
+/**
+ * 화면을 처음 열 때 (restoreSession)
+ *  - 개발 모드(npm run dev)  : 로그인 화면 없이 만능 테스트 계정으로 바로 홈
+ *  - 운영 모드(npm run build): 사내 인사정보 URL 호출 → 응답을 localStorage 에 저장 → 사번·재직 여부 확인
+ *                              → 임직원이면 홈 / 아니면 '임직원만 이용할 수 있어요' 안내(/login)
+ *    (인사정보 URL 설정: servers.config.mjs 의 sso.employeeApi, 호출·해석: auth/employee.js · utils/employeeInfo.js)
+ */
 router.beforeEach(async (to) => {
   if (to.meta.public) return true;
   await restoreSession();

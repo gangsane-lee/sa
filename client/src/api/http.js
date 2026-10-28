@@ -2,14 +2,16 @@
  * 실서버 API 클라이언트 — 엔드포인트 명세는 docs/DESIGN.md "5. API 명세" 참고
  * 인증은 서버가 발급한 HttpOnly 세션 쿠키로 처리하므로 토큰을 JS에서 다루지 않는다.
  */
-import { ApiError } from './errors.js';
+import { ApiError } from '@shared/api/errors.js';
 
-async function request(method, path, body) {
+/** @param {{ timeoutMs?: number }} [opt] timeoutMs: 이 시간 안에 응답이 없으면 연결 실패로 본다 (입구 확인처럼 화면이 기다리는 요청) */
+async function request(method, path, body, { timeoutMs = 0 } = {}) {
   let res;
   try {
     res = await fetch(`/api${path}`, {
       method,
       credentials: 'same-origin',
+      ...(timeoutMs && { signal: AbortSignal.timeout(timeoutMs) }),
       headers: {
         // 서버는 이 헤더가 없는 상태 변경 요청을 거절한다 (CSRF 방어 보조)
         'X-Requested-With': 'sayeon',
@@ -37,14 +39,14 @@ const del = (p) => request('DELETE', p);
 
 export const api = {
   auth: {
-    // 운영은 사내 SSO로만 들어온다 (ID/비밀번호 로그인 없음 — test 모드의 계정 로그인은 api/mock)
-    me: () => get('/auth/me'),
+    // 운영은 사내 인사정보로만 들어온다 (ID/비밀번호 로그인 없음 — 개발 모드의 계정 로그인은 api/mock)
+    me: () => request('GET', '/auth/me', undefined, { timeoutMs: 15000 }),
     logout: () => post('/auth/logout'),
     /** @returns {{ adminExpiresAt }} */
     enterAdmin: (password) => post('/auth/admin', { password }),
     exitAdmin: () => del('/auth/admin'),
-    /** 사내 SSO 확인 — query: 주소창의 값(SSO 로그인 페이지에서 돌아올 때 붙은 ticket 등) */
-    sso: (hint = {}) => post('/auth/sso', { query: hint.query ?? {} }),
+    /** 사내 SSO 확인 — employee: 화면이 사내 인사정보 URL 에서 받은 사용자 정보(browser 방식) · query: 주소창의 값 */
+    sso: (hint = {}) => request('POST', '/auth/sso', { query: hint.query ?? {}, ...(hint.employee && { employee: hint.employee }) }, { timeoutMs: 20000 }),
   },
 
   codes: {

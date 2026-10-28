@@ -2,7 +2,7 @@
 /** 후보 간략 카드 — 이름은 가리고, 팀·건물·외모·연락처는 보여주지 않는다 */
 import { computed } from 'vue';
 import { ct, cts } from '@/stores/codes';
-import { SERIOUSNESS } from '@/constants/codes';
+import { SERIOUSNESS } from '@shared/constants/codes';
 import FaceIcon from './FaceIcon.vue';
 
 const props = defineProps({
@@ -30,7 +30,7 @@ const where = computed(() => [ct('DIVISION', props.card.division), props.card.ca
         <p v-if="caption" class="pc__caption">{{ caption }}</p>
         <h3 class="pc__name">
           {{ card.nickname || card.name }}
-          <span class="pc__age">만 {{ card.age }}세</span>
+          <span class="pc__age">{{ card.age }}세</span>
         </h3>
         <p class="pc__where">
           <span v-if="card.nickname" class="pc__initial mono">{{ card.name }}</span>

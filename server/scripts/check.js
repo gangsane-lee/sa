@@ -1,7 +1,7 @@
 /**
- * 배포 점검 — server 폴더에서  npm run check
+ * 배포 점검 — API 서버 폴더(IIS 사이트 폴더)에서  npm run check
  *
- * 실행 환경 · .env 값 · 패키지 · 화면 빌드 · 포트 · DB(연결·권한·테이블·암호화 키) · 관리자 파일 · 사내 로그인 연결을
+ * 실행 환경(Node.js · IIS · iisnode) · web.config · .env 값 · 패키지 · IIS 사이트·포트 · DB(연결·권한·테이블·암호화 키) · 관리자 파일 · 사내 로그인 연결을
  * 차례로 확인하고, 문제가 있으면 원인과 해결 방법을 함께 보여준다. 비밀번호·키 값은 출력하지 않는다.
  *   ✔ 정상   ⚠ 지금 막히지는 않지만 운영 전에 정리 권장   ✖ 이대로는 동작하지 않음 (종료 코드 1)
  *
@@ -23,7 +23,7 @@ const { preflight } = (await import('../preflight.cjs')).default;
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /** 운영 표준 버전 (docs/GO-LIVE.md 와 같게) */
-const STANDARD = { node: '22.12.0', npm: '10.9.0', pm2: '5.3.0' };
+const STANDARD = { node: '22.12.0', npm: '10.9.0' };
 const ROOT = path.resolve(SERVER_ROOT, '..');
 const CLIENT = path.join(ROOT, 'client');
 const args = new Set(process.argv.slice(2));
@@ -60,7 +60,7 @@ console.log('\n사緣 배포 점검');
 console.log(`  서버 폴더 ${SERVER_ROOT}`);
 
 // ═══ 1. 실행 환경 ═══════════════════════════════════════
-r.section('실행 환경 (Node.js · npm · PM2)');
+r.section('실행 환경 (Node.js · npm · IIS · iisnode)');
 {
   const node = process.versions.node;
   if (cmpVer(node, STANDARD.node) < 0) {
@@ -77,21 +77,21 @@ r.section('실행 환경 (Node.js · npm · PM2)');
   else if (cmpVer(npmVer, STANDARD.npm) < 0) r.warn(`npm ${npmVer} — 운영 표준은 ${STANDARD.npm} 이에요`, { fix: [`npm install -g npm@${STANDARD.npm}`] });
   else r.ok(`npm ${npmVer}${npmVer === STANDARD.npm ? ' (운영 표준)' : ''}`);
 
-  // PM2 — server/node_modules 에 들어 있다 (오프라인 서버에서도 npm ci·패키지로 함께 설치)
-  let pm2Ver = null;
-  try {
-    pm2Ver = JSON.parse(fs.readFileSync(path.join(SERVER_ROOT, 'node_modules', 'pm2', 'package.json'), 'utf8')).version;
-  } catch {
-    /* 없음 */
-  }
-  if (!pm2Ver) {
-    r.fail('PM2 가 없어요 (server/node_modules/pm2)', {
-      reason: '서버를 PM2 로 띄울 수 없어요.',
-      fix: ['개발 서버: server 폴더에서  npm ci  /  운영 서버: 배포 패키지(api)로 다시 설치'],
-    });
-  } else if (pm2Ver !== STANDARD.pm2) {
-    r.warn(`PM2 ${pm2Ver} — 운영 표준은 ${STANDARD.pm2} 이에요`, { fix: ['server/package.json 의 pm2 버전 확인 후 npm ci'] });
-  } else r.ok(`PM2 ${pm2Ver} (server/node_modules — 실행:  npm run pm2 -- status)`);
+  // IIS · iisnode · URL Rewrite — API 서버는 IIS 가 iisnode 로 main.js 를 실행한다 (Windows 서버에서만)
+  if (process.platform === 'win32') {
+    const pf = env.ProgramFiles ?? 'C:\\Program Files';
+    const sys = path.join(env.windir ?? 'C:\\Windows', 'System32', 'inetsrv');
+    const w3 = sh('sc query W3SVC');
+    if (w3 && /RUNNING/.test(w3)) r.ok('IIS(W3SVC) 실행 중');
+    else r.fail('IIS 가 설치·실행되어 있지 않아요', { fix: ['서버 관리자 → 역할 추가 → 웹 서버(IIS)  또는  Install-WindowsFeature Web-Server -IncludeManagementTools'] });
+    if (fs.existsSync(path.join(pf, 'iisnode', 'iisnode.dll')) || fs.existsSync(path.join(sys, 'iisnode.dll'))) r.ok('iisnode 설치됨');
+    else r.fail('iisnode 가 없어요', { reason: 'IIS 가 main.js 를 Node.js 로 실행하지 못해 /api 가 500 오류가 나요.', fix: ['개발 서버에서 iisnode-full-v0.2.26-x64.msi 를 받아 복사해 설치 (docs/GO-LIVE.md 1장 C)'] });
+    if (fs.existsSync(path.join(sys, 'rewrite.dll'))) r.ok('URL Rewrite 설치됨');
+    else r.fail('URL Rewrite 가 없어요', { reason: 'web.config 의 rewrite 규칙 때문에 사이트 전체가 500.19 오류가 나요.', fix: ['URL Rewrite 2.1 설치 파일(.msi)을 복사해 설치'] });
+    if (!fs.existsSync(path.join(pf, 'nodejs', 'node.exe'))) {
+      r.warn(`${path.join(pf, 'nodejs', 'node.exe')} 가 없어요`, { reason: 'web.config 의 nodeProcessCommandLine 이 이 경로를 써요.', fix: ['Node.js 를 기본 경로에 설치하거나 web.config 의 nodeProcessCommandLine 을 실제 node.exe 경로로'] });
+    }
+  } else r.info('Windows 가 아니라 IIS·iisnode 확인을 건너뛰어요 (npm start 로 직접 띄우는 경우)');
   r.info(`${os.type()} ${os.release()} · ${os.hostname()}`);
   const pre = preflight();
   for (const p of pre.problems.filter((x) => x.title.startsWith('설치 경로'))) r[p.fatal ? 'fail' : 'warn'](p.title, p);
@@ -99,7 +99,7 @@ r.section('실행 환경 (Node.js · npm · PM2)');
 }
 
 const sql = (await import('mssql')).default;
-const { config, RETIRED_ENV, topology } = await import('../src/config.js');
+const { config, RETIRED_ENV, topology, webConfigSettings, MASTER_FILE } = await import('../src/config.js');
 const { placeholdersOf } = await import('../src/sso.js');
 const { poolConfig, SAFE_DB_NAME, TABLE, __internals } = await import('../src/store.js');
 const { makeCipher, ENC_PREFIX } = await import('../src/crypto.js');
@@ -107,20 +107,30 @@ const { explainDbError } = await import('../src/dbErrors.js');
 const { inspectTable, TABLE_FIX } = await import('./lib/dbinspect.js');
 
 // ═══ 2. 서버 기준정보 servers.config.mjs ═══════════════
-r.section(`서버 기준정보 servers.config.mjs — 환경 ${topology.envName}`);
+r.section(`설정 web.config · servers.config.mjs — 환경 ${topology.envName}`);
 {
   const T = topology;
-  if (!['production', 'development'].includes(env.SAYEON_ENV ?? 'production')) {
-    r.fail(`SAYEON_ENV 값이 맞지 않아요: ${env.SAYEON_ENV}`, { fix: ['server/.env 에  SAYEON_ENV=production  (개발이면 development)'] });
+  // web.config (iisnode 설정 · 환경 · API 포트 · DB 서버)
+  const W = webConfigSettings;
+  if (!W) {
+    r.fail('web.config 가 없어요', { reason: 'IIS 가 main.js 를 실행하지 못하고, 환경·DB 서버도 정해지지 않아요.', fix: ['배포 패키지의 api 폴더를 통째로 복사  또는 이 폴더에서  npm run webconfig  (개발이면  -- --env development)'] });
+  } else {
+    const missing = ['SAYEON_ENV', 'API_PORT', 'DB_HOST', 'DB_NAME'].filter((k) => !W[k]);
+    if (missing.length) r.warn(`web.config 에 없는 값: ${missing.join(', ')}`, { reason: '없는 값은 servers.config.mjs 값을 써요.' });
+    r.ok(`web.config — 환경 ${W.SAYEON_ENV ?? '-'} · API 포트 ${W.API_PORT ?? '-'} · DB ${W.DB_HOST ?? '-'}:${W.DB_PORT ?? '1433'}/${W.DB_NAME ?? '-'}`);
   }
-  if (!env.SAYEON_ENV) r.info('server/.env 에 SAYEON_ENV 가 없어 production 으로 봐요');
+  if (!['production', 'development'].includes(env.SAYEON_ENV ?? 'production')) {
+    r.fail(`SAYEON_ENV 값이 맞지 않아요: ${env.SAYEON_ENV}`, { fix: ['web.config 의 SAYEON_ENV 를 production(운영) 또는 development(개발)로'] });
+  }
+  if (!env.SAYEON_ENV) r.info('web.config 에 SAYEON_ENV 가 없어 production 으로 봐요');
+  r.info(`기준정보 ${MASTER_FILE ?? '(없음)'}`);
   if (T.problems.length) {
-    for (const p of T.problems) r.fail(p, { fix: ['저장소 맨 위 servers.config.mjs 를 고친 뒤 — 개발 서버에서 다시 패키지(npm run release)'] });
+    for (const p of T.problems) r.fail(p, { fix: ['저장소 맨 위 servers.config.mjs(또는 web.config)를 고친 뒤 — 개발 서버에서 다시 패키지(npm run release)'] });
   } else {
     r.ok(`Web  ${T.publicUrl}  (IIS · 사용자가 접속하는 주소)`);
     r.ok(`API  ${T.apiUrl}  (이 서버 · 포트 ${T.api.port})`);
     r.ok(`DB   ${T.db.host}:${T.db.port} / ${T.db.name}`);
-    r.ok(`화면 모드 ${T.serviceMode} · 관리자 주소 ${T.adminPath}`);
+    r.ok(`로그인 방식 ${T.sso.mode ?? 'browser'} · 관리자 주소 ${T.adminPath}`);
   }
   const RESERVED = ['/', '/login', '/apply', '/me', '/saju', '/messages', '/voc', '/privacy', '/api', '/assets', '/sayeon.config.js', '/favicon.svg', '/_deploy'];
   if (RESERVED.includes(T.adminPath.toLowerCase()) || !/^\/[A-Za-z0-9_-]+$/.test(T.adminPath)) {
@@ -162,7 +172,7 @@ if (!fs.existsSync(envFile)) {
   if (unknown.length) {
     r.warn(`모르는 항목: ${unknown.join(', ')}`, { reason: '오타면 그 설정은 적용되지 않아요.', fix: ['.env.example 의 항목 이름과 비교해 주세요.'] });
   }
-  const isTest = config.serviceMode === 'test';
+  const isTest = false; // 운영 빌드는 늘 정식 운영 (개발 모드는 서버 없이 npm run dev)
   const raw = (k) => (env[k] ?? '').trim();
 
   // 쿠키 — http(IP·DNS) 로 접속하면 COOKIE_SECURE=false
@@ -215,16 +225,11 @@ r.section('패키지 (npm ci)');
   });
   if (missing.length) r.fail(`server 패키지가 없어요: ${missing.join(', ')}`, { fix: ['server 폴더에서  npm ci'] });
   else r.ok('server 패키지 설치됨');
-  // 서버는 client/src 의 업무 규칙을 함께 쓰고, 그 코드가 client/node_modules 의 사주 계산 라이브러리를 부른다
-  try {
-    createRequire(path.join(CLIENT, 'src', 'utils', 'saju.js')).resolve('lunar-javascript');
-    r.ok('client 패키지 설치됨 (서버가 함께 쓰는 사주 계산 라이브러리 포함)');
-  } catch {
-    r.fail('client 패키지가 없어요', {
-      reason: '서버가 client/src 의 업무 규칙을 함께 쓰는데, 그 코드가 client/node_modules 의 라이브러리를 불러요. 없으면 서버가 시작하지 못해요.',
-      fix: ['client 폴더에서  npm ci'],
-    });
-  }
+  // 업무 규칙(shared/)과 API 파일(routes/)이 이 폴더 안에 있어야 한다 — 폴더째 복사했는지
+  const need = ['main.js', 'routes/index.js', 'shared/api/core/service.js', 'shared/utils/saju.js', 'src/index.js'];
+  const lost = need.filter((f) => !fs.existsSync(path.join(SERVER_ROOT, f)));
+  if (lost.length) r.fail(`빠진 파일: ${lost.join(', ')}`, { fix: ['배포 패키지의 api 폴더를 통째로 다시 복사'] });
+  else r.ok('main.js · routes · shared(업무 규칙) · src 있음');
 }
 
 // ═══ 4. 화면 빌드 ══════════════════════════════════════
@@ -254,19 +259,9 @@ else {
       r.warn('빌드한 뒤에 화면 코드·설정이 바뀌었어요', { reason: '지금 화면에는 바뀐 내용이 반영되어 있지 않아요.', fix: ['client 폴더에서  npm run build  (서버 재시작은 필요 없어요)'] });
     }
 
-    // 시연용 가짜 데이터가 빌드에 들어 있는지 (VITE_INCLUDE_MOCK)
-    const mockIn = bundle.includes('sayeon.mock.db');
-    if (config.serviceMode === 'test' && !mockIn) {
-      r.fail('SERVICE_MODE=test 인데 시연용 코드가 빠진 빌드예요', {
-        reason: 'VITE_INCLUDE_MOCK=false 로 빌드하면 test 모드를 쓸 수 없어 open 으로 동작해요.',
-        fix: ['client/.env.production 의 VITE_INCLUDE_MOCK=true 로 바꾸고 다시 빌드, 또는 SERVICE_MODE=open'],
-      });
-    } else if (config.serviceMode === 'open' && mockIn) {
-      r.warn('정식 운영인데 시연용 코드(테스트 계정·가짜 데이터)가 빌드에 들어 있어요', {
-        reason: '동작에는 문제없지만 화면 코드에 테스트 계정 정보가 남아요.',
-        fix: ['client/.env.production 의 VITE_INCLUDE_MOCK=false 로 바꾸고  npm run build'],
-      });
-    } else r.ok(`빌드 종류: ${mockIn ? '시연용(가짜 데이터 포함)' : '정식 운영용(가짜 데이터 없음)'}`);
+    // 운영 빌드에는 개발 모드의 가짜 데이터가 없어야 한다
+    if (bundle.includes('sayeon.mock.db')) r.fail('빌드에 개발용 가짜 데이터가 들어 있어요', { fix: ['client 폴더에서  npm run build  로 다시 빌드 (npm run dev 결과물이 아닌지 확인)'] });
+    else r.ok('빌드 종류: 운영 모드(가짜 데이터 없음)');
 
     // DevExtreme 라이선스
     const licFile = path.join(CLIENT, 'src', '.devextreme', 'license-key.js');
@@ -283,22 +278,40 @@ else {
 }
 
 // ═══ 5. 포트 ══════════════════════════════════════════
-r.section(`포트 ${config.port}`);
+r.section(`IIS 사이트 · 포트 ${config.port}`);
 {
+  // 이 폴더를 쓰는 IIS 사이트와 바인딩 (관리자 권한 PowerShell 에서 정확히 보인다)
+  if (process.platform === 'win32') {
+    const ps = `Import-Module WebAdministration -ErrorAction Stop; Get-Website | ForEach-Object { '{0}|{1}|{2}|{3}' -f $_.name, [Environment]::ExpandEnvironmentVariables($_.physicalPath), (($_.bindings.Collection | ForEach-Object { ($_.bindingInformation -split ':')[1] }) -join ','), $_.applicationPool }`;
+    const out = sh(`powershell -NoProfile -Command "${ps}"`);
+    if (out === null) r.info('IIS 사이트 목록을 읽지 못했어요 (PowerShell 을 관리자 권한으로 실행하면 확인돼요)');
+    else {
+      const sites = out.split(/\r?\n/).filter(Boolean).map((l) => l.split('|'));
+      const mine = sites.find(([, p]) => path.resolve(p).toLowerCase() === SERVER_ROOT.toLowerCase());
+      if (!mine) {
+        r.fail('이 폴더를 쓰는 IIS 사이트가 없어요', { fix: [`New-WebAppPool sayeon-api${topology.envName === 'development' ? '-dev' : ''}  →  New-Website -Name 'sayeon-api${topology.envName === 'development' ? '-dev' : ''}' -Port ${config.port} -PhysicalPath '${SERVER_ROOT}' -ApplicationPool 'sayeon-api${topology.envName === 'development' ? '-dev' : ''}'  (docs/GO-LIVE.md 1장 D)`] });
+      } else {
+        const [name, , ports, pool] = mine;
+        if (ports.split(',').includes(String(config.port))) r.ok(`IIS 사이트 '${name}' · 포트 ${config.port} · 앱 풀 ${pool}`);
+        else r.fail(`IIS 사이트 '${name}' 의 포트(${ports})가 web.config 의 API_PORT(${config.port})와 달라요`, { fix: [`New-WebBinding -Name '${name}' -Port ${config.port} -Protocol http  (또는 web.config 의 API_PORT 를 고침)`] });
+      }
+    }
+  }
   const state = await new Promise((resolve) => {
     const srv = net.createServer();
     srv.once('error', (e) => resolve(e.code));
     srv.listen(config.port, config.host, () => srv.close(() => resolve('free')));
   });
-  if (state === 'free') r.ok('비어 있어요 — 서버를 시작할 수 있어요');
+  if (state === 'free') r.warn(`${config.port}번 포트에서 아무것도 돌지 않아요`, { reason: 'IIS 사이트가 없거나 멈춰 있어요. (npm start 로 직접 띄울 때는 정상)', fix: ['IIS 관리자에서 사이트 시작  또는  Start-Website <사이트 이름>'] });
   else if (state === 'EADDRINUSE') {
     const health = await fetch(`http://127.0.0.1:${config.port}/api/health`, { signal: AbortSignal.timeout(3000) })
       .then((res) => res.json())
       .catch(() => null);
-    if (health?.ok) r.ok(`사緣 서버가 이미 이 포트에서 실행 중이에요 (저장소 ${health.store})`);
+    if (health?.ok) r.ok(`사緣 API 가 이 포트에서 응답해요 (IIS + iisnode · 저장소 ${health.store})`);
     else {
-      r.fail(`다른 프로그램이 ${config.port}번 포트를 쓰고 있어요`, {
-        fix: [`어떤 프로그램인지 확인: netstat -ano | findstr :${config.port}  (Linux: ss -ltnp | grep ${config.port})`, '그 프로그램을 끄거나 servers.config.mjs 의 api.port 를 바꿔 주세요 (방화벽·Web 서버 web.config 도 함께 — 다시 패키지)'],
+      r.fail(`${config.port}번 포트에서 사緣 API 가 응답하지 않아요`, {
+        reason: 'IIS 사이트는 있는데 서버가 시작하지 못했거나(이 폴더의 iisnode\\ 로그), 다른 프로그램이 포트를 쓰고 있어요.',
+        fix: [`http://localhost:${config.port}/api/health 를 열어 오류 확인 · 이 폴더 iisnode\\ 의 최근 로그`, `다른 프로그램인지: netstat -ano | findstr :${config.port}`],
       });
     }
   } else if (state === 'EACCES') r.fail(`${config.port}번 포트를 열 권한이 없어요`, { fix: ['1024 이상 포트(예: 3000)를 쓰거나 관리자 권한으로 실행해 주세요.'] });
@@ -465,16 +478,29 @@ r.section('관리자 계정 (server/config/admins.js)');
 }
 
 // ═══ 8. 사내 로그인 (AD SSO) ════════════════════════════
-r.section(`사내 로그인 — ${{ iis: 'IIS Windows 인증 → AD → 사내 인사 API', url: 'SSO 주소', off: '연결 안 됨' }[config.sso.mode]}`);
+r.section(`사내 로그인 — ${{ browser: '화면이 사내 인사정보 URL 로 확인', iis: 'IIS Windows 인증 → AD → 사내 인사 API', url: 'SSO 주소', off: '연결 안 됨' }[config.sso.mode]}`);
 {
   const S = config.sso;
-  const isTest = config.serviceMode === 'test';
-  if (isTest) r.info('test 모드 — 화면이 테스트 계정으로 들어가요. 아래는 정식 운영 때 필요한 항목이에요');
-  const severity = isTest ? 'warn' : 'fail';
+  const severity = 'fail';
   const urls = [];
 
   if (S.mode === 'off') {
-    r[severity]('사내 로그인이 꺼져 있어요 (servers.config.mjs 의 sso.mode)', { reason: '정식 운영은 사내 SSO로만 들어와요. 모두 안내 화면에서 멈춰요.', fix: ["servers.config.mjs 의 sso.mode 를 'iis' 로"] });
+    r[severity]('사내 로그인이 꺼져 있어요 (servers.config.mjs 의 sso.mode)', { reason: '정식 운영은 사내 SSO로만 들어와요. 모두 안내 화면에서 멈춰요.', fix: ["servers.config.mjs 의 sso.mode 를 'browser' 로"] });
+  } else if (S.mode === 'browser') {
+    const E = topology.sso.employeeApi ?? {};
+    if (E.url) r.ok(`사내 인사정보 URL(브라우저가 부름) ${E.method ?? 'GET'} ${E.url}`);
+    else r.fail('사내 인사정보 URL 이 비어 있어요 (servers.config.mjs 의 sso.employeeApi.url)', { reason: '모든 사용자가 "임직원만 이용할 수 있어요" 화면으로 가요.', fix: ['개발 서버에서 servers.config.mjs 를 고쳐 다시 빌드·배포 (또는 Web 서버의 sayeon.config.js 수정)'] });
+    r.info('인사정보는 사용자 PC 브라우저가 부르므로 이 서버에서는 연결을 시험하지 않아요 — 사내 PC 에서 화면을 열어 확인');
+    r.info('응답 읽기 시험:  npm run sso:test -- --file 응답.json  (사내 PC 화면 F12 → 로컬 스토리지의 sayeon.employee 값을 파일로)');
+    if (S.hrApi.url) {
+      if (!URL.canParse(S.hrApi.url.replace(/{[^}]*}/g, 'x'))) r.fail(`hrApi.url 형식이 맞지 않아요: ${S.hrApi.url}`);
+      else {
+        r.ok(`API 서버가 사번을 다시 확인할 사내 인사 API ${S.hrApi.method} ${S.hrApi.url} · 본문 ${JSON.stringify(S.hrApi.body)}`);
+        urls.push(['사내 인사 API', S.hrApi.url]);
+      }
+    } else {
+      r.warn('API 서버의 사번 재확인(sso.hrApi.url)이 꺼져 있어요', { reason: '브라우저가 보낸 인사정보를 그대로 믿어요 — 개발자 도구로 꾸며 보낼 수 있어요.', fix: ['사내 인사 API 가 있으면 servers.config.mjs 의 sso.hrApi.url 을 채워 주세요'] });
+    }
   } else if (S.mode === 'iis') {
     r.ok(`로그인 헤더 ${S.headerName} 는 Web 서버(${config.trustedProxies.join(', ')})에서 온 요청만 믿어요`);
     if (S.devUser) r.warn(`개발 시험 계정 DEV_SSO_USER=${S.devUser} 가 켜져 있어요`, { reason: 'IIS 없이 이 계정으로 로그인돼요 (development 환경에서만).', fix: ['시험이 끝나면 server/.env 에서 지워 주세요.'] });
@@ -491,12 +517,12 @@ r.section(`사내 로그인 — ${{ iis: 'IIS Windows 인증 → AD → 사내 �
           });
         } else {
           r.ok(`도메인 가입: ${domName}`);
-          // 지금 이 명령을 실행한 계정으로 AD 조회를 시험한다 (PM2 도 같은 계정으로 돌아야 한다)
+          // 지금 이 명령을 실행한 계정으로 AD 조회를 시험한다 (IIS 앱 풀도 같은 계정으로 돌아야 한다)
           const who = `${env.USERDOMAIN ?? ''}\\${env.USERNAME ?? ''}`;
           if ((env.USERDOMAIN ?? '').toUpperCase() !== S.domain) {
             r.warn(`지금 계정(${who})이 ${S.domain} 도메인 계정이 아니에요`, {
-              reason: '서버(PM2)를 로컬 계정으로 돌리면 AD 를 조회하지 못할 수 있어요.',
-              fix: [`PM2 는 ${S.domain} 도메인 서비스 계정으로 실행 — 확인:  npm run sso:test -- --user 회사아이디`],
+              reason: 'IIS 앱 풀을 로컬 계정으로 돌리면 AD 를 조회하지 못할 수 있어요.',
+              fix: [`앱 풀 ID 를 ${S.domain} 도메인 서비스 계정으로 — 확인:  npm run sso:test -- --user 회사아이디`],
             });
           } else {
             try {
@@ -560,7 +586,7 @@ r.section(`사내 로그인 — ${{ iis: 'IIS Windows 인증 → AD → 사내 �
 
 process.exit(
   r.summary({
-    okText: `시작할 준비가 됐어요 →  npm run pm2 -- start ecosystem.config.cjs  (이미 실행 중이면  npm run pm2 -- restart ${topology.envName === 'development' ? 'sayeon-api-dev' : 'sayeon-api'})`,
+    okText: `준비됐어요 → IIS 앱 풀 재시작(Restart-WebAppPool sayeon-api${topology.envName === 'development' ? '-dev' : ''}) 후 http://localhost:${config.port}/api/health 확인`,
     failText: '✖ 항목을 고친 뒤 다시  npm run check  해 주세요. (자세한 순서: docs/GO-LIVE.md)',
   }),
 );

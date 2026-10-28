@@ -1,5 +1,12 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue';
+/**
+ * 신청서 화면
+ *  - 처음 신청: 설문처럼 4페이지(나는 이런 사람 · 나의 모습 · 나의 일상 · 이런 분이면 좋겠어요)를 한 페이지씩.
+ *    위에 진행 상황(지금 페이지 · 남은 페이지)이 고정으로 보이고, 오른쪽에 필수 항목·추천 정확도가 보인다.
+ *    정규 신청과 인연 사주에서 하트를 보내며 하는 신청이 같은 양식이다 (사주는 신청과 함께 하트가 간다)
+ *  - 신청 후 수정: 모든 항목을 한 화면에
+ */
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { DxButton } from 'devextreme-vue/button';
 import { DxLoadPanel } from 'devextreme-vue/load-panel';
@@ -9,24 +16,27 @@ import { confirm } from 'devextreme/ui/dialog';
 import { api } from '@/api';
 import { session, flash, refreshUser } from '@/stores/session';
 import {
-  emptyForm, toFormModel, fromFormModel, sectionProgress, matchReadiness, OPTIONAL_BOOSTERS,
-} from '@/utils/applicationModel';
+  emptyForm, toFormModel, fromFormModel, sectionProgress, matchReadiness, OPTIONAL_BOOSTERS, SECTIONS, pageOfField,
+} from '@shared/utils/applicationModel';
 import ApplicantForm from '@/components/ApplicantForm.vue';
 
 const router = useRouter();
 const route = useRoute();
-/** 사주 하트 팝업에서 '정식으로 신청하기'로 왔는가 — 팝업에 적은 값을 이어 받는다 */
+/** 인연 사주에서 왔는가 — 사주 인연에게 하트를 보내려고 신청하는 중이면 신청과 함께 하트가 간다 */
 const fromSaju = route.query.from === 'saju';
-const DRAFT_KEY = 'sayeon.quickDraft';
-function takeDraft() {
+const SAJU_KEY = 'sayeon.sajuApply';
+function takeSaju() {
   try {
-    const d = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? 'null');
-    sessionStorage.removeItem(DRAFT_KEY);
+    const d = JSON.parse(sessionStorage.getItem(SAJU_KEY) ?? 'null');
+    sessionStorage.removeItem(SAJU_KEY);
     return d && typeof d === 'object' ? d : null;
   } catch {
     return null;
   }
 }
+/** { to: 하트 받을 사람 닉네임, birthYear } — 사주 화면이 넘겨준 값 */
+const saju = ref(null);
+
 const formComp = ref();
 const form = ref(null);
 const editing = ref(false);
@@ -49,6 +59,13 @@ let nudged = new Set();
 let nudgeTimer;
 let originalGender = null;
 
+// ── 페이지 (처음 신청할 때만) ──
+const page = ref(0);
+const reached = ref(0); // 지금까지 들어가 본 가장 뒤 페이지
+const wizard = computed(() => Boolean(form.value) && !editing.value && !locked.value);
+const lastPage = SECTIONS.length - 1;
+const sheetEl = ref();
+
 onMounted(async () => {
   try {
     const mine = await api.application.getMine();
@@ -59,9 +76,9 @@ onMounted(async () => {
     blocked.value = !mine && Boolean(session.user?.blocked);
     quick.value = Boolean(mine?.quick);
     const base = emptyForm(session.user);
-    const draft = !mine && fromSaju ? takeDraft() : null;
-    // 사주 팝업에서 적은 값 중 신청서에 있는 항목만 옮긴다 (이름·소속은 인사정보 그대로)
-    if (draft) for (const k of Object.keys(base)) if (k in draft && !['name', 'division', 'team'].includes(k)) base[k] = draft[k];
+    saju.value = !mine && fromSaju ? takeSaju() : null;
+    // 사주에서 입력한 생년월일의 연도만 미리 채운다 (월·일은 저장하지 않는다)
+    if (saju.value?.birthYear) base.birthYear = saju.value.birthYear;
     form.value = reactive(mine ? toFormModel(mine) : base);
     originalGender = mine?.gender ?? null;
     nudged = new Set(matchReadiness(form.value).filledKeys); // 이미 채운 항목은 다시 칭찬하지 않는다
@@ -78,6 +95,8 @@ const sections = computed(() => {
 const doneCount = computed(() => sections.value.reduce((s, x) => s + x.done, 0));
 const totalCount = computed(() => sections.value.reduce((s, x) => s + x.total, 0));
 const pct = computed(() => (totalCount.value ? Math.round((doneCount.value / totalCount.value) * 100) : 0));
+const current = computed(() => sections.value[page.value] ?? { done: 0, total: 0, title: '' });
+const left = computed(() => lastPage - page.value);
 
 const readiness = computed(() => {
   tick.value; // eslint-disable-line no-unused-expressions
@@ -98,25 +117,55 @@ function onChange() {
 }
 const OPTIONAL_TEXT = Object.fromEntries(OPTIONAL_BOOSTERS.map((b) => [b.key, b.nudge]));
 
+/** 지금 페이지 검사 — 문제가 있으면 알려 주고 false */
+function checkPage() {
+  const result = formComp.value.validate();
+  if (result.isValid) return true;
+  notify({ message: `확인이 필요한 항목이 ${result.count}개 있어요. 빨간 표시를 확인해 주세요.`, type: 'warning', displayTime: 3000 });
+  result.focus();
+  return false;
+}
+
+async function toTop() {
+  await nextTick();
+  const y = (sheetEl.value?.getBoundingClientRect().top ?? 0) + window.scrollY - 140;
+  window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+}
+
+/** 다른 페이지로 — 앞으로 갈 때는 지금 페이지를 먼저 검사한다 (뒤로는 그냥) */
+function goPage(i) {
+  if (i === page.value || i < 0 || i > lastPage) return;
+  if (i > page.value) {
+    if (i > reached.value + 1 && i > page.value + 1) return; // 아직 안 가 본 페이지를 건너뛰지 않는다
+    if (!checkPage()) return;
+  }
+  page.value = i;
+  reached.value = Math.max(reached.value, i);
+  toTop();
+}
+
 /** 선택 항목으로 이동 (팝업의 '채우러 갈게요') */
 function goFillOptional() {
   boostPopup.value = false;
   const first = readiness.value.missing[0];
-  const sec = first?.key.startsWith('pref') ? 'pref' : 'basic';
-  scrollToSection(sec);
+  const i = first ? pageOfField(first.key) : 0;
+  if (wizard.value) {
+    formComp.value?.revealOptional(i);
+    page.value = i;
+    toTop();
+  } else scrollToSection(SECTIONS[i].key);
 }
 
 function scrollToSection(key) {
   document.querySelector(`.sec-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+function onSectionClick(i) {
+  if (wizard.value) goPage(i);
+  else scrollToSection(SECTIONS[i].key);
+}
 
 async function submit() {
-  const result = formComp.value.validate();
-  if (!result.isValid) {
-    notify({ message: `확인이 필요한 항목이 ${result.count}개 있어요. 빨간 표시를 확인해 주세요.`, type: 'warning', displayTime: 3000 });
-    result.focus();
-    return;
-  }
+  if (!checkPage()) return;
   // 선택 항목이 많이 비어 있으면 한 번만 부드럽게 권한다 (강요하지 않음)
   if (!boostAsked && readiness.value.pct < 75) {
     boostAsked = true;
@@ -139,16 +188,31 @@ async function save() {
   saving.value = true;
   try {
     const payload = fromFormModel(form.value);
+    let heart = null; // 사주 인연에게 보낸 하트 결과
     if (editing.value) {
       await api.application.update(payload);
       flash.applied = 'updated';
+    } else if (saju.value?.to) {
+      try {
+        heart = await api.saju.apply(payload); // 신청 + 사주 인연에게 하트
+      } catch (e) {
+        // 그새 상대 상황이 바뀌었으면 신청만 한다 (하트는 사주 화면에서 다시)
+        if (e.code !== 'CANDIDATE_GONE') throw e;
+        await api.application.create(payload);
+        notify({ message: '그새 사주 인연의 상황이 바뀌어 하트는 보내지 못했어요. 신청은 완료됐어요.', type: 'warning', displayTime: 4500 });
+      }
     } else {
       await api.application.create(payload);
     }
     dirty.value = false;
     await refreshUser(); // 신청 상태(GUEST→APPLICANT 등)를 헤더·라우팅에 반영
-    if (editing.value) notify({ message: '신청서를 저장했어요. 바뀐 선호는 다음 후보부터 반영돼요.', type: 'success', displayTime: 3000 });
-    router.push(editing.value ? { name: 'home' } : { name: 'apply-done', query: fromSaju ? { from: 'saju' } : {} });
+    if (editing.value) {
+      notify({ message: '신청서를 저장했어요. 바뀐 선호는 다음 후보부터 반영돼요.', type: 'success', displayTime: 3000 });
+      router.push({ name: 'home' });
+    } else {
+      const query = fromSaju ? { from: 'saju', ...(heart && { heart: heart.to ?? saju.value.to, ...(heart.matched && { matched: '1' }) }) } : {};
+      router.push({ name: 'apply-done', query });
+    }
   } catch (e) {
     notify({ message: e.message, type: 'error', displayTime: 4000 });
   } finally {
@@ -188,9 +252,9 @@ onBeforeRouteLeave(async () => {
         <RouterLink to="/" class="head__back">← 홈으로</RouterLink>
         <p class="head__eyebrow"><span class="head__stamp">親展</span> {{ editing ? '마이페이지 · 내 신청서' : '사緣 신청서' }}</p>
         <h1 class="head__title display">{{ editing ? (quick ? '신청서를 마저 채워주세요' : '내 신청서') : '나를 소개하는 시간' }}</h1>
-        <p v-if="fromSaju && !editing" class="head__quick">
-          인연 사주에서 적은 내용을 그대로 옮겨 왔어요. 나머지를 채워 신청하면 <b>매일 3명의 후보</b>가 도착하고,
-          <b>사주 인연에게도 하트</b>를 보낼 수 있어요.
+        <p v-if="saju?.to && !editing" class="head__quick">
+          <b>♥ {{ saju.to }}</b>님에게 하트를 보내려면 신청서를 써 주세요. <b>4페이지</b>, 필수 항목만 채우면 되고
+          신청하는 순간 하트가 함께 전해져요.
         </p>
         <p v-if="quick" class="head__quick">
           사주로 하트를 보낸 임시 신청 상태예요. 나머지를 채우면 <b>매일 3명의 후보</b>가 열리고, 선호까지 반영해 <b>다음 매칭부터 더 잘 맞는 분</b>을 만나요.
@@ -216,72 +280,131 @@ onBeforeRouteLeave(async () => {
         <DxButton text="홈으로" styling-mode="outlined" @click="router.push({ name: 'home' })" />
       </section>
 
-      <div v-else class="layout">
-        <section class="sheet" aria-label="신청서">
-          <p class="verified">
-            <i class="dx-icon-check" aria-hidden="true" />
-            사내 계정 인증 완료 · <span class="mono">{{ session.user?.adId }}</span>
-          </p>
-
-          <ApplicantForm v-if="form" ref="formComp" :form-data="form" :read-only="locked" @change="onChange" />
-          <div v-else class="sheet__loading" />
-
-          <div class="actions">
-            <DxButton
-              v-if="!locked"
-              class="actions__submit"
-              :text="editing ? '수정 내용 저장' : '신청하기'"
-              type="default"
-              :disabled="saving || !form"
-              @click="submit"
-            />
-            <DxButton :text="locked ? '홈으로' : '취소'" styling-mode="outlined" @click="router.push({ name: 'home' })" />
-            <DxButton v-if="editing" text="신청 철회" styling-mode="text" class="actions__withdraw" @click="withdraw" />
-          </div>
-        </section>
-
-        <aside class="progress" aria-label="작성 진행률">
-          <div class="progress__card">
-            <p class="progress__label">
-              필수 항목 <b>{{ doneCount }}</b> / {{ totalCount }}
+      <template v-else>
+        <!-- 처음 신청: 위에 고정되는 진행 상황 -->
+        <nav v-if="wizard" class="steps" aria-label="신청서 진행 상황">
+          <div class="steps__top">
+            <p class="steps__now">
+              <span class="steps__no mono">{{ page + 1 }} / {{ SECTIONS.length }}</span>
+              <b>{{ SECTIONS[page].title }}</b>
+              <span class="steps__req">이 페이지 필수 {{ current.done }}/{{ current.total }}</span>
             </p>
-            <div
-              class="progress__bar"
-              role="progressbar"
-              :aria-valuenow="pct"
-              aria-valuemin="0"
-              aria-valuemax="100"
+            <p class="steps__left">
+              <template v-if="left > 0">남은 페이지 <b>{{ left }}</b> · 약 {{ left }}분</template>
+              <template v-else><b>마지막 페이지예요</b></template>
+              <span class="steps__acc">추천 정확도 {{ readiness.pct }}%</span>
+            </p>
+          </div>
+          <ol class="steps__list">
+            <li
+              v-for="(s, i) in sections"
+              :key="s.key"
+              :class="{ 'is-now': i === page, 'is-done': i < page || (i <= reached && s.done === s.total && i !== page) }"
             >
-              <span :style="{ width: `${pct}%` }" />
-            </div>
-            <ul class="progress__list">
-              <li v-for="s in sections" :key="s.key" :class="{ 'is-done': s.done === s.total }">
-                <button type="button" @click="scrollToSection(s.key)">
-                  <span class="progress__check" aria-hidden="true" />
-                  {{ s.title }}
-                </button>
-                <span class="mono">{{ s.done }}/{{ s.total }}</span>
-              </li>
-            </ul>
-            <div class="boost">
-              <p class="boost__label">
-                추천 정확도 <b>{{ readiness.pct }}%</b>
-              </p>
-              <div class="boost__bar" role="progressbar" :aria-valuenow="readiness.pct" aria-valuemin="0" aria-valuemax="100">
-                <span :style="{ width: `${readiness.pct}%` }" />
-              </div>
-              <p v-if="readiness.missing.length" class="boost__hint">
-                <b>{{ readiness.missing.slice(0, 2).map((m) => m.label).join(', ') }}</b>{{ readiness.missing.length > 2 ? ` 외 ${readiness.missing.length - 2}개` : '' }}를 채우면 더 잘 맞는 분을 찾아드려요.
-              </p>
-              <p v-else class="boost__hint">완벽해요! 가장 정확하게 추천해 드릴게요.</p>
-            </div>
-            <p class="progress__lock">
-              <i class="dx-icon-lock" aria-hidden="true" />
-              입력한 내용은 암호화되어 전송·보관돼요.
+              <button type="button" :disabled="i > reached + 1" :aria-current="i === page ? 'step' : undefined" @click="goPage(i)">
+                <span class="steps__dot mono">{{ i < page ? '✓' : i + 1 }}</span>
+                <span class="steps__name">{{ SECTIONS[i].short }}</span>
+              </button>
+            </li>
+          </ol>
+        </nav>
+
+        <div class="layout">
+          <section ref="sheetEl" class="sheet" aria-label="신청서">
+            <p class="verified">
+              <i class="dx-icon-check" aria-hidden="true" />
+              사내 계정 인증 완료 · <span class="mono">{{ session.user?.adId }}</span>
             </p>
-          </div>
-        </aside>
-      </div>
+            <h2 v-if="wizard" class="sheet__title display">{{ SECTIONS[page].title }}</h2>
+
+            <ApplicantForm
+              v-if="form"
+              ref="formComp"
+              :form-data="form"
+              :read-only="locked"
+              :page="wizard ? page : null"
+              :compact="wizard"
+              @change="onChange"
+            />
+            <div v-else class="sheet__loading" />
+
+            <div v-if="wizard" class="actions">
+              <DxButton v-if="page > 0" text="← 이전" styling-mode="outlined" @click="goPage(page - 1)" />
+              <DxButton
+                v-if="page < lastPage"
+                class="actions__submit"
+                :text="`다음 · ${SECTIONS[page + 1].short} →`"
+                type="default"
+                @click="goPage(page + 1)"
+              />
+              <DxButton
+                v-else
+                class="actions__submit"
+                :text="saju?.to ? `신청하고 ${saju.to}님에게 하트 보내기 ♥` : '신청하기'"
+                type="default"
+                :disabled="saving"
+                @click="submit"
+              />
+              <DxButton text="나중에 할게요" styling-mode="text" class="actions__withdraw" @click="router.push({ name: 'home' })" />
+            </div>
+            <div v-else class="actions">
+              <DxButton
+                v-if="!locked"
+                class="actions__submit"
+                :text="editing ? '수정 내용 저장' : '신청하기'"
+                type="default"
+                :disabled="saving || !form"
+                @click="submit"
+              />
+              <DxButton :text="locked ? '홈으로' : '취소'" styling-mode="outlined" @click="router.push({ name: 'home' })" />
+              <DxButton v-if="editing" text="신청 철회" styling-mode="text" class="actions__withdraw" @click="withdraw" />
+            </div>
+          </section>
+
+          <aside class="progress" :class="{ 'progress--wizard': wizard }" aria-label="작성 진행률">
+            <div class="progress__card">
+              <p class="progress__label">
+                필수 항목 <b>{{ doneCount }}</b> / {{ totalCount }}
+              </p>
+              <div
+                class="progress__bar"
+                role="progressbar"
+                :aria-valuenow="pct"
+                aria-valuemin="0"
+                aria-valuemax="100"
+              >
+                <span :style="{ width: `${pct}%` }" />
+              </div>
+              <ul class="progress__list">
+                <li v-for="(s, i) in sections" :key="s.key" :class="{ 'is-done': s.done === s.total, 'is-now': wizard && i === page }">
+                  <button type="button" :disabled="wizard && i > reached + 1" @click="onSectionClick(i)">
+                    <span class="progress__check" aria-hidden="true" />
+                    {{ s.title }}
+                  </button>
+                  <span class="mono">{{ s.done }}/{{ s.total }}</span>
+                </li>
+              </ul>
+              <div class="boost">
+                <p class="boost__label">
+                  추천 정확도 <b>{{ readiness.pct }}%</b>
+                </p>
+                <div class="boost__bar" role="progressbar" :aria-valuenow="readiness.pct" aria-valuemin="0" aria-valuemax="100">
+                  <span :style="{ width: `${readiness.pct}%` }" />
+                </div>
+                <p v-if="readiness.missing.length" class="boost__hint">
+                  <b>{{ readiness.missing.slice(0, 2).map((m) => m.label).join(', ') }}</b>{{ readiness.missing.length > 2 ? ` 외 ${readiness.missing.length - 2}개` : '' }}를 채우면 더 잘 맞는 분을 찾아드려요.
+                </p>
+                <p v-else class="boost__hint">완벽해요! 가장 정확하게 추천해 드릴게요.</p>
+                <button v-if="readiness.missing.length && !locked" type="button" class="boost__go" @click="goFillOptional">채우러 가기 →</button>
+              </div>
+              <p class="progress__lock">
+                <i class="dx-icon-lock" aria-hidden="true" />
+                입력한 내용은 암호화되어 전송·보관돼요.
+              </p>
+            </div>
+          </aside>
+        </div>
+      </template>
     </div>
 
     <Transition name="nudge">
@@ -309,7 +432,7 @@ onBeforeRouteLeave(async () => {
         </ul>
         <div class="boostpop__actions">
           <DxButton text="채우러 갈게요" type="default" @click="goFillOptional" />
-          <DxButton :text="editing ? '이대로 저장할게요' : '이대로 신청할게요'" styling-mode="text" @click="save" />
+          <DxButton :text="editing ? '이대로 저장할게요' : saju?.to ? '이대로 신청하고 하트 보낼게요' : '이대로 신청할게요'" styling-mode="text" @click="save" />
         </div>
       </div>
     </DxPopup>
@@ -689,6 +812,173 @@ onBeforeRouteLeave(async () => {
   .progress__list,
   .progress__lock {
     display: none;
+  }
+}
+
+/* ── 처음 신청: 위에 고정되는 진행 상황 ── */
+.steps {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 20;
+  margin: 24px 0 0;
+  padding: 12px 18px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-1);
+}
+.steps__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+.steps__now {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  color: var(--c-ink);
+}
+.steps__no {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--c-indigo);
+  color: #fff;
+  font-size: 12.5px;
+}
+.steps__now b {
+  font-size: 16px;
+  color: var(--c-indigo);
+}
+.steps__req {
+  color: var(--c-mute);
+  font-size: 13px;
+}
+.steps__left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--c-ink-2);
+  font-size: 13.5px;
+}
+.steps__left b {
+  color: var(--c-crimson-deep);
+}
+.steps__acc {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #e7e8f6;
+  color: var(--c-indigo);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.steps__list {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.steps__list li {
+  position: relative;
+  padding-top: 8px;
+  border-top: 4px solid var(--c-line);
+}
+.steps__list li.is-done {
+  border-top-color: var(--c-crimson);
+}
+.steps__list li.is-now {
+  border-top-color: var(--c-indigo);
+}
+.steps__list button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-mute);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.steps__list button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.steps__list .is-now button {
+  color: var(--c-indigo);
+  font-weight: 700;
+}
+.steps__list .is-done button {
+  color: var(--c-crimson-deep);
+}
+.steps__dot {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--c-line);
+  color: var(--c-ink-2);
+  font-size: 11px;
+}
+.is-now .steps__dot {
+  background: var(--c-indigo);
+  color: #fff;
+}
+.is-done .steps__dot {
+  background: var(--c-crimson);
+  color: #fff;
+}
+.sheet__title {
+  margin: 0 0 18px;
+  font-size: 22px;
+  color: var(--c-indigo);
+}
+.progress__list li.is-now button {
+  color: var(--c-indigo);
+  font-weight: 700;
+}
+.progress__list button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.boost__go {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-indigo);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (max-width: 991px) {
+  /* 좁은 화면 처음 신청: 위 진행 상황만 (오른쪽 카드는 숨김 — 추천 정확도는 위에 같이 보인다) */
+  .progress--wizard {
+    display: none;
+  }
+  .steps {
+    margin: 16px calc(var(--gutter) * -1) 0;
+    border-radius: 0;
+    border-width: 0 0 1px;
+  }
+}
+@media (max-width: 575px) {
+  .steps__name {
+    display: none;
+  }
+  .steps__list button {
+    justify-content: center;
   }
 }
 </style>

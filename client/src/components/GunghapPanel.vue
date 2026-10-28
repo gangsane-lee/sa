@@ -2,7 +2,7 @@
 /** 나와 오늘의 후보의 사주 궁합 (서버가 계산한 결과만 받는다 — 상대 생년월일은 오지 않음) */
 import { computed } from 'vue';
 import { RouterLink } from 'vue-router';
-import { ELEMENTS } from '@/utils/saju';
+import { ELEMENTS } from '@shared/utils/saju';
 
 const props = defineProps({
   gunghap: { type: Object, default: null },

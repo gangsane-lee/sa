@@ -15,8 +15,8 @@ import CustomStore from 'devextreme/data/custom_store';
 import notify from 'devextreme/ui/notify';
 import { confirm } from 'devextreme/ui/dialog';
 import { adminApi } from '@/stores/session';
-import { REVIEW_OUTCOMES, REVIEW_RATINGS } from '@/constants/codes';
-import { fmtDateTime } from '@/utils/format';
+import { REVIEW_OUTCOMES, REVIEW_RATINGS } from '@shared/constants/codes';
+import { fmtDateTime } from '@shared/utils/format';
 
 /** 확인창은 HTML로 그려지므로 인사정보에서 온 이름도 이스케이프한다 */
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);

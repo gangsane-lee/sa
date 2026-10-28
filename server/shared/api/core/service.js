@@ -1,9 +1,9 @@
 /**
  * 사緣 핵심 서비스 — 신청·오늘의 인연·하트·매칭·후기·쪽지·관리자 규칙이 모두 여기 있다.
- * 브라우저 test 모드(api/mock)와 Node.js 서버(server/)가 이 파일을 함께 쓴다
+ * 브라우저 개발 모드(api/mock)와 Node.js 서버(server/)가 이 파일을 함께 쓴다
  *  → 화면에서 시험한 동작이 운영 서버에서도 똑같이 돈다.
  * 저장소·세션·사내 인증·관리자 확인은 configureService()로 끼워 넣는다.
- *   test 모드: localStorage / sessionStorage / 가짜 임직원 (api/mock/index.js)
+ *   개발 모드: localStorage / sessionStorage / 가짜 임직원 (api/mock/index.js)
  *   서버    : MSSQL / 요청 세션 / 사내 AD·SSO(server/src/sso.js) / 관리자 계정(server/config/admins.js)
  * 응답 형태·오류 코드는 http.js(화면 쪽 호출)와 같다.
  */
@@ -11,7 +11,7 @@ import { ApiError } from '../errors.js';
 import { scoreCandidates, busyIds, matchStory } from './matching.js';
 import { compatibility } from '../../utils/saju.js';
 import { suggestNicknames } from '../../utils/nickname.js';
-import { validateApplication, ageOf } from '../../utils/applicationRules.js';
+import { validateApplication, ageOf, yearOf } from '../../utils/applicationRules.js';
 import { FIELD_LABELS } from '../../utils/applicationModel.js';
 import { initials } from '../../utils/format.js';
 import { DEFAULT_CODES } from '../../constants/defaultCodes.js';
@@ -28,7 +28,7 @@ const DAY = 86400000;
 /** 신청자가 저장할 수 있는 항목 화이트리스트 (그 외 키는 무시) */
 // 이름은 사내 인사정보로만 채운다 — 화면에서 보낸 값은 무시 (위·변조 방지)
 const APP_FIELDS = [
-  'nickname', 'serious', 'gender', 'birthDate', 'birthTime', 'heightBand', 'hobbies', 'mbti', 'religion', 'agreeSensitive',
+  'nickname', 'serious', 'gender', 'birthYear', 'heightBand', 'hobbies', 'mbti', 'religion', 'agreeSensitive',
   'residence', 'division', 'team', 'campus', 'building', 'comment', 'face', 'body', 'looks', 'drinking', 'smoking',
   'prefAgeMin', 'prefAgeMax', 'prefHeightMin', 'prefHeightMax', 'avoid',
   ...PREF_ITEMS.filter((p) => p.kind === 'multi').map((p) => p.key),
@@ -65,9 +65,9 @@ const CODE_USAGE = {
  *   authenticate(account, password, db) → Profile|null · identify() → Profile|null (SSO)
  *   search(q) → Profile[] · lookup(empNo) → Profile|null (블랙리스트 등록용, 선택)
  * @property {{ isAdmin: (emp: object, db: object) => boolean, verify: (password: string, emp: object) => boolean|Promise<boolean> }} admin
- * @property {() => Promise<void>} [delay]   응답 지연 흉내 (test 모드)
+ * @property {() => Promise<void>} [delay]   응답 지연 흉내 (개발 모드)
  * @property {() => string} [clientIp]       열람 기록에 남길 접속 IP
- * @property {boolean} [allowDev]            test 모드 전용 기능(가짜 데이터 초기화 등) 허용
+ * @property {boolean} [allowDev]            개발 모드 전용 기능(가짜 데이터 초기화 등) 허용
  */
 let A = null;
 let db = null;
@@ -81,6 +81,16 @@ function normalize(d) {
   d.settings = { ...DEFAULT_SETTINGS, ...(d.settings ?? {}) };
   delete d.settings.matchStartCount; // 예전 설정(숫자 기준 팝업) 정리
   d.seq = { applicant: 0, match: 0, audit: 0, heart: 0, review: 0, voc: 0, message: 0, ...(d.seq ?? {}) };
+  // 개인정보 보호: 생년월일(월·일)·태어난 시간은 저장하지 않는다 — 예전 데이터는 출생연도만 남기고 지운다
+  for (const x of [...d.applicants, ...d.employees]) {
+    if (x.birthYear == null && x.birthDate) x.birthYear = yearOf(x.birthDate);
+    delete x.birthDate;
+    delete x.birthTime;
+  }
+  for (const p of Object.values(d.sajuPicks)) {
+    delete p.birthDate;
+    delete p.birthTime;
+  }
   return d;
 }
 
@@ -183,7 +193,7 @@ const findApplicant = (id) => {
 const myApplication = (user) => db.applicants.find((a) => a.empNo === user.empNo);
 /** 기록·목록에 남기는 신청자 표시: 번호 + 초성 (이름 원문은 남기지 않는다) */
 const tag = (a) => `#${a.id} ${initials(a.name)}`;
-const withAge = (a) => ({ ...clone(a), age: ageOf(a.birthDate) });
+const withAge = (a) => ({ ...clone(a), age: ageOf(a.birthYear) });
 
 /** 매칭 상태에 맞춰 두 신청자의 상태를 맞춘다 */
 function syncStatuses(m) {
@@ -304,7 +314,7 @@ const userView = (a) => {
   return {
     ...rest,
     name: initials(a.name), // 신청 후에는 본인 화면에서도 초성만
-    age: ageOf(a.birthDate),
+    age: ageOf(a.birthYear),
     userStatus,
     editLocked: Boolean(lockReasonOf(a)), // 매칭 중·하트 응답 대기 중에는 수정 불가
     lockReason: lockReasonOf(a),
@@ -321,7 +331,7 @@ const card = (c, score, viewer = null) => ({
   nickname: c.nickname,
   serious: c.serious,
   ...(viewer && { story: matchStory(viewer, c, db.codes), gunghap: safeGunghap(viewer, c) }),
-  age: ageOf(c.birthDate),
+  age: ageOf(c.birthYear),
   division: c.division,
   campus: c.campus,
   heightBand: c.heightBand,
@@ -337,7 +347,8 @@ const card = (c, score, viewer = null) => ({
 
 function safeGunghap(a, b) {
   try {
-    return compatibility({ birthDate: a.birthDate, birthTime: a.birthTime }, { birthDate: b.birthDate, birthTime: b.birthTime });
+    // a: 사주 화면에서 입력한 생년월일(저장 안 함) 또는 신청서의 출생연도 · b: 신청서의 출생연도
+    return compatibility(a.birthDate ? { birthDate: a.birthDate, birthTime: a.birthTime } : { birthYear: a.birthYear }, { birthYear: b.birthYear });
   } catch {
     return null;
   }
@@ -736,7 +747,7 @@ export const api = {
       await wait();
       if (!A.directory.identify) throw new ApiError(501, '사내 SSO가 연결되지 않았어요.', 'SSO_DISABLED');
       const profile = await A.directory.identify(hint);
-      if (!profile) throw new ApiError(401, '사내 AD SSO로 확인되지 않았어요.', 'SSO_FAILED');
+      if (!profile) throw new ApiError(401, '사내 인사정보로 임직원이 확인되지 않았어요.', 'SSO_FAILED');
       return startSession(profile);
     },
 
@@ -1201,7 +1212,8 @@ export const api = {
       if (!pool.length) return { applied: Boolean(mine), card: null };
       const today = kstDate();
       const prev = db.sajuPicks[user.empNo];
-      let target = prev?.date === today && prev.birthDate === birthDate ? pool.find((c) => c.id === prev.id) : null;
+      // 같은 날에는 같은 사람 (입력한 생년월일은 저장하지 않으므로 날짜만 본다)
+      let target = prev?.date === today ? pool.find((c) => c.id === prev.id) : null;
       let real;
       if (!target) {
         const scored = pool.map((c) => ({ c, g: safeGunghap(me, c) })).filter((x) => x.g).sort((x, y) => y.g.score - x.g.score);
@@ -1209,7 +1221,7 @@ export const api = {
         target = scored[0].c;
         real = scored[0].g;
       } else real = safeGunghap(me, target);
-      db.sajuPicks[user.empNo] = { date: today, id: target.id, birthDate, birthTime };
+      db.sajuPicks[user.empNo] = { date: today, id: target.id }; // 생년월일·시간은 저장하지 않는다
       commit();
       // 연출: '무조건 높게' — 실제 궁합 점수와 90~97점 중 큰 값
       const shown = Math.max(real.score, 90 + (target.id * 7 + Number(birthDate.slice(-2))) % 8);
@@ -1238,9 +1250,8 @@ export const api = {
       }
       const created = await api.application.create(data); // 검증·블랙리스트·중복 신청 확인 포함
       const app = db.applicants.find((a) => a.id === created.id);
-      // 필수 항목만 받은 임시 신청 — 오늘의 인연은 신청서를 마저 쓰면 열린다
-      // (예전: 이 표시를 어디서도 켜지 않아 '임시 신청' 안내·제외 규칙이 전부 동작하지 않았다)
-      app.quick = true;
+      // 정규 신청과 같은 신청서(4페이지)로 받으므로 임시 신청(quick)이 아니다 — 바로 오늘의 인연도 열린다
+      // (예전 간편 팝업으로 만든 quick 신청서는 신청서를 저장하면 풀린다)
       try {
         return { ...sendSajuHeart(app), nickname: app.nickname };
       } finally {
@@ -1328,7 +1339,7 @@ export const api = {
         recent: [...apps]
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
           .slice(0, 6)
-          .map((a) => ({ id: a.id, name: a.name, gender: a.gender, age: ageOf(a.birthDate), division: a.division, status: a.status, createdAt: a.createdAt })),
+          .map((a) => ({ id: a.id, name: a.name, gender: a.gender, age: ageOf(a.birthYear), division: a.division, status: a.status, createdAt: a.createdAt })),
       };
     },
 
@@ -1339,7 +1350,7 @@ export const api = {
       const busy = busyIds(db.matches);
       return db.applicants.map((a) => ({
         id: a.id, empNo: a.empNo, name: a.name, nickname: a.nickname, serious: a.serious,
-        dislikes: dislikesOf(a), sanctioned: isSanctioned(a), blacklisted: isBlacklisted(a.empNo), gender: a.gender, birthDate: a.birthDate, age: ageOf(a.birthDate),
+        dislikes: dislikesOf(a), sanctioned: isSanctioned(a), blacklisted: isBlacklisted(a.empNo), gender: a.gender, birthYear: a.birthYear, age: ageOf(a.birthYear),
         division: a.division, team: a.team, campus: a.campus, building: a.building, mbti: a.mbti, face: a.face, looks: a.looks,
         heightBand: a.heightBand, status: a.status, userStatus: userStatusOf(a), busy: busy.has(a.id),
         heartsIn: db.hearts.filter((h) => h.toId === a.id).length, heartsOut: db.hearts.filter((h) => h.fromId === a.id).length,
@@ -1418,7 +1429,7 @@ export const api = {
       requireAdmin();
       const brief = (id) => {
         const a = db.applicants.find((x) => x.id === id);
-        return a ? { name: a.name, age: ageOf(a.birthDate), division: a.division, gender: a.gender } : { name: '(삭제됨)' };
+        return a ? { name: a.name, age: ageOf(a.birthYear), division: a.division, gender: a.gender } : { name: '(삭제됨)' };
       };
       return db.matches.map((m) => {
         const a = brief(m.aId);
@@ -1839,7 +1850,7 @@ export const api = {
     },
   },
 
-  /** test 모드 전용 (서버에서는 막힌다) */
+  /** 개발 모드 전용 (서버에서는 막힌다) */
   dev: {
     reset() {
       if (!A.allowDev) throw new ApiError(403, '테스트 모드에서만 쓸 수 있어요.', 'FORBIDDEN');

@@ -1,7 +1,8 @@
 <script setup>
 /**
- * test 모드 입구 — 테스트 계정을 골라 바로 들어간다 (계정마다 상태가 달라 화면별로 나눠 시험할 수 있다).
- * 정식 운영은 이 화면 대신 SsoGateView (사내 AD SSO로만 들어온다).
+ * 개발 모드(npm run dev) 계정 바꾸기 — 처음에는 만능 계정으로 바로 들어가고, 로그아웃하면 이 화면에서
+ * 다른 테스트 계정을 골라 들어간다 (계정마다 상태가 달라 화면별로 나눠 시험할 수 있다).
+ * 운영 모드는 이 화면 대신 SsoGateView (사내 인사정보로 확인된 임직원만).
  */
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -20,8 +21,8 @@ const account = ref('');
 const error = ref('');
 const busy = ref('');
 
-/** 테스트 계정 정보 — VITE_INCLUDE_MOCK=false 빌드에서는 import 자체가 사라진다 */
-const loadSeed = () => (import.meta.env.VITE_INCLUDE_MOCK !== 'false' ? import('@/api/mock/accounts.js') : Promise.resolve(null));
+/** 테스트 계정 정보 — 빌드(npm run build)에서는 import 자체가 사라진다 */
+const loadSeed = () => (import.meta.env.DEV ? import('@/api/mock/accounts.js') : Promise.resolve(null));
 
 onMounted(async () => {
   seed.value = await loadSeed();
@@ -59,9 +60,9 @@ async function enter(id) {
 
     <section class="panel">
       <div class="card">
-        <p class="card__eyebrow">테스트 운영 · 가짜 데이터</p>
+        <p class="card__eyebrow">개발 모드 · 가짜 데이터</p>
         <h2 class="card__title">테스트 계정으로 들어가기</h2>
-        <p class="card__sub">계정마다 신청 상태가 달라요. 시험할 화면에 맞는 계정을 고르면 바로 들어가요. (정식 운영에서는 이 화면 없이 사내 AD SSO로 들어와요)</p>
+        <p class="card__sub">계정마다 신청 상태가 달라요. 시험할 화면에 맞는 계정을 고르면 바로 들어가요. (운영 모드에서는 이 화면 없이 사내 인사정보로 확인해 들어와요)</p>
 
         <ul class="accts">
           <li v-for="a in accounts" :key="a.key">
