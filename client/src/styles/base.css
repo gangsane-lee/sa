@@ -128,3 +128,5 @@ a {
   }
 }
 .badge--CLOSED { background: #ececf0; color: #55556a; }
+.badge--PENDING { background: var(--c-crimson); color: #fff; }
+.badge--REJECTED { background: #ececf0; color: #8a8a99; text-decoration: line-through; }

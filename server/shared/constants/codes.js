@@ -108,15 +108,39 @@ export const RECOMMENDABLE_STATUS = ['RECEIVED', 'REVIEWING'];
 
 /** 매칭 상태 */
 export const MATCH_STATUS = [
+  { value: 'PENDING', text: '승인 대기(하트 맞교환)' },
   { value: 'PROPOSED', text: '제안됨' },
   { value: 'ACCEPTED', text: '양측 수락' },
   { value: 'MET', text: '만남 완료' },
   { value: 'DECLINED', text: '불발' },
   { value: 'CLOSED', text: '종료(재매칭)' },
   { value: 'COUPLE', text: '커플 성사(최종 완료)' },
+  { value: 'REJECTED', text: '반려(승인 안 함)' },
 ];
 /** 진행 중인 매칭 — 이 상태면 두 사람 모두 '매칭 중'이고 신청서 수정이 잠긴다 */
 export const ACTIVE_MATCH_STATUS = ['PROPOSED', 'ACCEPTED', 'MET'];
+/**
+ * 하트 맞교환 승인 대기 — 서로 하트를 보내면 바로 매칭되지 않고 여기서 멈춘다.
+ * 두 사람 화면에는 '매칭 대기 중'(새 후보 준비 중)으로 보이고, 관리자가 '매칭 승인 대기'에서 승인하면 양측 수락(ACCEPTED)이 된다
+ */
+export const PENDING_MATCH_STATUS = 'PENDING';
+/** 후보·하트에서 빼는 매칭 (진행 중 + 승인 대기) */
+export const BUSY_MATCH_STATUS = [...ACTIVE_MATCH_STATUS, PENDING_MATCH_STATUS];
+/** 관리자 화면 '매칭 여부' 분류 (신청자 기준) */
+export const MATCH_STATE = [
+  { value: 'NONE', text: '매칭 없음' },
+  { value: 'PENDING', text: '승인 대기' },
+  { value: 'MATCHING', text: '매칭 중' },
+  { value: 'COUPLED', text: '커플' },
+];
+/** 관리자 화면 '매칭 내역' 분류 (매칭 기준) */
+export const MATCH_GROUPS = [
+  { value: 'ALL', text: '전체', statuses: null },
+  { value: 'PENDING', text: '승인 대기', statuses: ['PENDING'] },
+  { value: 'ACTIVE', text: '진행 중', statuses: ['PROPOSED', 'ACCEPTED', 'MET'] },
+  { value: 'COUPLE', text: '커플', statuses: ['COUPLE'] },
+  { value: 'ENDED', text: '종료·반려', statuses: ['DECLINED', 'CLOSED', 'REJECTED'] },
+];
 /** 후기를 쓸 수 있는 매칭 (서로 수락한 적이 있는 매칭) */
 export const REVIEWABLE_MATCH_STATUS = ['ACCEPTED', 'MET', 'CLOSED', 'DECLINED', 'COUPLE'];
 export const REVIEW_WINDOW_DAYS = 30; // 매칭 후 이 기간 안에만 후기 작성
@@ -214,4 +238,6 @@ export const AUDIT_ACTIONS = [
   { value: 'DATA_EDIT', text: 'DB 표 행 추가·수정' },
   { value: 'DATA_DELETE', text: 'DB 표 행 삭제' },
   { value: 'DATA_PURGE_TEST', text: '테스트 데이터 지우기' },
+  { value: 'MATCH_APPROVE', text: '매칭 승인(하트 맞교환)' },
+  { value: 'MATCH_REJECT', text: '매칭 반려(하트 맞교환)' },
 ];

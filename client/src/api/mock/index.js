@@ -7,7 +7,7 @@ import { configureService, api } from '@shared/api/core/service.js';
 import { createSeed } from './seed.js';
 import { MOCK_PASSWORD, MOCK_ADMIN_PASSWORD } from './accounts.js';
 
-const DB_KEY = 'sasystem.mock.db.v8'; // v8: 생년월일 → 출생연도만
+const DB_KEY = 'sasystem.mock.db.v9'; // v9: 하트 맞교환 승인 대기 예시 · v8: 생년월일 → 출생연도만
 const SESSION_KEY = 'sasystem.mock.session';
 
 const memory = {};

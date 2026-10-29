@@ -154,6 +154,10 @@ export const api = {
     getCandidates: (id) => get(`/admin/applicants/${id}/candidates`),
 
     listMatches: () => get('/admin/matches'),
+    /** 하트 맞교환 승인 대기 → 최종 매칭 · 반려 */
+    listPendingMatches: () => get('/admin/matches/pending'),
+    approveMatch: (id) => post(`/admin/matches/${id}/approve`),
+    rejectMatch: (id, reason = '') => post(`/admin/matches/${id}/reject`, { reason }),
     createMatch: (aId, bId, memo = '') => post('/admin/matches', { aId, bId, memo }),
     updateMatch: (id, changes) => patch(`/admin/matches/${id}`, changes),
     deleteMatch: (id) => del(`/admin/matches/${id}`),

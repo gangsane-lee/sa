@@ -46,6 +46,7 @@ const routes = [
       { path: '', name: 'admin-dashboard', component: () => import('@/views/admin/AdminDashboard.vue'), meta: { title: '대시보드' } },
       { path: 'applicants', name: 'admin-applicants', component: () => import('@/views/admin/AdminApplicants.vue'), meta: { title: '신청자 관리' } },
       { path: 'matching', name: 'admin-matching', component: () => import('@/views/admin/AdminMatching.vue'), meta: { title: '매칭 관리' } },
+      { path: 'pending', name: 'admin-pending', component: () => import('@/views/admin/AdminPending.vue'), meta: { title: '매칭 승인 대기' } },
       { path: 'reviews', name: 'admin-reviews', component: () => import('@/views/admin/AdminReviews.vue'), meta: { title: '후기·제재' } },
       { path: 'messages', name: 'admin-messages', component: () => import('@/views/admin/AdminMessages.vue'), meta: { title: '쪽지' } },
       { path: 'voc', name: 'admin-voc', component: () => import('@/views/admin/AdminVoc.vue'), meta: { title: '개선의 소리' } },

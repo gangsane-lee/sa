@@ -9,7 +9,7 @@ import { DxButton } from 'devextreme-vue/button';
 import notify from 'devextreme/ui/notify';
 import { confirm } from 'devextreme/ui/dialog';
 import { api, isMock } from '@/api';
-import { session, exitAdmin } from '@/stores/session';
+import { session, exitAdmin, adminApi } from '@/stores/session';
 import { ADMIN_IDLE_MINUTES } from '@shared/constants/policy';
 import { fmtRemain } from '@shared/utils/format';
 import SaLogo from '@/components/SaLogo.vue';
@@ -24,6 +24,7 @@ const NAV = [
   { name: 'admin-dashboard', text: '대시보드', icon: 'chart' },
   { name: 'admin-applicants', text: '신청자 관리', icon: 'group' },
   { name: 'admin-matching', text: '매칭 관리', icon: 'link' },
+  { name: 'admin-pending', text: '매칭 승인 대기', icon: 'like', count: 'pending' },
   { name: 'admin-messages', text: '쪽지', icon: 'email' },
   { name: 'admin-reviews', text: '후기·제재', icon: 'like' },
   { name: 'admin-voc', text: '개선의 소리', icon: 'message' },
@@ -32,6 +33,17 @@ const NAV = [
   { name: 'admin-audit', text: '열람 기록', icon: 'clock' },
   { name: 'admin-tables', text: 'DB 표', icon: 'datafield' },
 ];
+
+/** 메뉴 옆 숫자 — 매칭 승인 대기 (화면을 옮길 때마다 다시 센다) */
+const counts = ref({ pending: 0 });
+async function loadCounts() {
+  try {
+    counts.value.pending = (await adminApi.listPendingMatches()).length;
+  } catch {
+    /* 숫자를 못 받아도 메뉴는 그대로 */
+  }
+}
+watch(() => route.fullPath, loadCounts, { immediate: true });
 
 const remainMs = computed(() => session.adminExpiresAt - now.value);
 const remain = computed(() => fmtRemain(remainMs.value));
@@ -105,6 +117,7 @@ async function resetMock() {
           >
             <i :class="`dx-icon-${n.icon}`" aria-hidden="true" />
             {{ n.text }}
+            <span v-if="n.count && counts[n.count]" class="side__count" :aria-label="`${counts[n.count]}건`">{{ counts[n.count] }}</span>
           </RouterLink>
         </nav>
         <div class="side__foot">
@@ -209,6 +222,17 @@ async function resetMock() {
   color: var(--c-on-indigo-mute);
   text-decoration: none;
   font-size: 14.5px;
+}
+.side__count {
+  margin-left: auto;
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--c-crimson);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
 }
 .side__link i {
   font-size: 18px;

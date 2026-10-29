@@ -320,6 +320,19 @@ export function createSeed() {
     });
   }
 
+  // 하트 맞교환 승인 대기 예시: 서로 하트를 보냈지만 담당자 승인 전 (본인 화면은 '매칭 대기 중')
+  const taken = new Set([...matches.flatMap((m) => [m.aId, m.bId]), doyun.id, master.id, ...hearts.flatMap((h) => [h.fromId, h.toId])]);
+  const free = applicants.filter((x) => !taken.has(x.id) && ['RECEIVED', 'REVIEWING'].includes(x.status) && !x.quick);
+  const pa = free.find((x) => x.gender === 'M');
+  const pb = free.find((x) => x.gender === 'F');
+  if (pa && pb) {
+    const at1 = iso(now - 20 * 3600000);
+    const at2 = iso(now - 3 * 3600000);
+    hearts.push({ id: ++heartSeq, fromId: pa.id, toId: pb.id, status: 'ACCEPTED', at: at1, answeredAt: at2 });
+    hearts.push({ id: ++heartSeq, fromId: pb.id, toId: pa.id, status: 'ACCEPTED', at: at2, answeredAt: at2 });
+    matches.push({ id: ++matchSeq, aId: pb.id, bId: pa.id, score: int(70, 92), status: 'PENDING', source: 'HEART', memo: '하트 맞교환 — 담당자 승인 대기', createdBy: '(하트 맞교환)', createdAt: at2, updatedAt: at2 });
+  }
+
   // ── 시스템 개선의 소리 ──────────────────────────────────
   const vocs = [
     { category: 'FEATURE', title: '교대 근무자 필터가 있으면 좋겠어요', content: '교대 근무라 주말·평일 낮에만 만날 수 있어요. 근무 형태가 맞는 분을 우선 추천해 주면 좋겠습니다.', anonymous: true, status: 'REVIEWING', reply: '근무 형태 항목 추가를 검토하고 있어요.', daysAgo: 6 },

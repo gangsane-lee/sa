@@ -47,11 +47,11 @@ const openApplicant = (id) => router.push({ name: 'admin-applicants', query: { o
         <b class="kpi__value">{{ s.weekNew }}</b>
         <span class="kpi__sub">최근 7일</span>
       </div>
-      <div class="kpi">
-        <span class="kpi__label">답을 기다리는 제안</span>
-        <b class="kpi__value">{{ s.proposing }}</b>
-        <span class="kpi__sub">매칭 제안 후 수락 대기</span>
-      </div>
+      <RouterLink :to="{ name: 'admin-pending' }" class="kpi kpi--link" :class="{ 'kpi--warn': s.pendingMatches }">
+        <span class="kpi__label">매칭 승인 대기</span>
+        <b class="kpi__value">{{ s.pendingMatches }}</b>
+        <span class="kpi__sub">서로 하트 · 담당자 확인 필요 · 제안 대기 {{ s.proposing }}</span>
+      </RouterLink>
       <div class="kpi">
         <span class="kpi__label">오늘 보낸 하트</span>
         <b class="kpi__value">{{ s.heartsToday }}</b>
@@ -219,6 +219,17 @@ const openApplicant = (id) => router.push({ name: 'admin-applicants', query: { o
 .kpi__sub {
   font-size: 12.5px;
   color: var(--c-mute);
+}
+.kpi--link {
+  color: inherit;
+  text-decoration: none;
+}
+.kpi--link:hover {
+  border-color: var(--c-line-strong);
+}
+.kpi--warn {
+  border-color: var(--c-blush);
+  background: var(--c-blush-soft);
 }
 .kpi--accent {
   border-color: var(--c-blush);

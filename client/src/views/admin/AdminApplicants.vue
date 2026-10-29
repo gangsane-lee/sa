@@ -15,7 +15,7 @@ import notify from 'devextreme/ui/notify';
 import { confirm } from 'devextreme/ui/dialog';
 import 'devextreme/ui/button'; // 툴바의 widget: 'dxButton'
 import { adminApi } from '@/stores/session';
-import { APPLY_STATUS, MANUAL_APPLY_STATUS, GENDERS, USER_STATUS, SERIOUSNESS } from '@shared/constants/codes';
+import { APPLY_STATUS, MANUAL_APPLY_STATUS, GENDERS, USER_STATUS, SERIOUSNESS, MATCH_STATE } from '@shared/constants/codes';
 import { allItems } from '@/stores/codes';
 import ApplicantDetailPopup from '@/components/ApplicantDetailPopup.vue';
 
@@ -23,10 +23,13 @@ const route = useRoute();
 const router = useRouter();
 const gridRef = ref();
 const statusFilter = ref(null);
+/** 매칭 여부 분류 — 매칭 없음 · 승인 대기 · 매칭 중 · 커플 (주소 ?match=PENDING 으로도 열 수 있다) */
+const matchFilter = ref(null);
 const selectedKeys = ref([]);
 const detail = reactive({ visible: false, id: null, edit: false });
 
 const STATUS_FILTER_ITEMS = [{ value: null, text: '전체 상태' }, ...APPLY_STATUS];
+const MATCH_FILTER_ITEMS = [{ value: null, text: '전체' }, ...MATCH_STATE];
 /** 일괄 변경은 직접 지정할 수 있는 상태만 (매칭 중·완료·커플은 매칭 상태에서 정해진다) */
 const MANUAL_STATUS_ITEMS = APPLY_STATUS.filter((s) => MANUAL_APPLY_STATUS.includes(s.value));
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -44,12 +47,18 @@ function open(id, edit = false) {
 }
 
 onMounted(() => {
+  if (MATCH_STATE.some((x) => x.value === route.query.match)) applyMatchFilter(route.query.match);
   const id = Number(route.query.open);
   if (id) {
     open(id);
     router.replace({ query: {} });
   }
 });
+
+function applyMatchFilter(value) {
+  matchFilter.value = value;
+  grid()?.columnOption('matchState', 'filterValue', value ?? undefined);
+}
 
 function applyStatusFilter(e) {
   statusFilter.value = e.value;
@@ -142,6 +151,7 @@ function goMatch(id) {
       <DxColumnChooser :enabled="true" mode="select" title="표시할 열" />
 
       <DxToolbar>
+        <DxItem location="before" template="matchFilterTpl" />
         <DxItem location="before" template="statusFilterTpl" />
         <DxItem location="after" template="bulkTpl" />
         <DxItem name="exportButton" />
@@ -152,6 +162,9 @@ function goMatch(id) {
 
       <DxColumn data-field="status" caption="상태" cell-template="statusCell" :width="104">
         <DxLookup :data-source="APPLY_STATUS" value-expr="value" display-expr="text" />
+      </DxColumn>
+      <DxColumn data-field="matchState" caption="매칭 여부" cell-template="matchStateCell" :width="96">
+        <DxLookup :data-source="MATCH_STATE" value-expr="value" display-expr="text" />
       </DxColumn>
       <DxColumn data-field="name" caption="이름" />
       <DxColumn data-field="nickname" caption="닉네임" />
@@ -203,6 +216,23 @@ function goMatch(id) {
       <template #statusCell="{ data }">
         <span class="badge" :class="`badge--${data.value}`">{{ data.text }}</span>
       </template>
+      <template #matchStateCell="{ data }">
+        <span class="ms" :class="`ms--${data.value}`">{{ data.text }}</span>
+      </template>
+      <template #matchFilterTpl>
+        <div class="seg" role="group" aria-label="매칭 여부">
+          <button
+            v-for="it in MATCH_FILTER_ITEMS"
+            :key="it.value ?? 'ALL'"
+            type="button"
+            class="seg__btn"
+            :class="{ 'is-on': matchFilter === it.value }"
+            @click="applyMatchFilter(it.value)"
+          >
+            {{ it.text }}
+          </button>
+        </div>
+      </template>
       <template #statusFilterTpl>
         <DxSelectBox
           :items="STATUS_FILTER_ITEMS"
@@ -247,6 +277,48 @@ function goMatch(id) {
   background: var(--c-surface);
   border: 1px solid var(--c-line);
   border-radius: var(--r-md);
+}
+.seg {
+  display: flex;
+  border: 1px solid var(--c-line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.seg__btn {
+  padding: 6px 12px;
+  border: 0;
+  border-left: 1px solid var(--c-line);
+  background: var(--c-surface);
+  color: var(--c-ink-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.seg__btn:first-child {
+  border-left: 0;
+}
+.seg__btn.is-on {
+  background: var(--c-indigo);
+  color: var(--c-on-indigo);
+}
+.ms {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--c-paper);
+  color: var(--c-mute);
+  font-size: 12px;
+}
+.ms--PENDING {
+  background: var(--c-blush-soft);
+  color: var(--c-crimson-deep);
+  font-weight: 700;
+}
+.ms--MATCHING {
+  background: #e7ecff;
+  color: var(--c-indigo);
+}
+.ms--COUPLED {
+  background: var(--c-ok-bg);
+  color: var(--c-ok);
 }
 .dislike--out {
   color: var(--c-crimson-deep);

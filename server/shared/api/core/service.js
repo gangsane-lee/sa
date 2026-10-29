@@ -8,7 +8,7 @@
  * 응답 형태·오류 코드는 http.js(화면 쪽 호출)와 같다.
  */
 import { ApiError } from '../errors.js';
-import { scoreCandidates, busyIds, matchStory } from './matching.js';
+import { scoreCandidates, busyIds, activeIds, matchStory } from './matching.js';
 import { compatibility } from '../../utils/saju.js';
 import { suggestNicknames } from '../../utils/nickname.js';
 import { validateApplication, ageOf, yearOf } from '../../utils/applicationRules.js';
@@ -16,7 +16,7 @@ import { FIELD_LABELS } from '../../utils/applicationModel.js';
 import { initials } from '../../utils/format.js';
 import { DEFAULT_CODES } from '../../constants/defaultCodes.js';
 import {
-  APPLY_STATUS, APPLY_STATUS_MAP, MANUAL_APPLY_STATUS, MATCH_STATUS, ACTIVE_MATCH_STATUS, CODE_GROUP_MAP, PREF_ITEMS, RECOMMENDABLE_STATUS,
+  APPLY_STATUS, APPLY_STATUS_MAP, MANUAL_APPLY_STATUS, MATCH_STATUS, ACTIVE_MATCH_STATUS, BUSY_MATCH_STATUS, PENDING_MATCH_STATUS, CODE_GROUP_MAP, PREF_ITEMS, RECOMMENDABLE_STATUS,
   DAILY_CARD_LIMIT, DAILY_HEART_LIMIT, RESHOW_AFTER_DAYS, textOf,
   DEFAULT_SETTINGS, REVIEW_OUTCOMES, REVIEW_RATINGS, REVIEWABLE_MATCH_STATUS, REVIEW_WINDOW_DAYS,
   VOC_CATEGORIES, VOC_STATUS, SETTING_ITEMS, REFERENCE_KIND, toBool,
@@ -275,7 +275,7 @@ const visibleTo = (viewer) => (c) => !c?.test || Boolean(viewer?.test);
  */
 const userStatusOf = (a) => {
   if (a.status === 'COUPLED') return 'COUPLED';
-  return busyIds(db.matches).has(a.id) || a.status === 'MATCHING' || a.status === 'MATCHED' ? 'MATCHING' : 'WAITING';
+  return activeIds(db.matches).has(a.id) || a.status === 'MATCHING' || a.status === 'MATCHED' ? 'MATCHING' : 'WAITING';
 };
 /** 내가 보낸 하트 중 아직 답을 기다리는 것 (72시간 지나면 만료) */
 const pendingHeartOf = (a) => {
@@ -301,7 +301,8 @@ function matchingBlockOf(app) {
   if (app.status === 'COUPLED') return 'COUPLED';
   if (userStatusOf(app) === 'MATCHING') return 'MATCHING';
   if (db.settings.holdUntilStart) return 'GATHERING';
-  if (app.status === 'HOLD' || isSanctioned(app)) return 'PAUSED'; // 보류·스스로 쉬기·싫어요 제재 (제재 사실은 알리지 않는다)
+  // 보류·스스로 쉬기·싫어요 제재·하트 맞교환 승인 대기 (승인 대기 사실은 본인에게 알리지 않는다)
+  if (app.status === 'HOLD' || isSanctioned(app) || pendingMatchOf(app)) return 'PAUSED';
   return null;
 }
 const BLOCK_ERRORS = {
@@ -576,13 +577,54 @@ function closeOpenHearts(ids) {
   }
 }
 
+/**
+ * 하트 맞교환 — 바로 매칭하지 않고 '승인 대기'로 둔다. 관리자가 '매칭 승인 대기'에서 승인해야 양측 수락이 된다.
+ * 두 사람 화면에는 매칭 대기 중(새 후보 준비 중)으로 보이고, 다른 사람의 후보·하트에서는 빠진다 (busyIds)
+ */
 function createHeartMatch(a, b, score) {
   const t = nowIso();
-  const m = { id: ++db.seq.match, aId: a.id, bId: b.id, score, status: 'ACCEPTED', source: 'HEART', memo: '하트 맞교환', createdBy: '(하트 맞교환)', createdAt: t, updatedAt: t, acceptedAt: t };
+  const m = { id: ++db.seq.match, aId: a.id, bId: b.id, score, status: PENDING_MATCH_STATUS, source: 'HEART', memo: '하트 맞교환 — 담당자 승인 대기', createdBy: '(하트 맞교환)', createdAt: t, updatedAt: t };
   db.matches.push(m);
-  syncStatuses(m);
   closeOpenHearts([a.id, b.id]);
   return m;
+}
+/** 하트 맞교환 승인 대기 중인 매칭 */
+const pendingMatchOf = (app) => db.matches.find((m) => m.status === PENDING_MATCH_STATUS && (m.aId === app.id || m.bId === app.id)) ?? null;
+/** 관리자 화면 '매칭 여부' — NONE 매칭 없음 · PENDING 승인 대기 · MATCHING 매칭 중 · COUPLED 커플 */
+const matchStateOf = (a) => (a.status === 'COUPLED' ? 'COUPLED' : userStatusOf(a) === 'MATCHING' ? 'MATCHING' : pendingMatchOf(a) ? 'PENDING' : 'NONE');
+/** 다른 진행 중·승인 대기 매칭이 있는가 (m 은 빼고) */
+const busyElsewhere = (m) =>
+  db.matches.some((o) => o.id !== m.id && (BUSY_MATCH_STATUS.includes(o.status) || o.status === 'COUPLE') && [o.aId, o.bId].some((x) => x === m.aId || x === m.bId));
+
+/** 승인 대기 → 양측 수락. 두 분에게 담당자 쪽지로 알린다 */
+function approvePending(m, user) {
+  if (m.status !== PENDING_MATCH_STATUS) throw new ApiError(409, '승인 대기 중인 매칭이 아니에요. 새로고침해 주세요.', 'NOT_PENDING');
+  const a = db.applicants.find((x) => x.id === m.aId);
+  const b = db.applicants.find((x) => x.id === m.bId);
+  if (!a || !b) throw new ApiError(409, '두 분 중 한 분이 탈퇴했어요. 반려해 주세요.', 'CANDIDATE_GONE');
+  if (busyElsewhere(m)) throw new ApiError(409, '두 분 중 한 분이 이미 다른 매칭을 진행 중이에요. 반려해 주세요.', 'MATCH_BUSY');
+  const t = nowIso();
+  Object.assign(m, { status: 'ACCEPTED', acceptedAt: t, approvedAt: t, approvedBy: user.name, updatedAt: t, memo: '하트 맞교환 — 담당자 승인' });
+  syncStatuses(m);
+  closeOpenHearts([m.aId, m.bId]);
+  for (const id of [m.aId, m.bId]) {
+    db.messages.push({
+      id: ++db.seq.message, thread: `A${id}`, fromId: null, fromAdmin: true, adminName: '사緣', toId: id, auto: true,
+      body: '[매칭 안내] 서로 하트를 보낸 분과 매칭이 확정됐어요. 홈에서 상대를 확인하고 쪽지로 먼저 인사를 건네 보세요.',
+      at: t, readAt: null, box: {},
+    });
+  }
+  audit(user, 'MATCH_APPROVE', `매칭 #${m.id} ${tag(a)} ↔ ${tag(b)}`, '하트 맞교환 승인 → 양측 수락');
+}
+/** 승인 대기 → 반려. 두 분에게는 알리지 않는다 (매칭 대기 중으로 돌아가고, 서로는 다시 추천되지 않는다) */
+function rejectPending(m, user, reason = '') {
+  if (m.status !== PENDING_MATCH_STATUS) throw new ApiError(409, '승인 대기 중인 매칭이 아니에요. 새로고침해 주세요.', 'NOT_PENDING');
+  const why = String(reason ?? '').trim().slice(0, 200);
+  const t = nowIso();
+  Object.assign(m, { status: 'REJECTED', rejectedAt: t, rejectedBy: user.name, updatedAt: t, memo: `하트 맞교환 — 반려${why ? `: ${why}` : ''}` });
+  const a = db.applicants.find((x) => x.id === m.aId);
+  const b = db.applicants.find((x) => x.id === m.bId);
+  audit(user, 'MATCH_REJECT', `매칭 #${m.id} ${a ? tag(a) : '(탈퇴)'} ↔ ${b ? tag(b) : '(탈퇴)'}`, why || '사유 없음');
 }
 
 /** 마이페이지 한 번에 내려주는 정보 */
@@ -645,7 +687,7 @@ function dashboardOf(app) {
 
   // 보류(담당자)·스스로 쉬기·싫어요 제재·임시 신청 → 새 후보 없음. 제재 사실은 본인에게 알리지 않는다
   const gathering = Boolean(db.settings.holdUntilStart);
-  const paused = app.status === 'HOLD' || isSanctioned(app) || isBlacklisted(app.empNo) || app.quick || gathering;
+  const paused = app.status === 'HOLD' || isSanctioned(app) || isBlacklisted(app.empNo) || app.quick || gathering || Boolean(pendingMatchOf(app));
   const d = paused || out.daily ? null : ensureDaily(app);
   if (out.daily) {
     // 하트 응답 대기 중 (위에서 채움)
@@ -743,7 +785,7 @@ function sendSajuHeart(app) {
     Object.assign(reverse, { status: 'ACCEPTED', answeredAt: t });
     createHeartMatch(target, app, 90);
   }
-  return { matched: Boolean(reverse), to: target.nickname };
+  return { matched: false, to: target.nickname }; // 서로 하트여도 담당자 승인 전까지는 매칭이 아니다
 }
 
 // ── API ─────────────────────────────────────────────────
@@ -996,7 +1038,7 @@ export const api = {
       d.heartTo = target.id;
       d.cursor++;
       commit();
-      return { ...dashboardOf(app), matched: Boolean(reverse) };
+      return { ...dashboardOf(app), matched: false }; // 서로 하트면 승인 대기 — 본인에게는 알리지 않는다
     },
 
     /** 받은 하트에 응답 — 수락하면 바로 '매칭 중', 거절은 상대에게 알리지 않는다 */
@@ -1022,9 +1064,9 @@ export const api = {
       }
       h.status = 'ACCEPTED';
       const score = scoreCandidates(app, [from], db.matches, db.codes)[0]?.score ?? 0;
-      createHeartMatch(from, app, score);
+      createHeartMatch(from, app, score); // 승인 대기
       commit();
-      return { ...dashboardOf(app), matched: true };
+      return { ...dashboardOf(app), matched: false };
     },
 
     /**
@@ -1349,6 +1391,7 @@ export const api = {
         male: apps.filter((a) => a.gender === 'M').length,
         female: apps.filter((a) => a.gender === 'F').length,
         proposing: db.matches.filter((m) => m.status === 'PROPOSED').length,
+        pendingMatches: db.matches.filter((m) => m.status === PENDING_MATCH_STATUS).length,
         couples: db.matches.filter((m) => m.status === 'ACCEPTED' || m.status === 'MET').length,
         coupled: db.matches.filter((m) => m.status === 'COUPLE').length,
         blacklisted: db.blacklist.length,
@@ -1389,6 +1432,7 @@ export const api = {
         heightBand: a.heightBand, status: a.status, userStatus: userStatusOf(a), busy: busy.has(a.id),
         heartsIn: db.hearts.filter((h) => h.toId === a.id).length, heartsOut: db.hearts.filter((h) => h.fromId === a.id).length,
         hasMemo: Boolean(a.adminMemo), createdAt: a.createdAt, updatedAt: a.updatedAt, test: Boolean(a.test),
+        matchState: matchStateOf(a),
       }));
     },
 
@@ -1484,6 +1528,7 @@ export const api = {
       if (a.id === b.id) throw new ApiError(400, '같은 사람끼리는 매칭할 수 없어요.', 'VALIDATION');
       if (Boolean(a.test) !== Boolean(b.test)) throw new ApiError(400, '개발 테스트 신청서와 실제 신청서는 이어줄 수 없어요.', 'VALIDATION');
       const busy = busyIds(db.matches);
+      if (pendingMatchOf(a) || pendingMatchOf(b)) throw new ApiError(409, '두 분 중 한 분은 하트 맞교환 승인 대기 중이에요. 매칭 승인 대기에서 먼저 처리해 주세요.', 'MATCH_BUSY');
       if (busy.has(a.id) || busy.has(b.id)) throw new ApiError(409, '두 분 중 한 분은 이미 진행 중인 매칭이 있어요.', 'MATCH_BUSY');
       if (a.status === 'COUPLED' || b.status === 'COUPLED') throw new ApiError(409, '두 분 중 한 분은 이미 커플 완료 상태예요.', 'MATCH_BUSY');
       const score = scoreCandidates(a, db.applicants, db.matches, db.codes).find((c) => c.applicant.id === b.id)?.score ?? 0;
@@ -1503,6 +1548,15 @@ export const api = {
       const m = db.matches.find((x) => x.id === Number(id));
       if (!m) throw new ApiError(404, '매칭 내역을 찾을 수 없어요.', 'NOT_FOUND');
       const before = m.status;
+      if (changes.status !== undefined && changes.status !== before && (before === PENDING_MATCH_STATUS || changes.status === PENDING_MATCH_STATUS)) {
+        // 하트 맞교환 승인 대기는 승인(양측 수락) 또는 반려로만 바꾼다 — 다른 상태로 바로 옮기거나, 다른 매칭을 승인 대기로 되돌릴 수 없다
+        if (before !== PENDING_MATCH_STATUS) throw new ApiError(400, "'승인 대기'는 하트 맞교환으로만 생겨요.", 'VALIDATION');
+        if (changes.status === 'ACCEPTED') approvePending(m, user);
+        else if (changes.status === 'REJECTED') rejectPending(m, user, changes.memo);
+        else throw new ApiError(400, "승인 대기 매칭은 '양측 수락'(승인) 또는 '반려'로만 바꿀 수 있어요. 매칭 승인 대기 화면을 써 주세요.", 'VALIDATION');
+        commit();
+        return clone(m);
+      }
       if (changes.status !== undefined) {
         if (!MATCH_STATUS.some((s) => s.value === changes.status)) throw new ApiError(400, '알 수 없는 매칭 상태예요.', 'VALIDATION');
         // 끝난 매칭을 다시 진행 중(또는 커플)으로 되돌릴 때, 그사이 둘 중 한 명이 다른 매칭에 들어갔으면 막는다
@@ -1523,6 +1577,57 @@ export const api = {
       if (before !== m.status) syncStatuses(m);
       audit(user, 'MATCH_UPDATE', `매칭 #${m.id}`,
         before !== m.status ? `${textOf(MATCH_STATUS, before)} → ${textOf(MATCH_STATUS, m.status)}` : '메모 수정');
+      commit();
+      return clone(m);
+    },
+
+    /** 매칭 승인 대기 — 서로 하트를 보낸 두 분 (본인들은 아직 '매칭 대기 중'으로 보고 있다) */
+    async listPendingMatches() {
+      await wait();
+      requireAdmin();
+      const person = (id) => {
+        const a = db.applicants.find((x) => x.id === id);
+        if (!a) return null;
+        return {
+          id: a.id, name: a.name, nickname: a.nickname, gender: a.gender, age: ageOf(a.birthYear), division: a.division, team: a.team,
+          campus: a.campus, mbti: a.mbti, status: a.status, test: Boolean(a.test), dislikes: dislikesOf(a), blacklisted: isBlacklisted(a.empNo),
+        };
+      };
+      const heartOf = (from, to) => db.hearts.filter((h) => h.fromId === from && h.toId === to).sort((x, y) => y.at.localeCompare(x.at))[0] ?? null;
+      return db.matches
+        .filter((m) => m.status === PENDING_MATCH_STATUS)
+        .map((m) => {
+          const ab = heartOf(m.aId, m.bId);
+          const ba = heartOf(m.bId, m.aId);
+          return {
+            id: m.id, score: m.score, createdAt: m.createdAt, a: person(m.aId), b: person(m.bId),
+            // 보낸 하트 (answeredAt: 상대가 받은 하트를 수락한 시각 — 수락으로 이어졌으면 반대쪽 하트가 없다)
+            hearts: {
+              aToB: ab ? { at: ab.at, source: ab.source ?? 'DAILY', answeredAt: ab.answeredAt } : null,
+              bToA: ba ? { at: ba.at, source: ba.source ?? 'DAILY', answeredAt: ba.answeredAt } : null,
+            },
+            conflict: busyElsewhere(m),
+          };
+        })
+        .sort((x, y) => x.createdAt.localeCompare(y.createdAt));
+    },
+    /** 최종 매칭 — 승인 대기 → 양측 수락 (두 분 화면이 '매칭 중'으로 바뀌고 안내 쪽지가 간다) */
+    async approveMatch(id) {
+      await wait();
+      const user = requireAdmin();
+      const m = db.matches.find((x) => x.id === Number(id));
+      if (!m) throw new ApiError(404, '매칭 내역을 찾을 수 없어요.', 'NOT_FOUND');
+      approvePending(m, user);
+      commit();
+      return clone(m);
+    },
+    /** 반려 — 두 분에게는 알리지 않고 매칭 대기로 돌린다 */
+    async rejectMatch(id, reason = '') {
+      await wait();
+      const user = requireAdmin();
+      const m = db.matches.find((x) => x.id === Number(id));
+      if (!m) throw new ApiError(404, '매칭 내역을 찾을 수 없어요.', 'NOT_FOUND');
+      rejectPending(m, user, reason);
       commit();
       return clone(m);
     },

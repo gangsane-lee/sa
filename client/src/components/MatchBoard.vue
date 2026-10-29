@@ -124,6 +124,8 @@ async function answer(item, accept) {
   }
   const r = await run(() => api.me.answerHeart(item.heartId, accept));
   if (r?.matched) openMatchCelebrate();
+  // 서로 하트여도 담당자 승인 전까지는 매칭이 아니다 — 본인에게는 수락 사실만 알린다
+  else if (r && accept) notify({ message: '하트를 받았어요. 새 소식이 생기면 알려드릴게요.', type: 'success', displayTime: 3200 });
 }
 
 async function submitReview(review) {

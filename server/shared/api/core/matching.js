@@ -9,7 +9,7 @@
  *    우선순위 1~5위 가중치 5·4·3·2·1, 우선순위 밖에서 고른 항목은 0.5. 고르지 않은(상관없음) 항목은 계산에서 뺀다
  * 3) 최종 점수 = (내 선호 적합도 + 상대 선호 적합도) / 2  → 서로에게 맞는 사람이 위로
  */
-import { ACTIVE_MATCH_STATUS, PREF_ITEMS, RECOMMENDABLE_STATUS } from '../../constants/codes.js';
+import { ACTIVE_MATCH_STATUS, BUSY_MATCH_STATUS, PREF_ITEMS, RECOMMENDABLE_STATUS } from '../../constants/codes.js';
 import { ageOf, yearOf, prefIsSet } from '../../utils/applicationRules.js';
 import { rankOf, findCode } from '../../utils/codeHelpers.js';
 
@@ -87,8 +87,11 @@ export function isEligiblePair(a, b) {
   return inPrefAge(bAge, a) || inPrefAge(aAge, b);
 }
 
-/** 진행 중인 매칭이 있는 신청자 id */
+/** 후보에서 빼는 사람 — 진행 중인 매칭 + 하트 맞교환 승인 대기 */
 export const busyIds = (matches) =>
+  new Set(matches.filter((m) => BUSY_MATCH_STATUS.includes(m.status)).flatMap((m) => [m.aId, m.bId]));
+/** 본인 화면이 '매칭 중'인 사람 — 진행 중인 매칭만 (승인 대기는 본인에게 '매칭 대기 중'으로 보인다) */
+export const activeIds = (matches) =>
   new Set(matches.filter((m) => ACTIVE_MATCH_STATUS.includes(m.status)).flatMap((m) => [m.aId, m.bId]));
 
 /**

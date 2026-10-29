@@ -23,6 +23,10 @@ export default function admin(h) {
 
   // ── 매칭 ──
   r.get('/matches', h(() => A.listMatches()));
+  // 하트 맞교환 승인 대기 → 최종 매칭(승인) · 반려
+  r.get('/matches/pending', h(() => A.listPendingMatches()));
+  r.post('/matches/:id/approve', h((req) => A.approveMatch(req.params.id)));
+  r.post('/matches/:id/reject', h((req) => A.rejectMatch(req.params.id, b(req).reason)));
   r.post('/matches', h((req) => A.createMatch(b(req).aId, b(req).bId, b(req).memo)));
   r.patch('/matches/:id', h((req) => A.updateMatch(req.params.id, b(req))));
   r.delete('/matches/:id', h((req) => A.deleteMatch(req.params.id)));

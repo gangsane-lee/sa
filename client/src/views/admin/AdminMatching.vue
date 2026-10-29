@@ -2,10 +2,11 @@
 /**
  * 매칭 관리
  *  ① 매칭 대기자 고르기 → ② 추천 후보(점수·이유) 확인 → ③ 매칭 제안
- *  아래 매칭 내역에서 진행 상태(제안됨 → 양측 수락 → 만남 완료 / 불발)를 바꾼다.
+ *  아래 매칭 내역에서 진행 상태(제안됨 → 양측 수락 → 만남 완료 / 불발)를 바꾼다. 위 분류(승인 대기 · 진행 중 · 커플 · 종료)로 나눠 본다.
+ *  하트 맞교환 승인 대기는 '매칭 승인 대기' 화면에서 최종 매칭·반려한다.
  */
 import { ref, computed, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { DxList } from 'devextreme-vue/list';
 import {
   DxDataGrid, DxColumn, DxLookup, DxEditing, DxPaging, DxButton as DxGridButton, DxSorting,
@@ -17,12 +18,13 @@ import 'devextreme/ui/select_box';
 import 'devextreme/ui/text_box';
 import { confirm } from 'devextreme/ui/dialog';
 import { adminApi } from '@/stores/session';
-import { GENDERS, MATCH_STATUS, MATCH_SOURCES, AVOID_OPTIONS, PREF_ITEMS, AGE_GAP, textOf } from '@shared/constants/codes';
+import { GENDERS, MATCH_STATUS, MATCH_SOURCES, MATCH_GROUPS, AVOID_OPTIONS, PREF_ITEMS, AGE_GAP, textOf } from '@shared/constants/codes';
 import { ct, cts } from '@/stores/codes';
 import { fmtDate } from '@shared/utils/format';
 import StatusBadge from '@/components/StatusBadge.vue';
 
 const route = useRoute();
+const router = useRouter();
 const applicants = ref([]);
 const target = ref(null);
 const candidates = ref([]);
@@ -31,7 +33,17 @@ const matchGrid = ref();
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-const queue = computed(() => applicants.value.filter((a) => a.status === 'RECEIVED' || a.status === 'REVIEWING'));
+// 진행 중인 매칭·하트 맞교환 승인 대기가 있는 분은 빼고 (busy)
+const queue = computed(() => applicants.value.filter((a) => (a.status === 'RECEIVED' || a.status === 'REVIEWING') && !a.busy));
+
+/** 매칭 내역 분류 — 전체 · 승인 대기 · 진행 중 · 커플 · 종료·반려 */
+const group = ref('ALL');
+const groupCounts = ref({});
+function applyGroup(value) {
+  group.value = value;
+  const g = MATCH_GROUPS.find((x) => x.value === value);
+  matchGrid.value?.instance.columnOption('status', { filterValues: g?.statuses ?? undefined, filterType: 'include' });
+}
 const selectedKeys = computed(() => (target.value ? [target.value.id] : []));
 
 async function loadApplicants() {
@@ -86,7 +98,11 @@ async function propose(c) {
 
 const matchStore = new CustomStore({
   key: 'id',
-  load: () => adminApi.listMatches(),
+  load: async () => {
+    const rows = await adminApi.listMatches();
+    groupCounts.value = Object.fromEntries(MATCH_GROUPS.map((g) => [g.value, g.statuses ? rows.filter((r) => g.statuses.includes(r.status)).length : rows.length]));
+    return rows;
+  },
   update: (key, values) => adminApi.updateMatch(key, values),
   remove: (key) => adminApi.deleteMatch(key),
 });
@@ -217,8 +233,20 @@ const scoreColor = (s) => (s >= 70 ? 'var(--c-crimson)' : s >= 45 ? '#D9677E' : 
     <section class="panel">
       <header class="panel__head">
         <h2>매칭 내역</h2>
-        <p>상태 칸을 누르면 바로 바꿀 수 있어요. 상태를 바꾸면 두 분의 신청 상태도 함께 바뀌어요.</p>
+        <p>상태 칸을 누르면 바로 바꿀 수 있어요. 상태를 바꾸면 두 분의 신청 상태도 함께 바뀌어요. 하트 맞교환 승인 대기는 <RouterLink :to="{ name: 'admin-pending' }">매칭 승인 대기</RouterLink>에서 처리해요.</p>
       </header>
+      <div class="groups" role="group" aria-label="매칭 분류">
+        <button
+          v-for="g in MATCH_GROUPS"
+          :key="g.value"
+          type="button"
+          class="groups__btn"
+          :class="{ 'is-on': group === g.value, 'is-alert': g.value === 'PENDING' && groupCounts.PENDING }"
+          @click="applyGroup(g.value)"
+        >
+          {{ g.text }} <b>{{ groupCounts[g.value] ?? 0 }}</b>
+        </button>
+      </div>
       <DxDataGrid
         ref="matchGrid"
         class="sa-grid"
@@ -228,6 +256,8 @@ const scoreColor = (s) => (s >= 70 ? 'var(--c-crimson)' : s >= 45 ? '#D9677E' : 
         :hover-state-enabled="true"
         no-data-text="아직 매칭 내역이 없어요."
         @saved="onMatchSaved"
+        @row-prepared="(e) => e.rowType === 'data' && e.data.status === 'PENDING' && e.rowElement.classList.add('is-pending')"
+        @row-dbl-click="(e) => e.data.status === 'PENDING' && router.push({ name: 'admin-pending' })"
       >
         <DxEditing
           mode="cell"
@@ -269,6 +299,36 @@ const scoreColor = (s) => (s >= 70 ? 'var(--c-crimson)' : s >= 45 ? '#D9677E' : 
 </template>
 
 <style scoped>
+.groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.groups__btn {
+  padding: 5px 12px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-ink-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.groups__btn b {
+  margin-left: 4px;
+}
+.groups__btn.is-on {
+  border-color: var(--c-indigo);
+  background: var(--c-indigo);
+  color: var(--c-on-indigo);
+}
+.groups__btn.is-alert:not(.is-on) {
+  border-color: var(--c-crimson);
+  color: var(--c-crimson-deep);
+}
+.matching :deep(.is-pending) td {
+  background: var(--c-blush-soft);
+}
 .matching {
   display: flex;
   flex-direction: column;
