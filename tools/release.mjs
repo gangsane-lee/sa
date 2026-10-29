@@ -66,7 +66,7 @@ ok('server · client 패키지 있음');
 
 // ── 2. 화면 빌드 ──
 step('화면 빌드 (npm run build)');
-const build = npm('build', { cwd: path.join(ROOT, 'client'), env: { ...process.env, SAYEON_TARGET: target }, stdio: ['ignore', 'pipe', 'pipe'] });
+const build = npm('build', { cwd: path.join(ROOT, 'client'), env: { ...process.env, SASYSTEM_TARGET: target }, stdio: ['ignore', 'pipe', 'pipe'] });
 if (build.status !== 0) {
   console.log((build.stdout + build.stderr).split('\n').slice(-25).join('\n'));
   stop('화면 빌드에 실패했어요 (위 내용)');
@@ -88,7 +88,7 @@ const copy = (from, to, filter) => fs.cpSync(path.join(ROOT, from), path.join(ou
 copy('client/dist', 'web');
 /** api.basePath 가 있으면 사緣 전용 사이트 대신 다른 앱 routes 폴더에 끼워 넣는 묶음 */
 const PLUGIN_MODE = Boolean(T.api.basePath);
-const appName = target === 'development' ? 'sayeon-api-dev' : 'sayeon-api';
+const appName = target === 'development' ? 'sasystem-api-dev' : 'sasystem-api';
 if (PLUGIN_MODE) {
   try {
     await buildPlugin({ target, T, outRoutes: path.join(out, 'routes'), buildId: info.buildId });
@@ -133,7 +133,7 @@ const pluginDir = `routes/${pluginFolderOf(T)}`;
 const apiFiles = PLUGIN_MODE
   ? [`${pluginDir}/index.js`, `${pluginDir}/package.json`, `${pluginDir}/web.config`, `${pluginDir}/.env.example`, `${pluginDir}/tools/db-setup.mjs`]
   : ['api/main.js', 'api/web.config', 'api/routes/index.js', 'api/shared/api/core/service.js', 'api/servers.config.mjs', 'api/node_modules/mssql/package.json', 'api/node_modules/lunar-javascript/package.json'];
-for (const f of ['web/index.html', 'web/web.config', 'web/sayeon.config.js', 'web/_deploy/check-web.ps1', ...apiFiles]) {
+for (const f of ['web/index.html', 'web/web.config', 'web/sasystem.config.js', 'web/_deploy/check-web.ps1', ...apiFiles]) {
   if (!fs.existsSync(path.join(out, f))) stop(`패키지에 ${f} 가 없어요`);
 }
 ok(PLUGIN_MODE ? '필수 파일 있음 (화면 · Web IIS 설정 · 점검 스크립트 · 사緣 묶음 · 폴더 보호 web.config · DB 준비 도구)' : '필수 파일 있음 (화면 · Web IIS 설정 · 점검 스크립트 · API main.js · web.config · routes · 업무 규칙 · DB 드라이버 · 사주 라이브러리)');

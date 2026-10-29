@@ -13,8 +13,8 @@ const str = (v, d = '') => (v === undefined || v === '' ? d : String(v).trim());
 const num = (v, d) => (Number.isFinite(Number(v)) && String(v).trim() !== '' ? Number(v) : d);
 const bool = (v, d) => (v === undefined || v === '' ? d : ['1', 'true', 'yes', 'y', 'on'].includes(String(v).trim().toLowerCase()));
 
-/** 이 서버의 환경 (SAYEON_ENV = production | development) — web.config 의 API 포트·DB 값이 기준정보보다 우선 */
-export const topology = resolveTopology(master, str(env.SAYEON_ENV, 'production'));
+/** 이 서버의 환경 (SASYSTEM_ENV = production | development) — web.config 의 API 포트·DB 값이 기준정보보다 우선 */
+export const topology = resolveTopology(master, str(env.SASYSTEM_ENV, 'production'));
 const T = topology;
 if (!MASTER_FILE) T.problems.push('servers.config.mjs 가 없어요 — 배포 패키지의 서버 폴더를 통째로 복사해 주세요');
 if (str(env.API_PORT)) T.api = { ...T.api, port: num(env.API_PORT, T.api.port) };
@@ -96,11 +96,11 @@ export const config = {
   sso: {
     /** browser: 화면이 사내 인사정보 URL 을 불러 넘긴 정보 (기본) · iis: Web 서버 Windows 인증 → AD → 인사 API · url: SSO 주소 한 줄 · off */
     mode: ['browser', 'iis', 'url', 'off'].includes(T.sso.mode) ? T.sso.mode : 'browser',
-    /** browser 방식: 브라우저가 부르는 사내 인사정보 URL · 임직원 확인 URL (화면 설정 sayeon.config.js 로 내려간다) */
+    /** browser 방식: 브라우저가 부르는 사내 인사정보 URL · 임직원 확인 URL (화면 설정 sasystem.config.js 로 내려간다) */
     employeeApi: T.sso.employeeApi ?? {},
     employeeCheck: T.sso.employeeCheck ?? {},
     domain: String(T.sso.domain ?? '').toUpperCase(),
-    headerName: String(T.sso.header ?? 'x-sayeon-user').toLowerCase(),
+    headerName: String(T.sso.header ?? 'x-sasystem-user').toLowerCase(),
     adLookup: T.sso.adLookup !== false,
     adPath: str(T.sso.adPath),
     hrApi: {
@@ -131,7 +131,7 @@ export const RETIRED_ENV = {
   SSO_URL: MOVED, SSO_LOGIN_PAGE: MOVED, SSO_RESULT_PATH: MOVED, SSO_TIMEOUT_MS: MOVED, SSO_API_KEY_HEADER: MOVED,
   HR_LOOKUP_URL: MOVED, HR_SEARCH_URL: MOVED,
   SSO_HEADER: MOVED, SSO_PROXY_SECRET: 'Web 서버 IP 확인으로 바뀌었어요 (servers.config.mjs 의 web.host)', SSO_PROXY_SECRET_HEADER: MOVED,
-  COOKIE_SECURE: '쿠키를 쓰지 않아요 — 로그인 세션은 화면이 헤더(X-Sayeon-Session)로 보내요',
+  COOKIE_SECURE: '쿠키를 쓰지 않아요 — 로그인 세션은 화면이 헤더(X-Sasystem-Session)로 보내요',
   AUTH_LOGIN_URL: '운영은 사내 SSO로만 들어와요. ID/비밀번호 로그인은 없어졌어요',
   SSO_TOKEN_COOKIE: '쓰지 않아요', SSO_VERIFY_URL: '쓰지 않아요', SSO_MODE: MOVED,
 };

@@ -5,10 +5,10 @@
  *   server 폴더에서  npm run plugin                      운영 (servers.config.mjs 의 production.api.basePath)
  *                    npm run plugin -- --env development  개발
  *
- * 만드는 것: release/routes-<환경>/routes/<basePath>/   예) routes/sayeon/
+ * 만드는 것: release/routes-<환경>/routes/<basePath>/   예) routes/sasystem/
  *   index.js          서버 코드 + 라이브러리(express · mssql · 사주 …)를 하나로 묶은 파일 (CommonJS)
  *                     사용자 브라우저가 직접 부른다 (화면은 Web 서버 · CORS 로 그 화면 주소만 허용)
- *                     그 앱 main.js 에  app.use('/sayeon', require('./routes/sayeon')({ db: 그앱mssql설정 }));  한 줄
+ *                     그 앱 main.js 에  app.use('/sasystem', require('./routes/sasystem')({ db: 그앱mssql설정 }));  한 줄
  *   package.json      이 폴더는 CommonJS (그 앱이 ESM 이어도 그대로 불러진다)
  *   web.config        이 폴더 파일을 브라우저가 내려받지 못하게 막는다 (.env · 관리자 파일 보호)
  *   .env.example      비밀번호·키 — 서버에서 .env 로 복사해 채운다
@@ -27,7 +27,7 @@ import { loadTopology } from './topology.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SERVER = path.join(ROOT, 'server');
 
-/** 묶음 폴더 이름 = basePath ('/sayeon' → 'sayeon') */
+/** 묶음 폴더 이름 = basePath ('/sasystem' → 'sasystem') */
 export const pluginFolderOf = (T) => T.api.basePath.replace(/^\//, '');
 
 /**
@@ -36,7 +36,7 @@ export const pluginFolderOf = (T) => T.api.basePath.replace(/^\//, '');
  */
 export async function buildPlugin({ target, T, outRoutes, buildId = '' }) {
   const folder = pluginFolderOf(T);
-  if (!folder) throw new Error(`servers.config.mjs 의 ${target}.api.basePath 가 비어 있어요 — 그 앱에 붙일 경로(예: '/sayeon')를 정해 주세요`);
+  if (!folder) throw new Error(`servers.config.mjs 의 ${target}.api.basePath 가 비어 있어요 — 그 앱에 붙일 경로(예: '/sasystem')를 정해 주세요`);
   const out = path.join(outRoutes, folder);
   fs.rmSync(out, { recursive: true, force: true });
   fs.mkdirSync(path.join(out, 'tools'), { recursive: true });
@@ -47,7 +47,7 @@ export async function buildPlugin({ target, T, outRoutes, buildId = '' }) {
 
   // 서버 폴더용 설정 읽기(runtime.js) 대신 묶음용(runtime.plugin.js)
   const runtimeSwap = {
-    name: 'sayeon-runtime',
+    name: 'sasystem-runtime',
     resolveId(source, importer) {
       if (importer && /[\\/]server[\\/]src[\\/]/.test(importer) && /^\.\/runtime\.js$/.test(source)) return path.join(SERVER, 'src', 'runtime.plugin.js');
       return null;
@@ -56,7 +56,7 @@ export async function buildPlugin({ target, T, outRoutes, buildId = '' }) {
   const common = {
     platform: 'node',
     plugins: [runtimeSwap],
-    transform: { define: { __SAYEON_ENV__: JSON.stringify(target) } },
+    transform: { define: { __SASYSTEM_ENV__: JSON.stringify(target) } },
     logLevel: 'warn',
   };
 
@@ -69,7 +69,7 @@ export async function buildPlugin({ target, T, outRoutes, buildId = '' }) {
       format: 'cjs',
       exports: 'default',
       codeSplitting: false,
-      banner: `/* 사緣 API 묶음 ${buildId} (${target}) — 직접 고치지 말고 다시 묶는다 (tools/plugin.mjs) */\nvar __SAYEON_ROOT__ = __dirname;`,
+      banner: `/* 사緣 API 묶음 ${buildId} (${target}) — 직접 고치지 말고 다시 묶는다 (tools/plugin.mjs) */\nvar __SASYSTEM_ROOT__ = __dirname;`,
     },
   });
 
@@ -77,7 +77,7 @@ export async function buildPlugin({ target, T, outRoutes, buildId = '' }) {
   const toolBanner = [
     "import { fileURLToPath as __syUrl } from 'node:url';",
     "import { dirname as __syDir } from 'node:path';",
-    'const __SAYEON_ROOT__ = __syDir(__syDir(__syUrl(import.meta.url)));',
+    'const __SASYSTEM_ROOT__ = __syDir(__syDir(__syUrl(import.meta.url)));',
   ].join('\n');
   for (const name of ['db-setup', 'sso-test', 'hash-password']) {
     await build({
@@ -92,7 +92,7 @@ export async function buildPlugin({ target, T, outRoutes, buildId = '' }) {
     fs.mkdirSync(path.dirname(path.join(out, rel)), { recursive: true });
     fs.writeFileSync(path.join(out, rel), text);
   };
-  write('package.json', `${JSON.stringify({ name: `sayeon-routes-${folder}`, private: true, type: 'commonjs', main: 'index.js' }, null, 2)}\n`);
+  write('package.json', `${JSON.stringify({ name: `sasystem-routes-${folder}`, private: true, type: 'commonjs', main: 'index.js' }, null, 2)}\n`);
   write('config/package.json', `${JSON.stringify({ type: 'module' }, null, 2)}\n`); // admins.js 는 export default 문법
   fs.copyFileSync(path.join(SERVER, 'config', 'admins.example.js'), path.join(out, 'config', 'admins.example.js'));
   fs.mkdirSync(path.join(out, 'sql'), { recursive: true });
@@ -174,7 +174,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.log(`  ✔ ${path.relative(ROOT, dir)}  (index.js ${size('index.js')})`);
     console.log(`  ✔ 불러오기 확인 — require('./routes/${pluginFolderOf(T)}') 가 미들웨어 함수`);
     console.log(`\n  그 앱 main.js (CORS·로그인 미들웨어보다 앞에):  app.use('${T.api.basePath}', require('./routes/${pluginFolderOf(T)}')({ db: dbConfig }));`);
-    console.log(`  사용자 브라우저 → ${T.apiUrl}/api   (화면 빌드 npm run build 가 이 주소를 sayeon.config.js 에 넣는다)`);
+    console.log(`  사용자 브라우저 → ${T.apiUrl}/api   (화면 빌드 npm run build 가 이 주소를 sasystem.config.js 에 넣는다)`);
     console.log(`  허용하는 화면 주소(CORS): ${T.webOrigins.join(' · ')}`);
     console.log(`  자세한 순서: ${path.relative(ROOT, path.join(dir, '설치안내.txt'))}\n`);
   } catch (e) {

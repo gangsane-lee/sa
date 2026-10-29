@@ -160,7 +160,7 @@ export const DEFAULT_SETTINGS = {
 };
 
 /** 기준정보 일괄 변경 파일(엑셀·JSON) 표시 */
-export const REFERENCE_KIND = 'sayeon-reference';
+export const REFERENCE_KIND = 'sasystem-reference';
 
 /** 설정 항목의 이름·형식·범위 — 설정 저장과 기준정보 일괄 변경(엑셀·JSON)이 같은 규칙으로 검사한다 */
 export const SETTING_ITEMS = [

@@ -1,16 +1,16 @@
 ﻿# ════════════════════════════════════════════════════════════════
 #  사緣 API 서버 배포 (IIS + iisnode) — 배포 패키지의 api 폴더를 IIS 사이트 폴더로 옮기고 점검·재시작까지
 #    PowerShell(관리자) →  powershell -ExecutionPolicy Bypass -File <패키지>\api\_deploy\deploy-api.ps1
-#    사이트 폴더를 바꾸려면  -Target D:\sites\sayeon-api   (영문·숫자로만 된 경로)
+#    사이트 폴더를 바꾸려면  -Target D:\sites\sasystem-api   (영문·숫자로만 된 경로)
 #  하는 일: 확인 → (처음이면 앱 풀·사이트 만들기) → 백업 → 교체(.env·관리자 파일은 그대로) → npm run check
 #           → 앱 풀 재시작 → 상태 확인. 점검·시작이 실패하면 백업으로 자동으로 되돌린다
-#  되돌리기만:  ... deploy-api.ps1 -Rollback C:\sayeon-backup\__APP_NAME__\<시각>
+#  되돌리기만:  ... deploy-api.ps1 -Rollback C:\sasystem-backup\__APP_NAME__\<시각>
 #  직접 복사해도 된다: api 폴더 → 사이트 폴더 (.env · config\admins.js 는 덮어쓰지 말 것) → 앱 풀 재시작
 #  빌드할 때 servers.config.mjs 값으로 만들어졌다 — 환경 __ENV__ · 사이트 __APP_NAME__ · 포트 __API_PORT__ · 빌드 __BUILD_ID__
 # ════════════════════════════════════════════════════════════════
 param(
   [string]$Target = 'C:\sites\__APP_NAME__',
-  [string]$BackupRoot = 'C:\sayeon-backup\__APP_NAME__',
+  [string]$BackupRoot = 'C:\sasystem-backup\__APP_NAME__',
   [string]$Rollback = '',
   [switch]$NoAutoRollback
 )
@@ -119,9 +119,9 @@ $acct = "IIS AppPool\$Pool"
 & icacls $Target /grant "${acct}:(OI)(CI)M" /T /Q | Out-Null
 Good "폴더 권한: $acct 수정 가능"
 # 방화벽 — 사용자 PC 브라우저가 직접 부르므로 사내 PC 대역에서 이 포트로
-if (-not (Get-NetFirewallRule -DisplayName "sayeon $Site $Port" -ErrorAction SilentlyContinue)) {
-  New-NetFirewallRule -DisplayName "sayeon $Site $Port" -Direction Inbound -Protocol TCP -LocalPort $Port -Action Allow | Out-Null
-  Good "방화벽: → $Port 인바운드 허용 규칙을 만들었어요"; Warn "보안 정책상 범위를 좁혀야 하면 규칙 `"sayeon $Site $Port`" 의 원격 주소를 사내 PC 대역으로 (Set-NetFirewallRule -DisplayName ... -RemoteAddress 10.0.0.0/8 등)"
+if (-not (Get-NetFirewallRule -DisplayName "sasystem $Site $Port" -ErrorAction SilentlyContinue)) {
+  New-NetFirewallRule -DisplayName "sasystem $Site $Port" -Direction Inbound -Protocol TCP -LocalPort $Port -Action Allow | Out-Null
+  Good "방화벽: → $Port 인바운드 허용 규칙을 만들었어요"; Warn "보안 정책상 범위를 좁혀야 하면 규칙 `"sasystem $Site $Port`" 의 원격 주소를 사내 PC 대역으로 (Set-NetFirewallRule -DisplayName ... -RemoteAddress 10.0.0.0/8 등)"
 }
 
 # ── 3. 백업 ──────────────────────────────────────────

@@ -67,7 +67,7 @@ export async function employeeLogin({ reuse = false } = {}) {
 /** 예전 이름 (안내 화면의 '다시 확인') */
 export const ssoLogin = employeeLogin;
 
-/* global __SAYEON_MOCK__ */
+/* global __SASYSTEM_MOCK__ */
 /**
  * 개발 화면: 로그인 화면 없이 첫 테스트 계정으로 들어간다
  *  npm run dev:mock → 가짜 데이터의 만능 계정 · npm run dev → 운영 API 의 첫 테스트 사번(servers.config.mjs 의 devLogin)
@@ -78,8 +78,8 @@ async function devLogin() {
     if (first) await devLoginAs(first.empNo);
     return;
   }
-  // __SAYEON_MOCK__ 상수를 직접 써야 운영 빌드·개발 모드에서 테스트 계정 파일이 빠진다
-  const seed = __SAYEON_MOCK__ ? await import('@/api/mock/accounts.js') : null;
+  // __SASYSTEM_MOCK__ 상수를 직접 써야 운영 빌드·개발 모드에서 테스트 계정 파일이 빠진다
+  const seed = __SASYSTEM_MOCK__ ? await import('@/api/mock/accounts.js') : null;
   if (!seed) return;
   await login(seed.TEST_ACCOUNTS.MASTER, seed.MOCK_PASSWORD);
 }
@@ -147,7 +147,7 @@ export async function logout() {
     session.ssoError = isTestMode ? null : { code: 'LOGGED_OUT', message: '로그아웃했어요.' };
     // '곧 매칭이 시작돼요' 팝업은 로그인할 때마다 1번 — 같은 탭에서 다른 계정으로 다시 들어와도 보이게 표시를 지운다
     try {
-      sessionStorage.removeItem('sayeon.gathering.shown');
+      sessionStorage.removeItem('sasystem.gathering.shown');
     } catch {
       /* noop */
     }

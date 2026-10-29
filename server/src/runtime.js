@@ -1,6 +1,6 @@
 /**
  * 설정을 어디서 읽는가 — 서버 폴더(IIS 사이트 폴더)로 돌 때
- *  1) web.config 의 <appSettings>  : 환경(SAYEON_ENV) · API 포트(API_PORT) · DB 서버(DB_HOST·DB_PORT·DB_NAME)
+ *  1) web.config 의 <appSettings>  : 환경(SASYSTEM_ENV) · API 포트(API_PORT) · DB 서버(DB_HOST·DB_PORT·DB_NAME)
  *     iisnode 가 환경 변수로 넘겨 주고, 점검 명령(npm run check 등)은 이 파일이 직접 읽는다
  *  2) .env                          : 비밀번호·키 (설명: .env.example) — 서버에만 두고 복사하지 않는다
  *  3) servers.config.mjs (기준정보)  : Web 서버 주소 · 관리자 주소 · 사내 로그인 방식 — 저장소에서는 맨 위,

@@ -5,14 +5,14 @@ import vue from '@vitejs/plugin-vue';
 import { loadTopology } from '../tools/topology.mjs';
 
 const SHARED = fileURLToPath(new URL('../server/shared', import.meta.url));
-const BUILT_CONFIG = fileURLToPath(new URL('./dist/sayeon.config.js', import.meta.url));
+const BUILT_CONFIG = fileURLToPath(new URL('./dist/sasystem.config.js', import.meta.url));
 
 // npm run preview: 운영 빌드의 화면 설정에는 운영 API 주소(apiBase)가 들어 있다 → 미리보기에서는 비워서
 // 같은 주소의 /api 를 부르게 하고, 아래 proxy 가 API 서버로 넘긴다
 const previewConfig = {
-  name: 'sayeon-preview-config',
+  name: 'sasystem-preview-config',
   configurePreviewServer(server) {
-    server.middlewares.use('/sayeon.config.js', (req, res, next) => {
+    server.middlewares.use('/sasystem.config.js', (req, res, next) => {
       let text;
       try {
         text = fs.readFileSync(BUILT_CONFIG, 'utf8');
@@ -27,7 +27,7 @@ const previewConfig = {
 };
 
 /** 개발 키 헤더 — API 서버가 테스트 사번 로그인을 받을지 판단한다 (server/routes/auth.js) */
-const DEV_KEY_HEADER = 'X-Sayeon-Dev-Key';
+const DEV_KEY_HEADER = 'X-Sasystem-Dev-Key';
 
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -35,19 +35,19 @@ export default defineConfig(({ command, mode }) => {
   const devApi = command === 'serve' && !mock;
   // npm run dev(·preview) 의 /api 는 운영 API 서버로 넘긴다 (개발도 같은 API · 같은 DB). DEV_API_PROXY 로 바꿀 수 있다
   const T = loadTopology('production');
-  // 개발 키 — client/.env.development.local 의 SAYEON_DEV_KEY. VITE_ 로 시작하지 않아 브라우저 코드에는 들어가지 않고,
+  // 개발 키 — client/.env.development.local 의 SASYSTEM_DEV_KEY. VITE_ 로 시작하지 않아 브라우저 코드에는 들어가지 않고,
   // 이 PC 의 vite 프록시가 API 서버로 넘길 때만 헤더로 붙인다
-  const devKey = String(env.SAYEON_DEV_KEY ?? '').trim();
+  const devKey = String(env.SASYSTEM_DEV_KEY ?? '').trim();
   if (devApi && command === 'serve' && !devKey) {
-    console.warn('\n  ⚠ client/.env.development.local 에 SAYEON_DEV_KEY 가 없어요 — 테스트 사번 로그인이 거절돼요 (API 서버 .env 의 DEV_LOGIN_KEY 와 같은 값)\n');
+    console.warn('\n  ⚠ client/.env.development.local 에 SASYSTEM_DEV_KEY 가 없어요 — 테스트 사번 로그인이 거절돼요 (API 서버 .env 의 DEV_LOGIN_KEY 와 같은 값)\n');
   }
 
   return {
     plugins: [vue(), previewConfig],
     define: {
       // 화면 모드 상수 (src/config.js) — 운영 빌드에서는 둘 다 false 라 가짜 데이터·테스트 사번 코드가 빠진다
-      __SAYEON_MOCK__: JSON.stringify(mock),
-      __SAYEON_DEV_API__: JSON.stringify(devApi),
+      __SASYSTEM_MOCK__: JSON.stringify(mock),
+      __SASYSTEM_DEV_API__: JSON.stringify(devApi),
     },
     resolve: {
       alias: {

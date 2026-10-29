@@ -3,13 +3,13 @@
  *
  * 이 파일을 읽어 자동으로 맞춰지는 곳
  *  - API 서버 설정 (server/src/config.js)     : 포트 · DB 서버/이름 · 이 API 를 부를 수 있는 화면 주소(CORS)
- *  - 화면 빌드 (client, npm run build)         : Web 서버용 IIS 설정(web.config) · 화면 설정(sayeon.config.js: API 주소·관리자 주소·사내 인사정보 URL)
+ *  - 화면 빌드 (client, npm run build)         : Web 서버용 IIS 설정(web.config) · 화면 설정(sasystem.config.js: API 주소·관리자 주소·사내 인사정보 URL)
  *  - 배포 패키지 (npm run release)             : Web·API 서버에 복사할 폴더와 점검 스크립트
  *  - 점검 (npm run check · check-web.ps1)      : 각 서버 연결 확인
  *
  * 통신 구조 (운영)
  *   사용자 PC 브라우저 → Web 서버  https://oncloud9.samsungds.net:8282   (화면 파일만 — IIS)
- *   사용자 PC 브라우저 → API 서버  https://alfadev.samsungds.net:8292/sayeon/api   (회사 iisnode 앱 routes/sayeon)
+ *   사용자 PC 브라우저 → API 서버  https://alfadev.samsungds.net:8292/sasystem/api   (회사 iisnode 앱 routes/sasystem)
  *   API 서버 → DB 서버 1433
  *   Web 서버 ↔ API·DB 서버 통신은 없다
  *
@@ -18,8 +18,8 @@
  *   npm run dev:mock  → 서버 없이 브라우저 안 가짜 데이터
  *   npm run build     → 운영 화면 (dist 를 압축해 Web 서버로)
  *
- * 비밀번호·키는 여기에 쓰지 않는다 → API 서버의 routes/sayeon/.env (DB 계정은 그 앱 main.js 에서 넘겨받을 수 있다)
- * 값을 바꾼 뒤에는: 화면은 다시 빌드해 Web 서버에 복사, API 는 다시 묶어(npm run plugin) routes/sayeon 에 덮어쓰기
+ * 비밀번호·키는 여기에 쓰지 않는다 → API 서버의 routes/sasystem/.env (DB 계정은 그 앱 main.js 에서 넘겨받을 수 있다)
+ * 값을 바꾼 뒤에는: 화면은 다시 빌드해 Web 서버에 복사, API 는 다시 묶어(npm run plugin) routes/sasystem 에 덮어쓰기
  */
 export default {
   environments: {
@@ -36,14 +36,14 @@ export default {
         dnsName: 'oncloud9.samsungds.net',
       },
       /**
-       * API 서버 — 회사의 다른 iisnode 앱(IIS) routes 폴더에 사緣 묶음을 끼워 넣는다 (설치 없음, npm run plugin → routes/sayeon)
+       * API 서버 — 회사의 다른 iisnode 앱(IIS) routes 폴더에 사緣 묶음을 끼워 넣는다 (설치 없음, npm run plugin → routes/sasystem)
        *  host    : API 서버 IP (방화벽 · 연결 점검)
        *  dnsName : https 인증서에 적힌 DNS 이름 — 사용자 PC 브라우저가 이 이름으로 부른다
        *  port    : 그 앱 IIS 사이트의 https 포트 (방화벽: 사용자 PC 대역 · 개발 PC → 이 포트)
        *  https   : true = https 로만 받는다 (http 로 온 호출은 막는다)
-       *  basePath: 그 앱 main.js 에서 붙인 경로 — app.use('/sayeon', require('./routes/sayeon')(…))
+       *  basePath: 그 앱 main.js 에서 붙인 경로 — app.use('/sasystem', require('./routes/sasystem')(…))
        */
-      api: { host: '10.122.122.2', dnsName: 'alfadev.samsungds.net', port: 8292, https: true, basePath: '/sayeon' },
+      api: { host: '10.122.122.2', dnsName: 'alfadev.samsungds.net', port: 8292, https: true, basePath: '/sasystem' },
       /** DB 서버 — MSSQL. 목적별 표(SA_APPLICANT · SA_MATCH …)를 쓴다 */
       db: { host: '10.166.101.127', port: 1433, name: 'sasystem' },
     },
@@ -56,12 +56,12 @@ export default {
    * 개발 화면(npm run dev) 테스트 사번 — 사내 인사정보 확인 없이 이 사번으로 바로 로그인한다.
    * 운영 API 서버가 받아 주는 조건 (셋 다 맞아야 한다)
    *  1) 호출한 PC IP 가 devServer.host (개발 PC — 그 앱 web.config 의 promoteServerVars 에 REMOTE_ADDR 필요)
-   *  2) 개발 화면 프록시가 붙인 개발 키(client/.env.development.local 의 SAYEON_DEV_KEY)가
-   *     API 서버 routes/sayeon/.env 의 DEV_LOGIN_KEY 와 같다 — 키는 브라우저에 내려가지 않는다
+   *  2) 개발 화면 프록시가 붙인 개발 키(client/.env.development.local 의 SASYSTEM_DEV_KEY)가
+   *     API 서버 routes/sasystem/.env 의 DEV_LOGIN_KEY 와 같다 — 키는 브라우저에 내려가지 않는다
    *  3) 사번이 아래 목록에 있다
    * 테스트 사번으로 만든 신청·하트·쪽지에는 '테스트' 표시가 붙고, 일반 사용자 화면(후보·하트·매칭)에는 나오지 않는다.
    * 관리자 화면 'DB 표'에서 따로 보이고 '테스트 데이터 지우기'로 한 번에 지울 수 있다.
-   * 관리자 화면까지 시험하려면 그 사번을 routes/sayeon/config/admins.js 의 accounts 에 넣는다.
+   * 관리자 화면까지 시험하려면 그 사번을 routes/sasystem/config/admins.js 의 accounts 에 넣는다.
    */
   devLogin: {
     accounts: [
@@ -86,7 +86,7 @@ export default {
    *
    *  ※ 두 서버 모두 사緣 화면 주소(https://oncloud9.samsungds.net:8282)에 CORS 를 허용해야 브라우저가 응답을 읽을 수 있다
    *  ※ 화면이 https 라 두 URL 도 https 여야 한다 (http 는 브라우저가 막는다)
-   *  ※ URL 을 바꾸면 다시 빌드하거나, Web 서버의 sayeon.config.js 만 고쳐도 바로 반영된다
+   *  ※ URL 을 바꾸면 다시 빌드하거나, Web 서버의 sasystem.config.js 만 고쳐도 바로 반영된다
    */
   sso: {
     mode: 'browser', // browser | off
@@ -102,7 +102,7 @@ export default {
       withCredentials: true,
       timeoutMs: 8000,
       /** 받아 온 인사 데이터를 저장할 localStorage 키 */
-      storageKey: 'sayeon.employee',
+      storageKey: 'sasystem.employee',
     },
     /** 2) 임직원 확인 URL — 1)의 값으로 POST. 비우면 1)만으로 확인한다 */
     employeeCheck: {
@@ -130,7 +130,7 @@ export default {
       method: 'POST', // POST | GET
       /** 보낼 본문 — {empNo} 사번 · {id} 사내 계정 ID · {domain} 도메인 */
       body: { sabun: '{empNo}' },
-      /** API 키가 필요하면 routes/sayeon/.env 의 SSO_API_KEY (헤더 이름은 아래) */
+      /** API 키가 필요하면 routes/sasystem/.env 의 SSO_API_KEY (헤더 이름은 아래) */
       apiKeyHeader: 'x-api-key',
       timeoutMs: 5000,
     },

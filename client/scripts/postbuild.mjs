@@ -3,12 +3,12 @@
  * servers.config.mjs(마스터)의 값으로 Web 서버(IIS)에 둘 파일을 dist 에 만든다.
  *
  *   dist/web.config              IIS 설정: 화면 주소 처리 · 캐시 (Web 서버는 화면 파일만 낸다 — /api 를 넘기지 않는다)
- *   dist/sayeon.config.js        화면 설정 (API 서버 주소 · 관리자 주소 · 사내 인사정보 URL) — 빌드는 늘 운영 모드
+ *   dist/sasystem.config.js        화면 설정 (API 서버 주소 · 관리자 주소 · 사내 인사정보 URL) — 빌드는 늘 운영 모드
  *                                사용자 브라우저가 이 API 주소를 직접 부른다
  *   dist/_deploy/                Web 서버 점검·배포 스크립트와 파일 목록 (웹으로는 열리지 않는다)
  *       check-web.ps1 · deploy-web.ps1 · manifest.json · build.json
  *
- * 대상 환경: SAYEON_TARGET (기본 production) — 예) set SAYEON_TARGET=development && npm run build
+ * 대상 환경: SASYSTEM_TARGET (기본 production) — 예) set SASYSTEM_TARGET=development && npm run build
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,7 +19,7 @@ import { loadTopology } from '../../tools/topology.mjs';
 
 const CLIENT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(CLIENT, 'dist');
-const target = process.env.SAYEON_TARGET || 'production';
+const target = process.env.SASYSTEM_TARGET || 'production';
 const T = loadTopology(target);
 const fail = (m) => {
   console.error(`\n  ✖ ${m}\n`);
@@ -35,9 +35,9 @@ if (!fs.existsSync(path.join(DIST, 'index.html'))) fail('dist/index.html 이 없
 
 // 운영 빌드에는 개발 모드의 가짜 데이터·테스트 계정이 없어야 한다
 const bundle = fs.readdirSync(path.join(DIST, 'assets')).filter((f) => f.endsWith('.js')).map((f) => fs.readFileSync(path.join(DIST, 'assets', f), 'utf8')).join('\n');
-const mockIncluded = bundle.includes('sayeon.mock.db') || bundle.includes('sayeon1234');
-if (mockIncluded) fail('운영 빌드에 개발용 가짜 데이터·테스트 계정이 들어갔어요 — __SAYEON_MOCK__ 로 감싸지 않은 mock import 를 찾아 고쳐 주세요');
-if (bundle.includes('dev-login') || bundle.includes('dev-accounts')) fail('운영 빌드에 개발 화면 테스트 사번 로그인 호출이 들어갔어요 — __SAYEON_DEV_API__ 로 감싸 주세요');
+const mockIncluded = bundle.includes('sasystem.mock.db') || bundle.includes('sasystem1234');
+if (mockIncluded) fail('운영 빌드에 개발용 가짜 데이터·테스트 계정이 들어갔어요 — __SASYSTEM_MOCK__ 로 감싸지 않은 mock import 를 찾아 고쳐 주세요');
+if (bundle.includes('dev-login') || bundle.includes('dev-accounts')) fail('운영 빌드에 개발 화면 테스트 사번 로그인 호출이 들어갔어요 — __SASYSTEM_DEV_API__ 로 감싸 주세요');
 // 보안: 소스맵(원본 코드 지도)이 없어야 한다
 const maps = fs.readdirSync(path.join(DIST, 'assets')).filter((f) => f.endsWith('.map'));
 if (maps.length || bundle.includes('sourceMappingURL')) fail('운영 빌드에 소스맵이 들어갔어요 — vite.config.js 의 build.sourcemap 을 false 로');
@@ -58,7 +58,7 @@ const licKey = (() => {
 const licensed = Boolean(licKey && licKey !== 'TRIAL' && bundle.includes(licKey.slice(0, 40)));
 if (!licensed) console.warn('  ⚠ DevExtreme 라이선스 키가 빌드에 없어요 — 화면 위에 평가판 배너가 떠요 (docs/GO-LIVE.md)');
 
-// 1) 화면 설정 (빌드에 들어 있던 개발용 sayeon.config.js 를 덮어쓴다) — 배포 뒤 이 파일만 고쳐도 반영된다
+// 1) 화면 설정 (빌드에 들어 있던 개발용 sasystem.config.js 를 덮어쓴다) — 배포 뒤 이 파일만 고쳐도 반영된다
 const runtime = {
   apiBase: T.apiUrl,
   adminPath: T.adminPath,
@@ -66,7 +66,7 @@ const runtime = {
   security: { blockDevtools: T.security.blockDevtools },
   ...(T.sso.loginPage && { ssoLoginPage: T.sso.loginPage }),
 };
-fs.writeFileSync(path.join(DIST, 'sayeon.config.js'), `window.SAYEON_CONFIG = ${JSON.stringify(runtime, null, 2)};\n`);
+fs.writeFileSync(path.join(DIST, 'sasystem.config.js'), `window.SASYSTEM_CONFIG = ${JSON.stringify(runtime, null, 2)};\n`);
 
 // 2) IIS 설정 — 화면 파일만 낸다. 사용자 브라우저가 API 서버를 직접 부르므로 /api 전달·ARR 은 없다
 //    보안 헤더: 화면이 부를 수 있는 곳(CSP connect-src)을 자기 자신 · API 서버 · 사내 인사정보 URL 로만 제한
@@ -95,14 +95,14 @@ const webConfig = `<?xml version="1.0" encoding="UTF-8"?>
     <rewrite>
       <!-- 보안: 응답의 Server 헤더(IIS 버전)를 비운다 -->
       <outboundRules>
-        <rule name="sayeon-hide-server">
+        <rule name="sasystem-hide-server">
           <match serverVariable="RESPONSE_SERVER" pattern=".+" />
           <action type="Rewrite" value="" />
         </rule>
       </outboundRules>
       <rules>
         <!-- 화면 주소(/saju, /messages …)를 새로 고쳐도 index.html 로 -->
-        <rule name="sayeon-spa" stopProcessing="true">
+        <rule name="sasystem-spa" stopProcessing="true">
           <match url=".*" />
           <conditions logicalGrouping="MatchAll">
             <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
@@ -154,7 +154,7 @@ const webConfig = `<?xml version="1.0" encoding="UTF-8"?>
   <location path="index.html">
     <system.webServer><staticContent><clientCache cacheControlMode="DisableCache" /></staticContent></system.webServer>
   </location>
-  <location path="sayeon.config.js">
+  <location path="sasystem.config.js">
     <system.webServer><staticContent><clientCache cacheControlMode="DisableCache" /></staticContent></system.webServer>
   </location>
 </configuration>
@@ -204,5 +204,5 @@ for (const name of ['check-web.ps1', 'deploy-web.ps1']) {
   fs.writeFileSync(path.join(deployDir, name), BOM + s.replace(/\r?\n/g, '\r\n'));
 }
 
-console.log(`  ✔ web.config · sayeon.config.js(로그인 ${ssoMode}) · _deploy/ (점검 스크립트 · 파일 ${Object.keys(files).length}개 목록)`);
+console.log(`  ✔ web.config · sasystem.config.js(로그인 ${ssoMode}) · _deploy/ (점검 스크립트 · 파일 ${Object.keys(files).length}개 목록)`);
 console.log(`  ✔ 빌드 ${buildId} · 운영 모드${licensed ? '' : ' · ⚠ 라이선스 없음'}\n`);

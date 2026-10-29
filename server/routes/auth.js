@@ -24,7 +24,7 @@ const cleanQuery = (q) =>
   );
 
 /** 개발 화면 프록시(client/vite.config.js)가 붙이는 개발 키 헤더 */
-export const DEV_KEY_HEADER = 'X-Sayeon-Dev-Key';
+export const DEV_KEY_HEADER = 'X-Sasystem-Dev-Key';
 const devWarned = new Set();
 /**
  * 개발 화면(npm run dev) 테스트 사번 로그인을 받아도 되는 요청인가 — 셋 다 맞아야 한다
@@ -42,7 +42,7 @@ function devAllowed(req) {
     devWarned.add(req.clientIp);
     const why = D.key.length < 16 ? '.env 의 DEV_LOGIN_KEY 가 비었거나 16자 미만'
       : !D.allowIps.includes(req.clientIp) ? `개발 PC(${D.allowIps.join(', ') || '없음'})가 아님` : '개발 키가 다름';
-    console.warn(`[sayeon] 테스트 사번 로그인 거절 — ${req.clientIp} (${why})`);
+    console.warn(`[sasystem] 테스트 사번 로그인 거절 — ${req.clientIp} (${why})`);
   }
   return ok;
 }

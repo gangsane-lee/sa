@@ -134,7 +134,7 @@ export function createSeed() {
     person('김하늘', 'F', 1997, 'MEMORY', 'DRAM설계팀', 'haneul', 'kim'),
     person('이도윤', 'M', 1993, 'FOUNDRY', '공정기술팀', 'doyun', 'lee'),
     person('박서진', 'M', 1990, 'LSI', 'SoC설계팀', 'seojin', 'park', { retired: true }),
-    person('한사연', 'M', 1993, 'FOUNDRY', '수율향상팀', 'sayeon', 'test'),
+    person('한사연', 'M', 1993, 'FOUNDRY', '수율향상팀', 'sasystem', 'test'),
   ];
   const usedNames = new Set(employees.map((e) => e.name));
   for (let i = 0; i < 64; i++) {

@@ -17,7 +17,7 @@
    ════════════════════════════════════════════════════════════════════ */
 
 DECLARE @DbName   sysname       = N'sasystem';          -- servers.config.mjs 의 db.name
-DECLARE @AppLogin sysname       = N'sayeon_app';        -- server/.env 의 DB_USER
+DECLARE @AppLogin sysname       = N'sasystem_app';        -- server/.env 의 DB_USER
 DECLARE @AppPass  nvarchar(128) = N'여기에_새_비밀번호';  -- server/.env 의 DB_PASSWORD (8자 이상, 대·소문자·숫자·특수문자 중 3종류)
 
 /* 이미 있는 로그인의 비밀번호를 위 값으로 바꾸려면 1 (기본 0: 바꾸지 않음) */

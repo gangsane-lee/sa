@@ -23,7 +23,7 @@ export function buildApiWebConfig(T) {
 <configuration>
   <appSettings>
     <!-- 환경: production(운영) | development(개발) -->
-    <add key="SAYEON_ENV" value="${xml(T.envName)}" />
+    <add key="SASYSTEM_ENV" value="${xml(T.envName)}" />
     <!-- 이 사이트의 IIS 포트 (사이트 바인딩과 같게). 사용자 PC 브라우저가 이 포트로 API 를 부른다 -->
     <add key="API_PORT" value="${xml(T.api.port)}" />
     <!-- DB 서버 (MSSQL). 계정·비밀번호는 .env 의 DB_USER · DB_PASSWORD -->
@@ -39,7 +39,7 @@ export function buildApiWebConfig(T) {
     <!-- 모든 요청을 main.js 로 (화면 파일은 Web 서버가 낸다) -->
     <rewrite>
       <rules>
-        <rule name="sayeon-api" stopProcessing="true">
+        <rule name="sasystem-api" stopProcessing="true">
           <match url=".*" />
           <action type="Rewrite" url="main.js" />
         </rule>

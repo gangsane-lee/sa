@@ -1,15 +1,15 @@
 /**
  * 실서버 API 클라이언트 — 엔드포인트 명세는 docs/DESIGN.md "5. API 명세" 참고
  * 화면(Web 서버)과 API 서버의 주소가 달라 쿠키 대신 세션 헤더로 로그인을 이어 간다:
- *   서버가 응답 헤더 X-Sayeon-Session 으로 준 값을 이 탭(sessionStorage)에 두고, 요청마다 같은 헤더로 보낸다.
+ *   서버가 응답 헤더 X-Sasystem-Session 으로 준 값을 이 탭(sessionStorage)에 두고, 요청마다 같은 헤더로 보낸다.
  *   탭을 닫으면 사라지고, 새 탭은 화면을 열 때 사내 인사정보로 다시 로그인한다 (stores/session.js)
  */
-/* global __SAYEON_DEV_API__ */
+/* global __SASYSTEM_DEV_API__ */
 import { ApiError } from '@shared/api/errors.js';
 import { API_BASE } from '@/config';
 
-const SESSION_HEADER = 'X-Sayeon-Session';
-const SESSION_KEY = 'sayeon.session';
+const SESSION_HEADER = 'X-Sasystem-Session';
+const SESSION_KEY = 'sasystem.session';
 /** 저장소를 쓸 수 없는 브라우저면 이 화면을 여는 동안만 메모리에 둔다 */
 let memorySession = '';
 const readSession = () => {
@@ -40,7 +40,7 @@ async function request(method, path, body, { timeoutMs = 0 } = {}) {
       ...(timeoutMs && { signal: AbortSignal.timeout(timeoutMs) }),
       headers: {
         // 서버는 이 헤더가 없는 상태 변경 요청을 거절한다 (CSRF 방어 보조)
-        'X-Requested-With': 'sayeon',
+        'X-Requested-With': 'sasystem',
         ...(sid && { [SESSION_HEADER]: sid }),
         ...(body !== undefined && { 'Content-Type': 'application/json' }),
       },
@@ -77,7 +77,7 @@ export const api = {
     /** 사내 SSO 확인 — employee: 화면이 사내 인사정보 URL 에서 받은 사용자 정보(browser 방식) · query: 주소창의 값 */
     sso: (hint = {}) => request('POST', '/auth/sso', { query: hint.query ?? {}, ...(hint.employee && { employee: hint.employee }) }, { timeoutMs: 20000 }),
     // 개발 화면(npm run dev) 테스트 사번 — 운영 빌드에서는 상수 false 라 이 두 줄이 빠진다
-    ...(__SAYEON_DEV_API__ && {
+    ...(__SASYSTEM_DEV_API__ && {
       devAccounts: () => get('/auth/dev-accounts'),
       devLogin: (empNo) => post('/auth/dev-login', { empNo }),
     }),

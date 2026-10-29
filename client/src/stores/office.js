@@ -6,7 +6,7 @@
  */
 import { reactive } from 'vue';
 
-const KEY = 'sayeon.office';
+const KEY = 'sasystem.office';
 const FAKE_TITLE = '통합 문서1 - 스프레드시트';
 // 흰 바탕 초록 격자 아이콘 (특정 제품 로고 아님)
 const FAKE_ICON =

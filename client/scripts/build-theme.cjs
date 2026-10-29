@@ -1,19 +1,19 @@
 /**
  * DevExtreme 커스텀 테마 생성 스크립트
  * - 기준 테마: Fluent SaaS Light
- * - 브랜드 색(홍실 #C8243F)과 본문 서체를 반영해 src/styles/dx.sayeon.css 를 만든다.
+ * - 브랜드 색(홍실 #C8243F)과 본문 서체를 반영해 src/styles/dx.sasystem.css 를 만든다.
  * 실행: npm run theme   (색을 바꿀 때만 다시 실행하면 됨. 결과 CSS는 커밋한다)
  */
 const fs = require('fs');
 const path = require('path');
 const { buildTheme } = require('devextreme-themebuilder');
 
-const OUT = path.join(__dirname, '..', 'src', 'styles', 'dx.sayeon.css');
+const OUT = path.join(__dirname, '..', 'src', 'styles', 'dx.sasystem.css');
 
 buildTheme({
   command: 'build-theme',
   baseTheme: 'fluent.saas.light',
-  outputColorScheme: 'sayeon',
+  outputColorScheme: 'sasystem',
   items: [
     { key: '$base-accent', value: '#C8243F' },
     { key: '$base-text-color', value: '#1B1B24' },

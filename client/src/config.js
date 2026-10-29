@@ -7,28 +7,28 @@
  *  npm run build    → 운영 모드: 실제 API. 화면을 열 때 사내 인사정보 URL 로 임직원인지 확인한다
  *                     (가짜 데이터·테스트 사번 코드는 빌드에 들어가지 않는다)
  */
-/* global __SAYEON_MOCK__, __SAYEON_DEV_API__ — vite.config.js 가 넣는 상수 (빌드에서는 둘 다 false) */
-const runtime = (typeof window !== 'undefined' && window.SAYEON_CONFIG) || {};
+/* global __SASYSTEM_MOCK__, __SASYSTEM_DEV_API__ — vite.config.js 가 넣는 상수 (빌드에서는 둘 다 false) */
+const runtime = (typeof window !== 'undefined' && window.SASYSTEM_CONFIG) || {};
 
 /** 가짜 데이터 모드 (npm run dev:mock) */
-export const isMock = __SAYEON_MOCK__;
+export const isMock = __SASYSTEM_MOCK__;
 /** 개발 모드 — 실제 API + 테스트 사번 (npm run dev) */
-export const isDevApi = __SAYEON_DEV_API__;
+export const isDevApi = __SASYSTEM_DEV_API__;
 /** 개발 화면(둘 중 하나) — 맨 위 '개발 모드' 띠를 보여준다 */
 export const isTestMode = isMock || isDevApi;
 export const SERVICE_MODE = isTestMode ? 'test' : 'open';
-/** 운영 화면에서 개발자 도구 단축키·오른쪽 클릭 막기 (servers.config.mjs 의 security.blockDevtools → sayeon.config.js) */
+/** 운영 화면에서 개발자 도구 단축키·오른쪽 클릭 막기 (servers.config.mjs 의 security.blockDevtools → sasystem.config.js) */
 export const BLOCK_DEVTOOLS = !isTestMode && runtime.security?.blockDevtools !== false;
 
 /**
  * API 서버 주소 — 화면은 Web 서버에서 열리고, 브라우저가 API 서버를 직접 부른다.
- * 운영 빌드 때 servers.config.mjs 의 API 주소(예: https://sayeon-api.corp/sayeon)가 sayeon.config.js 로 들어온다.
+ * 운영 빌드 때 servers.config.mjs 의 API 주소(예: https://sasystem-api.corp/sasystem)가 sasystem.config.js 로 들어온다.
  * 비어 있으면 같은 주소의 /api (API 서버가 화면도 낼 때 · npm run preview 프록시)
  */
 export const API_BASE = `${typeof runtime.apiBase === 'string' ? runtime.apiBase.trim().replace(/\/+$/, '') : ''}/api`;
 
 /**
- * 운영 모드 입구 — 사내 인사정보 URL (servers.config.mjs 의 sso.employeeApi → 빌드 때 sayeon.config.js 로 들어온다)
+ * 운영 모드 입구 — 사내 인사정보 URL (servers.config.mjs 의 sso.employeeApi → 빌드 때 sasystem.config.js 로 들어온다)
  *  url · method(GET|POST) · body(POST 본문, {ls:키} = localStorage 값 · {query:이름} = 주소창 값)
  *  resultPath(응답에서 사용자 정보 위치, 비우면 자동) · withCredentials(사내 SSO 쿠키를 함께 보냄)
  */
@@ -43,7 +43,7 @@ export const EMPLOYEE_API = {
   timeoutMs: Number(emp.timeoutMs) > 0 ? Number(emp.timeoutMs) : 8000,
 };
 /** 받아 온 인사정보를 저장하는 localStorage 키 */
-export const EMPLOYEE_STORAGE_KEY = typeof emp.storageKey === 'string' && emp.storageKey ? emp.storageKey : 'sayeon.employee';
+export const EMPLOYEE_STORAGE_KEY = typeof emp.storageKey === 'string' && emp.storageKey ? emp.storageKey : 'sasystem.employee';
 
 /**
  * 2단계 임직원 확인 URL — 1단계(EMPLOYEE_API) 응답의 sabun · user_name 으로 POST (servers.config.mjs 의 sso.employeeCheck)
@@ -64,7 +64,7 @@ export const EMPLOYEE_CHECK = {
 
 /**
  * 관리자 화면 주소 — 사용자 화면에는 들어가는 버튼이 없고, 이 주소로 직접 들어간다.
- * 운영 빌드 때 servers.config.mjs 의 adminPath 가 sayeon.config.js 로 들어가 여기로 온다 (기본 /changeme)
+ * 운영 빌드 때 servers.config.mjs 의 adminPath 가 sasystem.config.js 로 들어가 여기로 온다 (기본 /changeme)
  */
 const adminPath = `/${String(runtime.adminPath ?? 'changeme').replace(/^\/+|\/+$/g, '')}`;
 export const ADMIN_PATH = adminPath === '/' ? '/changeme' : adminPath;

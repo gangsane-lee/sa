@@ -51,7 +51,7 @@ export function apiRouter(store) {
 
   // 상태를 바꾸는 요청은 화면이 붙이는 헤더가 있어야 한다 (다른 사이트에서 몰래 보내는 요청 차단 보조)
   r.use((req, res, next) => {
-    if (req.method !== 'GET' && req.get('X-Requested-With') !== 'sayeon') {
+    if (req.method !== 'GET' && req.get('X-Requested-With') !== 'sasystem') {
       return res.status(403).json({ message: '허용되지 않은 요청이에요.', code: 'CSRF' });
     }
     next();

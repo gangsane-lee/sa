@@ -1,7 +1,7 @@
 /**
  * 운영 모드 입구 — 사내 인사정보로 임직원인지 확인한다 (라우터가 화면을 열 때 부른다)
  *
- *  1) 사내 인사 데이터 URL 호출 (servers.config.mjs 의 sso.employeeApi → sayeon.config.js)
+ *  1) 사내 인사 데이터 URL 호출 (servers.config.mjs 의 sso.employeeApi → sasystem.config.js)
  *     정상 회신이면 응답을 localStorage(EMPLOYEE_STORAGE_KEY)에 저장하고 sabun · user_name 등을 읽는다
  *  2) 임직원 확인 URL 에 1)의 sabun · user_name 을 POST (sso.employeeCheck — 비어 있으면 건너뛴다)
  *     응답으로 임직원인지 판단한다 (okPath 값 또는 같은 사번 · 재직 상태)

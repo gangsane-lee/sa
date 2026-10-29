@@ -1,4 +1,4 @@
-/* global __SAYEON_MOCK__, __SAYEON_DEV_API__ */
+/* global __SASYSTEM_MOCK__, __SASYSTEM_DEV_API__ */
 import { createRouter, createWebHistory } from 'vue-router';
 import { session, restoreSession } from '@/stores/session';
 import { loadCodes } from '@/stores/codes';
@@ -13,7 +13,7 @@ const routes = [
   {
     path: '/login',
     name: 'login',
-    component: __SAYEON_MOCK__ || __SAYEON_DEV_API__ ? () => import('@/views/LoginView.vue') : () => import('@/views/SsoGateView.vue'),
+    component: __SASYSTEM_MOCK__ || __SASYSTEM_DEV_API__ ? () => import('@/views/LoginView.vue') : () => import('@/views/SsoGateView.vue'),
     meta: { public: true, title: isTestMode ? '테스트 계정 고르기' : '임직원 확인' },
   },
   {
@@ -31,7 +31,7 @@ const routes = [
       { path: 'privacy', name: 'privacy', component: () => import('@/views/PrivacyView.vue'), meta: { title: '개인정보 처리 안내' } },
     ],
   },
-  // 관리자 화면 — 사용자 화면과 다른 주소로만 들어온다 (주소는 sayeon.config.js 의 adminPath)
+  // 관리자 화면 — 사용자 화면과 다른 주소로만 들어온다 (주소는 sasystem.config.js 의 adminPath)
   {
     path: `${ADMIN_PATH}/login`,
     name: 'admin-login',

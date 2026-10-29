@@ -17,21 +17,21 @@ flowchart LR
 
 | 영역 | 기술 |
 |---|---|
-| 프론트 | Vue 3, Vite, vue-router, DevExtreme 26.1 (Complete), 커스텀 테마 `dx.sayeon.css` |
+| 프론트 | Vue 3, Vite, vue-router, DevExtreme 26.1 (Complete), 커스텀 테마 `dx.sasystem.css` |
 | 백엔드 | Node.js 22.12.0, Express 5, `mssql`(tedious), `express-session` + `memorystore`(로그인 정보는 메모리 — 재시작하면 다시 로그인), `bcryptjs`, `helmet`, 로그인 실패 제한(자체 구현) |
 | DB | MSSQL — 목적별 표 17개(`SA_APPLICANT` · `SA_MATCH` · `SA_HEART` · `SA_MESSAGE` …, 정의 `server/shared/db/tables.js`), 이름·메일은 앱에서 AES-256-GCM 암호화 (TDE는 DB 쪽 선택) |
-| 배포 | Web 서버(IIS, https 8282)는 화면 파일만, 사용자 브라우저가 API 서버(회사 iisnode 앱의 `routes/sayeon`, https 8292)를 직접 부른다(CORS · 세션 헤더). 주소는 `servers.config.mjs`(마스터), 절차는 [GO-LIVE.md](GO-LIVE.md) |
+| 배포 | Web 서버(IIS, https 8282)는 화면 파일만, 사용자 브라우저가 API 서버(회사 iisnode 앱의 `routes/sasystem`, https 8292)를 직접 부른다(CORS · 세션 헤더). 주소는 `servers.config.mjs`(마스터), 절차는 [GO-LIVE.md](GO-LIVE.md) |
 
 **업무 규칙은 한 파일** — `server/shared/api/core/service.js`. 브라우저 가짜 데이터 모드(`npm run dev:mock`, `api/mock`)와 Node 서버(`server/`)가 이 파일을 함께 쓰고, 저장소·세션·사내 인증·관리자 확인만 끼워 넣는다(`configureService`). 그래서 화면에서 시험한 동작이 운영에서도 똑같다.
 
 | | 가짜 데이터 (`npm run dev:mock`) | 개발 (`npm run dev`) | 운영 (`npm run build`) |
 |---|---|---|---|
 | 저장소 | localStorage | 운영 API 서버 → MSSQL 목적별 표 (`server/src/store.js`) | 같음 |
-| 세션 | sessionStorage | express-session (세션 헤더 `X-Sayeon-Session`) | 같음 |
+| 세션 | sessionStorage | express-session (세션 헤더 `X-Sasystem-Session`) | 같음 |
 | 사내 인증 | 만능 테스트 계정으로 자동 입장 (`api/mock/accounts.js`) | 테스트 사번 (`servers.config.mjs` 의 `devLogin` — 개발 PC · 개발 키 확인) | 인사정보 2단계 확인(`auth/employee.js`) → 서버(`server/src/sso.js`) |
 | 관리자 계정 | `api/mock/accounts.js` | `config/admins.js` (API 서버) | 같음 |
 
-모드는 **명령으로 자동** (vite `define` 상수 `__SAYEON_MOCK__` · `__SAYEON_DEV_API__`) — 운영 빌드에서는 가짜 데이터·테스트 사번 코드가 빠진다. 운영 빌드 때 `servers.config.mjs`의 `adminPath`·`sso.employeeApi`·`sso.employeeCheck`·`security`로 `sayeon.config.js`와 IIS `web.config`(보안 헤더 포함)를 만든다. 테스트 사번으로 만든 신청서는 `test` 표시가 붙어 일반 사용자의 후보·하트·사주·통계에서 빠진다.
+모드는 **명령으로 자동** (vite `define` 상수 `__SASYSTEM_MOCK__` · `__SASYSTEM_DEV_API__`) — 운영 빌드에서는 가짜 데이터·테스트 사번 코드가 빠진다. 운영 빌드 때 `servers.config.mjs`의 `adminPath`·`sso.employeeApi`·`sso.employeeCheck`·`security`로 `sasystem.config.js`와 IIS `web.config`(보안 헤더 포함)를 만든다. 테스트 사번으로 만든 신청서는 `test` 표시가 붙어 일반 사용자의 후보·하트·사주·통계에서 빠진다.
 
 ## 2. 화면
 
@@ -219,7 +219,7 @@ CREATE TABLE SA_ADMIN (EMP_NO VARCHAR(20) PRIMARY KEY);  -- 관리자 허용 사
 | PATCH/DELETE | `/admin/matches/:id` | 상태·메모 변경 / 삭제 |
 | GET/POST | `/admin/codes/:group` | 기준정보 목록(쓰는 신청서 수 포함) / 추가 |
 | PATCH/DELETE | `/admin/codes/:group/:code` | 이름·순서·사용·상위·보조 값 변경 / 삭제(409 사용 중) |
-| GET | `/admin/reference` | 기준정보·설정 전체 내보내기 (`{ kind: "sayeon-reference", codes, settings }`) |
+| GET | `/admin/reference` | 기준정보·설정 전체 내보내기 (`{ kind: "sasystem-reference", codes, settings }`) |
 | POST | `/admin/reference/import` `{payload, apply}` | 일괄 변경 — `apply=false` 미리보기(추가·수정·사용 안 함·삭제·오류), `true` 적용(열람 기록 `REFERENCE_IMPORT`) |
 | GET | `/admin/audit-logs` | 열람 기록 |
 | POST | `/admin/audit-logs/export` `{count}` | 엑셀 내려받기 기록 |
@@ -326,7 +326,7 @@ CREATE TABLE SA_SETTING (SETTING_KEY VARCHAR(40) PRIMARY KEY, SETTING_VALUE NVAR
 1. **임직원 인증**: 사내 인사정보로만 확인 — 사용자 브라우저가 사내 인사정보 URL 응답으로 사번·재직을 확인하고 API 서버에 넘긴다. API 서버는 같은 규칙으로 다시 읽고, `sso.hrApi` 가 있으면 그 사번을 인사 API 로 재확인한다(없는 사번·퇴직자 차단). 브라우저 값은 꾸밀 수 있어 '그 사번 본인인지'까지는 보장하지 않는다 — 더 강한 확인이 필요하면 `sso.mode: 'iis'`(Windows 인증 → AD). 비밀번호는 받지 않는다
 1-1. **개인정보 최소 수집**: 생년월일은 출생연도만 저장한다. 사주 입력의 월·일·시간은 저장하지 않는다(서버도 받은 값을 계산에만 쓰고 버림, 예전 데이터는 불러올 때 연도만 남김)
 2. **관리자 이중 확인**: `server/config/admins.js`의 사번·사내 계정 ID + 별도 관리자 비밀번호(bcrypt 해시 권장) · 5회 실패 시 10분 잠금(사번 기준) · 30분 무활동 자동 종료(슬라이딩)
-3. **세션**: 화면(Web 서버)과 API 서버의 주소가 달라 쿠키 대신 서명된 세션 ID 를 `X-Sayeon-Session` 헤더로 주고받는다(탭별 sessionStorage). API 는 Web 서버 화면 주소만 CORS 로 허용, 상태 변경 요청은 `X-Requested-With` 헤더 필수, 로그인 실패 제한(같은 IP·계정 10분에 10회), 로그인할 때 세션 ID 새로 발급, SSO 헤더 모드는 프록시 비밀값 필수
+3. **세션**: 화면(Web 서버)과 API 서버의 주소가 달라 쿠키 대신 서명된 세션 ID 를 `X-Sasystem-Session` 헤더로 주고받는다(탭별 sessionStorage). API 는 Web 서버 화면 주소만 CORS 로 허용, 상태 변경 요청은 `X-Requested-With` 헤더 필수, 로그인 실패 제한(같은 IP·계정 10분에 10회), 로그인할 때 세션 ID 새로 발급, SSO 헤더 모드는 프록시 비밀값 필수
 4. **암호화**: 이름·메일 AES-256-GCM(키는 `.env`의 `DATA_KEY` — 바꾸면 기존 데이터를 읽을 수 없어 서버가 시작을 멈추고 알려 준다). DB 연결 암호화는 `DB_ENCRYPT`, https는 앞단 프록시를 둘 때. 연락처는 받지 않고 매칭 시 사내 메일(인사 정보)로 안내
 5. **최소 노출**: 후보 카드는 이름 초성·팀/건물/외모/종교 미노출. 관리자 화면은 매칭 업무상 이름 전체를 보되, 상세 열람·수정·삭제·엑셀·쪽지 열람은 전부 기록. 관리 메모·내부 상태는 본인에게도 비공개 (홈의 '100% 기밀 보장'은 '신청 사실은 상대방이 전혀 몰라요'·'개인정보는 암호화해 보관해요'를 약속한다 — 이 동작과 같게 유지할 것)
 5-1. **거절 비노출**: 하트 거절·무응답·관리자 불발은 본인 화면에서 모두 '매칭 대기 중'으로만 보인다
@@ -349,9 +349,9 @@ sa/
 ├─ docs/GO-LIVE.md             ★ 운영 가이드 (배포 절차는 여기에만)
 ├─ docs/DESIGN.md
 ├─ client/                     Vue 3 + DevExtreme
-│  ├─ public/sayeon.config.js  관리자 주소 (개발용 — 운영 빌드는 servers.config.mjs 로 새로 만든다)
+│  ├─ public/sasystem.config.js  관리자 주소 (개발용 — 운영 빌드는 servers.config.mjs 로 새로 만든다)
 │  ├─ scripts/preflight.mjs    빌드 전 Node.js 버전·설치 경로 확인
-│  ├─ scripts/postbuild.mjs    빌드 후 IIS web.config · sayeon.config.js · _deploy(check-web.ps1 · deploy-web.ps1 · 파일 목록)
+│  ├─ scripts/postbuild.mjs    빌드 후 IIS web.config · sasystem.config.js · _deploy(check-web.ps1 · deploy-web.ps1 · 파일 목록)
 │  └─ src/
 │     ├─ api/core/service.js   ★ 업무 규칙 (서버와 공용)
 │     ├─ api/core/matching.js  매칭 점수

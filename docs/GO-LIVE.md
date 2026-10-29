@@ -12,7 +12,7 @@
 | 역할 | 주소 | 종류 | 인터넷 | 하는 일 |
 |---|---|---|---|---|
 | **Web 서버** | `https://oncloud9.samsungds.net:8282` (`10.122.122.1`) | 클라우드 · Windows Server | 차단 | IIS + URL Rewrite + 사내 인증서. **화면 파일만** (`dist` 를 풀어 놓는다) |
-| **API 서버** | `https://alfadev.samsungds.net:8292/sayeon` (`10.122.122.2`) | 물리 · Windows Server | 차단 | **이미 운영 중인 IIS-iisnode 앱의 `routes` 폴더에 `routes\sayeon` 을 복사** (설치 없음, [D-2](#d-2-사이트를-새로-만들기-어려울-때--회사의-다른-iisnode-앱-routes-폴더에-끼워-넣기)). **https 로만** 받는다 |
+| **API 서버** | `https://alfadev.samsungds.net:8292/sasystem` (`10.122.122.2`) | 물리 · Windows Server | 차단 | **이미 운영 중인 IIS-iisnode 앱의 `routes` 폴더에 `routes\sasystem` 을 복사** (설치 없음, [D-2](#d-2-사이트를-새로-만들기-어려울-때--회사의-다른-iisnode-앱-routes-폴더에-끼워-넣기)). **https 로만** 받는다 |
 | **DB 서버** | `10.166.101.127:1433` · DB `sasystem` | 클라우드 · Windows Server | 차단 | MSSQL — **운영·개발이 같은 DB** · 목적별 표(`SA_APPLICANT` · `SA_MATCH` …) |
 | **개발 서버** | `10.122.122.10` (개인 PC) | 물리 | **연결** | 개발(`npm run dev`) · 빌드(`npm run build`) · API 묶음(`npm run plugin`) |
 
@@ -22,8 +22,8 @@
       │
       ├── https :8282 ───▶ [Web 서버 IIS] 화면 파일만
       │
-      └── https :8292 ───▶ [API 서버 — 회사 iisnode 앱 /sayeon] ── 1433 ──▶ [DB 서버] sasystem
-           (화면 JS 가 직접 호출 · CORS: oncloud9 화면만 · 세션은 X-Sayeon-Session 헤더 · http 는 거절)
+      └── https :8292 ───▶ [API 서버 — 회사 iisnode 앱 /sasystem] ── 1433 ──▶ [DB 서버] sasystem
+           (화면 JS 가 직접 호출 · CORS: oncloud9 화면만 · 세션은 X-Sasystem-Session 헤더 · http 는 거절)
 
 [개발 PC 10.122.122.10] npm run dev (5173) ── vite 프록시 /api ── https :8292 ──▶ 같은 API · 같은 DB (테스트 사번)
 
@@ -33,11 +33,11 @@
 
 ### 개발 단계
 
-1. API · DB 서버는 미리 셋업해 둔다 (API: 그 앱 `main.js` 에 한 줄 + `routes\sayeon` · DB: 표는 처음 시작할 때 자동, 또는 `sql\setup.sql`)
+1. API · DB 서버는 미리 셋업해 둔다 (API: 그 앱 `main.js` 에 한 줄 + `routes\sasystem` · DB: 표는 처음 시작할 때 자동, 또는 `sql\setup.sql`)
 2. 개발 서버에서 `npm run dev` — 화면 5173 이 **운영 API 서버를 부르고 운영 DB 를 함께 쓴다**. 로그인 없이 **테스트 사번**으로 바로 들어간다
 3. 개발이 끝나면 개발 서버에서 `npm run build` → `client\dist` 를 압축해 Web 서버로
 4. Web 서버에서 압축을 풀고 IIS(URL Rewrite · 사내 인증서 · https 8282)로 낸다 — `dist\web.config` 가 들어 있다
-5. API 코드가 바뀌었으면 개발 서버에서 `npm run plugin` → `release\routes-production\routes\sayeon` 을 API 서버 그 앱의 `routes\sayeon` 에 덮어쓰고 앱 풀 재시작
+5. API 코드가 바뀌었으면 개발 서버에서 `npm run plugin` → `release\routes-production\routes\sasystem` 을 API 서버 그 앱의 `routes\sasystem` 에 덮어쓰고 앱 풀 재시작
 
 ### 화면 모드 — 명령으로 자동
 
@@ -52,7 +52,7 @@
 | 조건 | 어디서 |
 |---|---|
 | 호출한 PC 가 개발 PC | `servers.config.mjs` 의 `devServer.host` (`10.122.122.10`) — 그 앱 web.config 의 `promoteServerVars` 에 `REMOTE_ADDR` 필요 |
-| 개발 키가 같다 | API 서버 `routes\sayeon\.env` 의 `DEV_LOGIN_KEY` = 개발 PC `client\.env.development.local` 의 `SAYEON_DEV_KEY` (16자 이상, git 에 올리지 않는다 — 키는 브라우저로 내려가지 않고 vite 프록시만 붙인다) |
+| 개발 키가 같다 | API 서버 `routes\sasystem\.env` 의 `DEV_LOGIN_KEY` = 개발 PC `client\.env.development.local` 의 `SASYSTEM_DEV_KEY` (16자 이상, git 에 올리지 않는다 — 키는 브라우저로 내려가지 않고 vite 프록시만 붙인다) |
 | 사번이 목록에 있다 | `servers.config.mjs` 의 `devLogin.accounts` (`TEST0001` 남 · `TEST0002` 여 · `TEST0003` 관리자 시험용) |
 
 테스트 사번으로 만든 신청서에는 **'테스트' 표시**가 붙고, 일반 사용자의 후보·하트·사주·매칭·통계에 **나오지 않는다**(테스트 사번은 운영 데이터를 함께 본다). 관리자 화면 **DB 표 → 테스트 데이터 지우기**로 한 번에 지운다.
@@ -85,7 +85,7 @@
 | 화면 (운영) | 개발자 도구 단축키(F12 · Ctrl+Shift+I/J/C · Ctrl+U)·오른쪽 클릭 막기 (`servers.config.mjs` 의 `security.blockDevtools` — 보조 조치, 브라우저 메뉴로 여는 것은 못 막는다) |
 | Web 서버 (`dist\web.config`) | CSP(부를 수 있는 곳: 자기 · API · 인사 URL) · Server 헤더 비움 · X-Powered-By 제거 · `.map`·`.config`·`.json`·`.ps1` 차단 · GET/HEAD 만 · 디렉터리 목록 끔 · 다른 사이트에 끼워 보이기 금지 |
 | API | https 로 온 호출만 · CORS 는 oncloud9 화면만 · IP 당 1분 600회 · 응답 캐시 금지 · 오류에 서버 정보 없음 · 점검(`/api/health`)은 ok 만 · 관리자는 비밀번호 + 실패 잠금 · 모든 관리자 열람·수정 기록 |
-| 비밀값 | 화면에는 없다 — DB 계정(그 앱 main.js) · 키(`routes\sayeon\.env`) · 관리자 비밀번호(`config\admins.js`) 는 API 서버에만 |
+| 비밀값 | 화면에는 없다 — DB 계정(그 앱 main.js) · 키(`routes\sasystem\.env`) · 관리자 비밀번호(`config\admins.js`) 는 API 서버에만 |
 
 > ⚠ **보안 한계**: 화면 코드는 사용자 PC 로 내려가므로 읽는 것 자체를 완전히 막을 수는 없다 — 그래서 권한 판단은 모두 API 서버가 한다. 인사정보 2단계 확인은 브라우저가 하므로 사용자가 결과를 꾸밀 수 있다. API 서버에서 인사 서버로 통신이 되면 `sso.hrApi` 로 서버 재확인을 켤 수 있다.
 
@@ -180,7 +180,7 @@ npm run release
 API 서버 폴더는 **그대로 IIS 사이트 폴더**다. 패키지의 `api` 폴더를 복사하면 끝이다.
 
 ```
-C:\sites\sayeon-api\          ← IIS 사이트 'sayeon-api' (포트 8292, 운영)   ← api 폴더째 복사
+C:\sites\sasystem-api\          ← IIS 사이트 'sasystem-api' (포트 8292, 운영)   ← api 폴더째 복사
   main.js                     iisnode 진입점
   web.config                  iisnode 설정 · 환경 · API 포트 · DB 서버/이름 (appSettings)
   routes\                     API 파일 (auth.js · applications.js · me.js · messages.js · saju.js · voc.js · admin.js …)
@@ -188,7 +188,7 @@ C:\sites\sayeon-api\          ← IIS 사이트 'sayeon-api' (포트 8292, 운�
   servers.config.mjs          Web 서버 주소 · 관리자 주소 · 로그인 방식 (기준정보 사본)
   .env  config\admins.js      ★ 서버에만 — 비밀값·관리자 (복사할 때 덮어쓰지 않는다)
   iisnode\                    서버 로그 (자동 생성)
-C:\sites\sayeon-api-dev\      ← 'sayeon-api-dev' (포트 8293, 개발) — 개발 패키지(npm run release -- --env development)의 api 폴더
+C:\sites\sasystem-api-dev\      ← 'sasystem-api-dev' (포트 8293, 개발) — 개발 패키지(npm run release -- --env development)의 api 폴더
 ```
 
 1. [ ] `node-v22.12.0-x64.msi` 설치(기본 경로 `C:\Program Files\nodejs`) → **확인** `node -v` = `v22.12.0`
@@ -203,27 +203,27 @@ C:\sites\sayeon-api-dev\      ← 'sayeon-api-dev' (포트 8293, 개발) — 개
    ```powershell
    powershell -ExecutionPolicy Bypass -File C:\deploy\<빌드번호>-production\api\_deploy\deploy-api.ps1
    ```
-   앱 풀 `sayeon-api`(관리 코드 없음 · 유휴 종료 끔 · 겹친 재활용 끔 · 프로세스 1개)과 사이트 `sayeon-api`(포트 8292, 폴더 `C:\sites\sayeon-api`), 방화벽(→ 8292 인바운드 — 사용자 PC 브라우저가 직접 부른다)을 만들고 파일을 놓은 뒤, **`.env`·관리자 파일을 만들라는 안내와 함께 멈춘다**
-4. [ ] `C:\sites\sayeon-api\web.config` 의 `<appSettings>` 확인 — 패키지가 기준정보로 채워 둔다
+   앱 풀 `sasystem-api`(관리 코드 없음 · 유휴 종료 끔 · 겹친 재활용 끔 · 프로세스 1개)과 사이트 `sasystem-api`(포트 8292, 폴더 `C:\sites\sasystem-api`), 방화벽(→ 8292 인바운드 — 사용자 PC 브라우저가 직접 부른다)을 만들고 파일을 놓은 뒤, **`.env`·관리자 파일을 만들라는 안내와 함께 멈춘다**
+4. [ ] `C:\sites\sasystem-api\web.config` 의 `<appSettings>` 확인 — 패키지가 기준정보로 채워 둔다
 
    | 키 | 운영 | 개발 사이트 |
    |---|---|---|
-   | `SAYEON_ENV` | `production` | `development` |
+   | `SASYSTEM_ENV` | `production` | `development` |
    | `API_PORT` | `8292` (IIS 사이트 포트와 같게) | `8293` |
    | `DB_HOST` · `DB_PORT` · `DB_NAME` | `10.166.101.127` · `1433` · `sasystem` | 같은 서버 · `sasystem_dev` |
 
-5. [ ] `C:\sites\sayeon-api\.env` — `copy .env.example .env` 후 채우기
+5. [ ] `C:\sites\sasystem-api\.env` — `copy .env.example .env` 후 채우기
 
    | 항목 | 값 |
    |---|---|
    | `SESSION_SECRET` | 비워 두고 점검(`npm run check`)을 돌리면 예시 값을 만들어 준다 |
-   | `DB_USER` / `DB_PASSWORD` | 앱 전용 계정 (`sayeon_app` + 새 비밀번호 — E 단계가 만든다) |
+   | `DB_USER` / `DB_PASSWORD` | 앱 전용 계정 (`sasystem_app` + 새 비밀번호 — E 단계가 만든다) |
    | `DB_ADMIN_USER` / `DB_ADMIN_PASSWORD` | `sa` 등 — E 단계 동안만, 끝나면 지움 |
    | `DATA_KEY` | 점검이 만들어 주는 값. ⚠ **한 번 정하면 절대 바꾸지 말고 따로 보관** |
    | `SSO_API_KEY` | 서버 재확인용 인사 API 키 (있으면) |
-6. [ ] `C:\sites\sayeon-api\config\admins.js` — `copy admins.example.js admins.js` → `accounts` 에 매칭 담당자 사번·계정 ID, 비밀번호 해시
+6. [ ] `C:\sites\sasystem-api\config\admins.js` — `copy admins.example.js admins.js` → `accounts` 에 매칭 담당자 사번·계정 ID, 비밀번호 해시
    ```powershell
-   cd C:\sites\sayeon-api
+   cd C:\sites\sasystem-api
    npm run hash-password -- "새 관리자 비밀번호"
    ```
 7. [ ] DB 준비 → **E 단계**
@@ -231,44 +231,44 @@ C:\sites\sayeon-api-dev\      ← 'sayeon-api-dev' (포트 8293, 개발) — 개
    ```powershell
    powershell -ExecutionPolicy Bypass -File C:\deploy\<빌드번호>-production\api\_deploy\deploy-api.ps1
    ```
-9. [ ] 개발 사이트도 같은 방법으로 — 개발 서버에서 `npm run release -- --env development` → 그 패키지의 `deploy-api.ps1` (사이트 `sayeon-api-dev`, 포트 8293, 폴더 `C:\sites\sayeon-api-dev`)
+9. [ ] 개발 사이트도 같은 방법으로 — 개발 서버에서 `npm run release -- --env development` → 그 패키지의 `deploy-api.ps1` (사이트 `sasystem-api-dev`, 포트 8293, 폴더 `C:\sites\sasystem-api-dev`)
 
 재부팅하면 IIS 가 사이트를 자동으로 시작하고, 첫 요청 때 iisnode 가 서버를 띄운다 (따로 할 일 없음).
 
 - **확인**
   - `deploy-api.ps1` 마지막이 `API 서버 배포 완료` · `http://localhost:8292/api/health → 정상`
-  - `cd C:\sites\sayeon-api` → `npm run check` 가 ✖ 0 ([7-1](#7-1-npm-run-check--api-서버) 읽는 법) — IIS·iisnode·URL Rewrite, web.config, 사이트·포트, DB, 관리자, 사내 로그인
+  - `cd C:\sites\sasystem-api` → `npm run check` 가 ✖ 0 ([7-1](#7-1-npm-run-check--api-서버) 읽는 법) — IIS·iisnode·URL Rewrite, web.config, 사이트·포트, DB, 관리자, 사내 로그인
   - 서버 재확인을 켰으면 `npm run sso:test -- --empno <내 사번>` → "바로 들어올 수 있어요"
-  - 서버를 다시 띄우려면 `Restart-WebAppPool sayeon-api` (web.config 나 `.js` 파일을 바꾸면 iisnode 가 알아서 다시 띄운다)
-  - 로그: `C:\sites\sayeon-api\iisnode\` (시작 실패도 "원인 / 해결" 로 남는다)
+  - 서버를 다시 띄우려면 `Restart-WebAppPool sasystem-api` (web.config 나 `.js` 파일을 바꾸면 iisnode 가 알아서 다시 띄운다)
+  - 로그: `C:\sites\sasystem-api\iisnode\` (시작 실패도 "원인 / 해결" 로 남는다)
 
-**직접 복사로 배포할 때** (스크립트 없이): 앱 풀 멈춤 → 패키지 `api` 폴더 내용을 사이트 폴더에 복사(**`.env` · `config\admins.js` 는 덮어쓰지 않음**) → 사이트 폴더에서 `npm run check` → `Start-WebAppPool sayeon-api` → `http://localhost:8292/api/health`
+**직접 복사로 배포할 때** (스크립트 없이): 앱 풀 멈춤 → 패키지 `api` 폴더 내용을 사이트 폴더에 복사(**`.env` · `config\admins.js` 는 덮어쓰지 않음**) → 사이트 폴더에서 `npm run check` → `Start-WebAppPool sasystem-api` → `http://localhost:8292/api/health`
 
 #### D-2. 사이트를 새로 만들기 어려울 때 — 회사의 다른 iisnode 앱 `routes` 폴더에 끼워 넣기
 
-> **지금 배포 방식이다** — API 서버 `10.122.122.2` 의 운영 중인 IIS-iisnode 앱(https 8292, 인증서 `alfadev.samsungds.net`, Node 22, `require` 방식) `routes` 폴더에 `routes\sayeon` 을 복사한다. 사緣 전용 사이트(위 D)로 돌아가려면 `basePath: ''`.
+> **지금 배포 방식이다** — API 서버 `10.122.122.2` 의 운영 중인 IIS-iisnode 앱(https 8292, 인증서 `alfadev.samsungds.net`, Node 22, `require` 방식) `routes` 폴더에 `routes\sasystem` 을 복사한다. 사緣 전용 사이트(위 D)로 돌아가려면 `basePath: ''`.
 
 API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어려우면, 이미 돌고 있는 다른 iisnode(Express) 앱에 사緣 API 를 **폴더 하나**로 넣는다. 라이브러리까지 한 파일(`index.js`)에 묶여 있어 `npm install` 이 필요 없다.
 
-1. [ ] `servers.config.mjs` 의 `api` — `dnsName: 'alfadev.samsungds.net'`(인증서 이름), `port: 8292`(그 앱 IIS 사이트의 https 포트), `https: true`, `basePath: '/sayeon'` (개발 화면도 같은 API 를 쓴다 — 개발용 경로를 따로 두지 않는다)
-   - **사용자 PC 브라우저**가 `https://<dnsName>/sayeon/api/…` 를 직접 부른다 → 사내 PC 가 그 이름을 찾을 수 있어야 하고(사내 DNS 등록), 인증서를 발급한 **사내 인증 기관(루트) 인증서를 사내 PC 가 신뢰**해야 한다 (보통 사내 PC 에는 배포돼 있다)
+1. [ ] `servers.config.mjs` 의 `api` — `dnsName: 'alfadev.samsungds.net'`(인증서 이름), `port: 8292`(그 앱 IIS 사이트의 https 포트), `https: true`, `basePath: '/sasystem'` (개발 화면도 같은 API 를 쓴다 — 개발용 경로를 따로 두지 않는다)
+   - **사용자 PC 브라우저**가 `https://<dnsName>/sasystem/api/…` 를 직접 부른다 → 사내 PC 가 그 이름을 찾을 수 있어야 하고(사내 DNS 등록), 인증서를 발급한 **사내 인증 기관(루트) 인증서를 사내 PC 가 신뢰**해야 한다 (보통 사내 PC 에는 배포돼 있다)
    - 그 앱 IIS 사이트에 https 8292 바인딩 + `alfadev.samsungds.net` 인증서, 방화벽 **사용자 PC 대역 · 개발 PC → 8292**
    - API 는 `web`(IP · DNS 이름)에서 연 화면의 호출만 받는다(CORS). 다른 주소로도 화면을 열면 묶음 `.env` 의 `CORS_ORIGINS` 에 더한다
-   - 로그인 세션은 쿠키가 아니라 `X-Sayeon-Session` 헤더로 주고받는다 — 화면과 API 의 주소가 달라도 회사 브라우저의 제3자 쿠키 정책과 상관없다. 탭마다 따로이고, 탭을 닫으면 끝난다(다시 열면 인사정보로 자동 재확인)
-2. [ ] 개발 PC 에서 `npm run release` — `basePath` 가 있으면 `api\` 대신 `routes\sayeon\` 을 만든다 (묶음만: server 폴더에서 `npm run plugin`)
-   화면 설정 `sayeon.config.js` 의 `apiBase` 에 `https://<dnsName>/sayeon` 이 들어간다 (Web 서버 web.config 에는 `/api` 전달이 없다)
-3. [ ] `routes\sayeon` 폴더를 그 앱의 `routes` 폴더에 복사 → 그 앱 `main.js` 에 한 줄 — **그 앱의 CORS·로그인 미들웨어보다 앞에**, 그 앱의 mssql 설정(계정 포함)을 넘긴다
+   - 로그인 세션은 쿠키가 아니라 `X-Sasystem-Session` 헤더로 주고받는다 — 화면과 API 의 주소가 달라도 회사 브라우저의 제3자 쿠키 정책과 상관없다. 탭마다 따로이고, 탭을 닫으면 끝난다(다시 열면 인사정보로 자동 재확인)
+2. [ ] 개발 PC 에서 `npm run release` — `basePath` 가 있으면 `api\` 대신 `routes\sasystem\` 을 만든다 (묶음만: server 폴더에서 `npm run plugin`)
+   화면 설정 `sasystem.config.js` 의 `apiBase` 에 `https://<dnsName>/sasystem` 이 들어간다 (Web 서버 web.config 에는 `/api` 전달이 없다)
+3. [ ] `routes\sasystem` 폴더를 그 앱의 `routes` 폴더에 복사 → 그 앱 `main.js` 에 한 줄 — **그 앱의 CORS·로그인 미들웨어보다 앞에**, 그 앱의 mssql 설정(계정 포함)을 넘긴다
    ```js
    // 그 앱 main.js 에 이미 있는 mssql 설정 변수를 넘긴다 (변수 이름은 그 앱에 맞게). DB 이름은 사緣 것(sasystem)을 쓴다
-   app.use('/sayeon', require('./routes/sayeon')({ db: dbConfig }));
-   // 그 앱 계정 대신 사緣 전용 계정을 쓰려면 위 대신 아래 + routes\sayeon\.env 의 DB_USER · DB_PASSWORD
-   // app.use('/sayeon', require('./routes/sayeon'));
+   app.use('/sasystem', require('./routes/sasystem')({ db: dbConfig }));
+   // 그 앱 계정 대신 사緣 전용 계정을 쓰려면 위 대신 아래 + routes\sasystem\.env 의 DB_USER · DB_PASSWORD
+   // app.use('/sasystem', require('./routes/sasystem'));
    ```
    - 그 앱 계정이 `sasystem` DB 에 읽기·쓰기(처음 한 번은 표 만들기) 권한이 있어야 한다. 표 만들기 권한이 없으면 DB 담당자가 `sql\setup.sql` 로 표를 미리 만든다
 4. [ ] 그 앱 web.config 의 `<iisnode>` — **`nodeProcessCountPerApplication="1"` 필수**(사緣은 데이터를 메모리에 두고 저장한다), **`promoteServerVars="REMOTE_ADDR,HTTPS"` 필요** (REMOTE_ADDR: 사용자 IP — 열람 기록 · 로그인 확인 횟수 제한 · 개발 PC 확인 / HTTPS: http 로 온 호출 거절). Node.js 22 이상
    그 앱이 모든 요청에 로그인 확인 · CORS 를 먼저 거는 구조면 사緣 줄을 그보다 **앞에** 둔다 (OPTIONS 사전 확인 요청이 사緣까지 와야 한다)
-5. [ ] `routes\sayeon\.env` 채우기 — `SESSION_SECRET` · `DATA_KEY` (DB 계정은 3번에서 넘겼으면 비워 둔다) · 개발 화면을 쓸 거면 `DEV_LOGIN_KEY`(16자 이상, 개발 PC `client\.env.development.local` 의 `SAYEON_DEV_KEY` 와 같게) → `config\admins.js` → 그 앱의 앱 풀 재시작
-6. [ ] **확인** — **사내 PC 브라우저**에서 `https://alfadev.samsungds.net:8292/sayeon/api/health` (인증서 이름과 맞아야 하므로 DNS 이름으로) → `{"ok":true …}` · 이어서 화면 로그인 · 실패하면 그 앱 iisnode 로그의 `[sayeon]` 줄 (허용하지 않은 화면 주소에서 부르면 `[sayeon] 허용하지 않은 화면 주소 …` 가 남는다)
+5. [ ] `routes\sasystem\.env` 채우기 — `SESSION_SECRET` · `DATA_KEY` (DB 계정은 3번에서 넘겼으면 비워 둔다) · 개발 화면을 쓸 거면 `DEV_LOGIN_KEY`(16자 이상, 개발 PC `client\.env.development.local` 의 `SASYSTEM_DEV_KEY` 와 같게) → `config\admins.js` → 그 앱의 앱 풀 재시작
+6. [ ] **확인** — **사내 PC 브라우저**에서 `https://alfadev.samsungds.net:8292/sasystem/api/health` (인증서 이름과 맞아야 하므로 DNS 이름으로) → `{"ok":true …}` · 이어서 화면 로그인 · 실패하면 그 앱 iisnode 로그의 `[sasystem]` 줄 (허용하지 않은 화면 주소에서 부르면 `[sasystem] 허용하지 않은 화면 주소 …` 가 남는다)
 
 순서 전체는 묶음 안의 `설치안내.txt`. 사緣이 시작에 실패해도 **그 앱은 그대로 돈다**(사緣 API 만 503, 30초 뒤 다시 시도). 설정은 묶음 폴더의 `.env` 에서만 읽고 그 앱의 환경 변수·세션과 섞지 않는다. 업데이트는 `index.js` 등을 덮어쓰고(`.env` · `config\admins.js` 는 그대로) 앱 풀 재시작 — `routes` 아래 파일은 iisnode 가 바뀐 것을 알아채지 못한다.
 
@@ -280,7 +280,7 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 1. `.env` 에 앱 계정(`DB_USER`·`DB_PASSWORD`)과 관리 계정(`DB_ADMIN_USER=sa`·`DB_ADMIN_PASSWORD`)
 2. 바꾸지 않고 할 일만 보기 → 실행
    ```powershell
-   cd C:\sites\sayeon-api
+   cd C:\sites\sasystem-api
    npm run db:setup -- --check
    npm run db:setup
    ```
@@ -320,21 +320,21 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 2. [ ] C 단계의 **URL Rewrite 2.1** 설치 (ARR 은 필요 없다 — 이 서버는 `/api` 를 넘기지 않는다)
 3. [ ] 사이트 만들기 (폴더는 영문 경로, 인증은 기본값 — 익명 인증 켜짐 그대로)
    ```powershell
-   New-Item -ItemType Directory -Force D:\sites\sayeon
-   New-Website -Name 'sayeon' -Port 8282 -Ssl -PhysicalPath 'D:\sites\sayeon'
-   # IIS 관리자 → 사이트 'sayeon' → 바인딩 → https 8282 에 사내 인증서 'oncloud9.samsungds.net' 선택
-   New-NetFirewallRule -DisplayName 'sayeon web 8282' -Direction Inbound -Protocol TCP -LocalPort 8282 -Action Allow
+   New-Item -ItemType Directory -Force D:\sites\sasystem
+   New-Website -Name 'sasystem' -Port 8282 -Ssl -PhysicalPath 'D:\sites\sasystem'
+   # IIS 관리자 → 사이트 'sasystem' → 바인딩 → https 8282 에 사내 인증서 'oncloud9.samsungds.net' 선택
+   New-NetFirewallRule -DisplayName 'sasystem web 8282' -Direction Inbound -Protocol TCP -LocalPort 8282 -Action Allow
    ```
 4. [ ] 화면 배포 — 개발 서버의 `client\dist` 압축을 풀어 사이트 폴더에 (또는 패키지의 스크립트로 백업·교체·점검까지)
    ```powershell
-   powershell -ExecutionPolicy Bypass -File C:\deploy\<빌드번호>-production\web\_deploy\deploy-web.ps1 -SitePath D:\sites\sayeon
+   powershell -ExecutionPolicy Bypass -File C:\deploy\<빌드번호>-production\web\_deploy\deploy-web.ps1 -SitePath D:\sites\sasystem
    ```
 - **확인**: `check-web.ps1` 이 `[실패] 0` ([7-2](#7-2-check-webps1--web-서버) 읽는 법) — 정적 파일·화면 스크립트 응답, 화면 설정의 API 주소, 사내 인사정보 URL 설정. API 연결·로그인은 G 단계에서 **사내 PC** 로 확인 (Web 서버에서 API 에 닿지 않아도 정상)
 
 ### G. 사내 PC 확인
 
 - [ ] 사내 PC(사내 포털에 로그인한 상태)에서 `https://oncloud9.samsungds.net:8282` → **로그인 화면 없이 홈**, 화면 위 이름·사업부
-- [ ] "임직원만 이용할 수 있어요" 가 뜨면 → F12 → **Console** 에 CORS 오류가 있는지(0장 3번), **Network** 에서 인사정보 URL 응답 확인 → **애플리케이션 → 로컬 스토리지** 의 `sayeon.employee` 값을 파일로 저장해 API 서버에서 `npm run sso:test -- --file 응답.json`
+- [ ] "임직원만 이용할 수 있어요" 가 뜨면 → F12 → **Console** 에 CORS 오류가 있는지(0장 3번), **Network** 에서 인사정보 URL 응답 확인 → **애플리케이션 → 로컬 스토리지** 의 `sasystem.employee` 값을 파일로 저장해 API 서버에서 `npm run sso:test -- --file 응답.json`
 - [ ] 사내망 밖·인사정보 없는 PC 에서는 안내 화면이 뜨는지
 - [ ] 관리자 담당자 PC 에서 `…/changeme` → 관리자 비밀번호 → 대시보드
 - [ ] 신청서 작성 → 하트 → 매칭 → 쪽지, 인연 사주 (리허설 계정 2개 이상)
@@ -356,14 +356,14 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 | 2 | 개발 서버 | git 커밋 | `git status` 깨끗 |
 | 3 | 개발 서버 | `npm run release` | 마지막 `배포 패키지 준비 완료`, ⚠ "커밋하지 않은 변경" 이 없을 것 |
 | 4 | API 서버 | `deploy-api.ps1` (패키지의 `api\_deploy`) — **API 먼저** | `배포 완료` · `/api/health 정상`. 점검·시작이 실패하면 **자동으로 이전 버전으로 되돌린다** |
-| 5 | Web 서버 | `deploy-web.ps1 -SitePath D:\sites\sayeon` | `check-web.ps1` `[실패] 0` |
+| 5 | Web 서버 | `deploy-web.ps1 -SitePath D:\sites\sasystem` | `check-web.ps1` `[실패] 0` |
 | 6 | 사내 PC | Ctrl+F5 → **새 기능** + 기본 흐름: 홈 진입 · 인연 사주 · 신청서 저장 · 쪽지 · 관리자 대시보드 | 모두 됨 |
 | 7 | 문제 시 | 되돌리기 — 각 스크립트가 마지막에 보여주는 `-Rollback <백업 폴더>` (API·Web 각각) | 이전 화면·기능으로 동작 |
 
 - DB 표의 원본은 `DATA_JSON` 이라 **기능 추가로 항목이 늘어도 표를 바꿀 일이 없다** — 코드만 바꾼다. 보기용 열을 더하려면 `server/shared/db/tables.js` 와 `npm run sql:tables`(setup.sql) 를 함께 바꾸고, 운영 DB 에는 `ALTER TABLE … ADD` 를 직접 한다
 - 기준정보(선택 목록)를 추가했다면 배포 후 관리자 화면 → 기준정보 → 엑셀 가져오기
 - API 를 먼저 배포하는 이유: 새 화면이 새 API 를 부를 수 있어서. 화면만 바뀐 경우 5번만 해도 된다 (패키지는 늘 통째로 만든다)
-- 백업 위치: API `C:\sayeon-backup\api\<시각>`, Web `C:\sayeon-backup\web\<시각>` — 가끔 오래된 것을 지운다
+- 백업 위치: API `C:\sasystem-backup\api\<시각>`, Web `C:\sasystem-backup\web\<시각>` — 가끔 오래된 것을 지운다
 
 ---
 
@@ -375,10 +375,10 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 | Web 서버 DNS 이름 | `servers.config.mjs` 의 `web.dnsName` | release → 둘 다 배포 |
 | DB 서버 IP / DB 이름 | `servers.config.mjs` 의 `db` (+ DB 백업·복원 → `npm run db:setup`) | release → API 배포 |
 | DB 서버·DB 이름 · API 포트 | API 서버 사이트 폴더의 `web.config` (`appSettings`) — 또는 `servers.config.mjs` 고쳐 다시 패키지 | 저장하면 iisnode 가 다시 띄움 → `npm run check` |
-| DB 계정·비밀번호 | API 서버 사이트 폴더의 `.env` | `npm run check` → `Restart-WebAppPool sayeon-api` |
-| 사내 인사정보 URL (브라우저가 부름) | `servers.config.mjs` 의 `sso.employeeApi` | release → Web 배포 (급하면 Web 서버의 `sayeon.config.js` 만 고쳐도 됨 — 다음 배포 때 덮어써짐) |
+| DB 계정·비밀번호 | API 서버 사이트 폴더의 `.env` | `npm run check` → `Restart-WebAppPool sasystem-api` |
+| 사내 인사정보 URL (브라우저가 부름) | `servers.config.mjs` 의 `sso.employeeApi` | release → Web 배포 (급하면 Web 서버의 `sasystem.config.js` 만 고쳐도 됨 — 다음 배포 때 덮어써짐) |
 | 서버 재확인용 인사 API | `servers.config.mjs` 의 `sso.hrApi` | release → API 배포 → `npm run sso:test -- --empno …` |
-| 인사 API 키 | API 서버 사이트 폴더 `.env` 의 `SSO_API_KEY` | `Restart-WebAppPool sayeon-api` |
+| 인사 API 키 | API 서버 사이트 폴더 `.env` 의 `SSO_API_KEY` | `Restart-WebAppPool sasystem-api` |
 | 응답 필드 이름·사업부 이름·재직 아님 값 | `client\src\utils\employeeInfo.js` 의 `FIELD`·`DIVISION_MAP`·`INACTIVE` (화면·서버 같이 씀) | release → API·Web 둘 다 배포 |
 | 관리자 추가·삭제·비밀번호 | API 서버 사이트 폴더 `config\admins.js` | 자동 (3초) |
 | 관리자 주소 | `servers.config.mjs` 의 `adminPath` | release → 둘 다 배포 |
@@ -406,10 +406,10 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 ### browser 방식 (`sso.mode: 'browser'`) — 인사정보 2단계 확인
 
 1. **사내 인사 데이터 URL** (`sso.employeeApi`) — 화면을 열 때 사용자 PC 브라우저가 부른다. 사내 SSO 쿠키를 함께 보낸다(`withCredentials`). 주소·본문에 `{ls:키}`(localStorage 값)·`{query:이름}`(주소창 값)을 쓸 수 있다
-   - 정상 회신이면 응답을 **localStorage 의 `sayeon.employee`** 에 저장하고 `sabun` · `user_name` 등을 읽는다 (`server/shared/utils/employeeInfo.js` — JSON 어디에 있든 사번이 든 객체를 찾고, 필드 이름은 대소문자·`_` 무시)
+   - 정상 회신이면 응답을 **localStorage 의 `sasystem.employee`** 에 저장하고 `sabun` · `user_name` 등을 읽는다 (`server/shared/utils/employeeInfo.js` — JSON 어디에 있든 사번이 든 객체를 찾고, 필드 이름은 대소문자·`_` 무시)
 2. **임직원 확인 URL** (`sso.employeeCheck`) — 1)에서 읽은 값으로 POST. 본문 `{ sabun: '{sabun}', user_name: '{user_name}' }` (`{필드}` = 1) 응답의 같은 이름 값)
    - `okPath` 를 정하면 응답의 그 값이 `okValues`(예: `Y` · `true`) 중 하나일 때 임직원 · 비우면 응답에서 같은 사번을 찾고 재직 상태로 판단
-   - 응답에 같은 사람의 성별·사업부 등이 더 있으면 1)의 정보와 합친다 · 응답은 `sayeon.employee.check` 에 저장
+   - 응답에 같은 사람의 성별·사업부 등이 더 있으면 1)의 정보와 합친다 · 응답은 `sasystem.employee.check` 에 저장
    - 비워 두면 1)만으로 확인한다
 3. 임직원이면 그 정보를 **API 서버**(`/api/auth/sso`)로 보낸다 → 세션 → 홈. (선택) `sso.hrApi.url` 이 있으면 API 서버가 그 사번을 인사 API 에 한 번 더 묻는다 (API 서버 → 인사 서버 통신이 될 때만)
 
@@ -423,7 +423,7 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 | `employeeApi.url` 비어 있음 | "서비스를 준비하고 있어요" |
 
 - 두 인사 서버 모두 `https://oncloud9.samsungds.net:8282` 에 CORS 를 허용하고 **https** 여야 한다 (Web 화면이 https)
-- 시험: 사내 PC 화면 F12 → Network 에서 두 호출의 응답 확인 · 애플리케이션 → 로컬 스토리지의 `sayeon.employee` · `sayeon.employee.check`
+- 시험: 사내 PC 화면 F12 → Network 에서 두 호출의 응답 확인 · 애플리케이션 → 로컬 스토리지의 `sasystem.employee` · `sasystem.employee.check`
 - ⚠ 브라우저가 확인한 결과는 사용자가 꾸밀 수 있다 (0장 보안 한계)
 
 ---
@@ -432,9 +432,9 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 
 | 무엇 | 어디 | 설정 |
 |---|---|---|
-| 화면 개발 + 운영 데이터 | 개발 서버 `client` → `npm run dev` (5173) | `client\.env.development.local` 에 `SAYEON_DEV_KEY` (= API 서버 `routes\sayeon\.env` 의 `DEV_LOGIN_KEY`). 예시: `client\.env.development.local.example` |
+| 화면 개발 + 운영 데이터 | 개발 서버 `client` → `npm run dev` (5173) | `client\.env.development.local` 에 `SASYSTEM_DEV_KEY` (= API 서버 `routes\sasystem\.env` 의 `DEV_LOGIN_KEY`). 예시: `client\.env.development.local.example` |
 | 화면 개발 (가짜 데이터) | `client` → `npm run dev:mock` | 설정 없음 — 만능 계정으로 바로 홈, 로그아웃하면 테스트 계정 고르기 |
-| 운영 빌드 미리보기 | `client` → `npm run build` → `npm run preview` → `/api` 를 운영 API(또는 `DEV_API_PROXY`)로 | 로그인은 인사정보 2단계 (`dist\sayeon.config.js` 의 URL) |
+| 운영 빌드 미리보기 | `client` → `npm run build` → `npm run preview` → `/api` 를 운영 API(또는 `DEV_API_PROXY`)로 | 로그인은 인사정보 2단계 (`dist\sasystem.config.js` 의 URL) |
 | API 를 내 PC 에서 | `server` → `npm start` (node main.js) | `server\.env` (`STORE=memory` 면 DB 없이). ⚠ **운영 DB 를 넣고 띄우지 않는다** — 운영 API 와 서로 덮어쓴다 |
 
 ⚠ 이 DB 를 쓰는 사緣 API 는 **API 서버의 하나뿐**이다. 개발 화면도 그 API 를 부른다.
@@ -493,7 +493,7 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 |---|---|
 | 명령이 메시지 없이 꺼짐 | Node 22.12 + 한글 경로 → 영문 경로로 |
 | 화면 전체가 500.19 오류 | URL Rewrite 미설치 → C 단계 msi 설치 |
-| "사緣 서버에 연결하지 못했어요" | 브라우저가 API 서버에 닿지 못함. 사내 PC F12 → Console 에 **CORS 오류**면 화면 주소가 API 의 허용 목록에 없음(묶음 `.env` 의 `CORS_ORIGINS` · 그 앱 iisnode 로그의 `[sayeon] 허용하지 않은 화면 주소`) / Network 에서 API 요청이 실패면 사내 PC → API 443 방화벽 · DNS 이름 · 인증서 신뢰 (사내 PC 브라우저에서 `https://<dnsName>/sayeon/api/health`) / 503 이면 사緣 시작 실패(그 앱 iisnode 로그) |
+| "사緣 서버에 연결하지 못했어요" | 브라우저가 API 서버에 닿지 못함. 사내 PC F12 → Console 에 **CORS 오류**면 화면 주소가 API 의 허용 목록에 없음(묶음 `.env` 의 `CORS_ORIGINS` · 그 앱 iisnode 로그의 `[sasystem] 허용하지 않은 화면 주소`) / Network 에서 API 요청이 실패면 사내 PC → API 443 방화벽 · DNS 이름 · 인증서 신뢰 (사내 PC 브라우저에서 `https://<dnsName>/sasystem/api/health`) / 503 이면 사緣 시작 실패(그 앱 iisnode 로그) |
 | 화면이 하얗게만 나옴 | F12 → Console 에 `MIME type "text/html"` 이면 화면 파일 누락·하위 경로 배포·정적 콘텐츠 기능 없음 (`check-web.ps1` 2·4·5번) / 주소창에 IE 아이콘이면 Edge IE 모드 → 사이트 목록에서 제외 요청 |
 | 모두 "임직원만 이용할 수 있어요" | 사내 PC F12 → Console 에 **CORS 오류**면 인사정보 서버에 CORS 허용 요청(0장 3번) / Network 에서 인사정보 URL 응답이 401·302 면 사내 포털 로그인·쿠키 / 응답은 오는데 안 되면 `npm run sso:test -- --file 응답.json` |
 | "사내 인사정보 서버에 연결하지 못했어요" | 사내 PC → 인사정보 URL 네트워크·주소, 인사정보 서버 5xx / 서버 재확인을 켰으면 API 서버 → 인사 API 방화벽·`SSO_API_KEY` |

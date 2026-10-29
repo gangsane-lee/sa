@@ -35,7 +35,7 @@ npm run release
 powershell -ExecutionPolicy Bypass -File <패키지>\api\_deploy\deploy-api.ps1
 
 # Web 서버 — 백업 → 교체 → IIS·파일·연결·로그인 점검
-powershell -ExecutionPolicy Bypass -File <패키지>\web\_deploy\deploy-web.ps1 -SitePath D:\sites\sayeon
+powershell -ExecutionPolicy Bypass -File <패키지>\web\_deploy\deploy-web.ps1 -SitePath D:\sites\sasystem
 
 # API 서버에서 따로 돌리는 점검
 npm run check                          # 서버 기준정보 · .env · DB · 관리자 · 사내 로그인
@@ -60,7 +60,7 @@ npm run sso:test -- --user 회사아이디   # AD 조회 → 사내 인사 API �
 
 ## 로그인과 역할
 
-- **운영 모드** (`npm run build`): 로그인 화면이 없다. 화면을 열 때 **사내 인사 데이터 URL** 로 sabun · user_name 을 받아(localStorage `sayeon.employee`) → 그 값으로 **임직원 확인 URL** 에 POST → 임직원이면 API 서버로 넘겨 바로 홈. 아니면 "임직원만 이용할 수 있어요" 안내 화면 (자세히: [GO-LIVE 4장](docs/GO-LIVE.md#4-사내-로그인-구조))
+- **운영 모드** (`npm run build`): 로그인 화면이 없다. 화면을 열 때 **사내 인사 데이터 URL** 로 sabun · user_name 을 받아(localStorage `sasystem.employee`) → 그 값으로 **임직원 확인 URL** 에 POST → 임직원이면 API 서버로 넘겨 바로 홈. 아니면 "임직원만 이용할 수 있어요" 안내 화면 (자세히: [GO-LIVE 4장](docs/GO-LIVE.md#4-사내-로그인-구조))
 - **개발 모드** (`npm run dev`): 운영 API 서버(같은 DB)를 부르고, 로그인 화면 없이 테스트 사번(`servers.config.mjs` 의 `devLogin`)으로 바로 홈. 테스트 사번으로 만든 데이터는 일반 사용자에게 보이지 않는다
 - **가짜 데이터 모드** (`npm run dev:mock`): 서버 없이 만능 테스트 계정으로 바로 홈. 로그아웃하면 다른 테스트 계정을 고를 수 있다
 - **개인정보**: 생년월일은 **출생연도만** 저장한다. 인연 사주에 입력한 월·일·태어난 시간은 저장하지 않는다
@@ -72,7 +72,7 @@ npm run sso:test -- --user 회사아이디   # AD 조회 → 사내 인사 API �
 ```bash
 cd client
 npm ci
-npm run dev        # 운영 API · 운영 데이터 · 테스트 사번 (client/.env.development.local 에 SAYEON_DEV_KEY 필요 — .env.development.local.example)
+npm run dev        # 운영 API · 운영 데이터 · 테스트 사번 (client/.env.development.local 에 SASYSTEM_DEV_KEY 필요 — .env.development.local.example)
 npm run dev:mock   # 서버 없이 가짜 데이터
 ```
 
@@ -80,7 +80,7 @@ npm run dev:mock   # 서버 없이 가짜 데이터
 
 | 용도 | 사내 계정 ID | 비고 |
 |---|---|---|
-| 만능 계정 | `sayeon.test` | 신청 완료 · 받은 하트 2개 · 관리자 계정이기도 함 |
+| 만능 계정 | `sasystem.test` | 신청 완료 · 받은 하트 2개 · 관리자 계정이기도 함 |
 | 매칭 담당자 | `jiwon.jung` | 관리자 계정, 신청서 없음 |
 | 신청 전 | `haneul.kim` | 신청서 작성부터 시험 |
 | 신청 완료 + 받은 하트 1 | `doyun.lee` | |

@@ -146,8 +146,8 @@ const AD_SCRIPT = `
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
 $s = New-Object System.DirectoryServices.DirectorySearcher
-if ($env:SAYEON_AD_PATH) { $s.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry($env:SAYEON_AD_PATH) }
-$s.Filter = "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$($env:SAYEON_AD_ID)))"
+if ($env:SASYSTEM_AD_PATH) { $s.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry($env:SASYSTEM_AD_PATH) }
+$s.Filter = "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$($env:SASYSTEM_AD_ID)))"
 ${AD_PROPS.map((p) => `[void]$s.PropertiesToLoad.Add('${p}')`).join('\n')}
 $r = $s.FindOne()
 if (-not $r) { '{}'; exit 0 }
@@ -163,7 +163,7 @@ let adLookupImpl = (id) =>
     execFile(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', AD_ENCODED],
-      { env: { ...process.env, SAYEON_AD_ID: id, SAYEON_AD_PATH: S.adPath }, timeout: 10000, windowsHide: true, encoding: 'utf8', maxBuffer: 1 << 20 },
+      { env: { ...process.env, SASYSTEM_AD_ID: id, SASYSTEM_AD_PATH: S.adPath }, timeout: 10000, windowsHide: true, encoding: 'utf8', maxBuffer: 1 << 20 },
       (err, stdout, stderr) => {
         if (err) return reject(new Error(String(stderr || err.message).trim().split('\n')[0]));
         try {

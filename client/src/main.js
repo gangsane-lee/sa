@@ -13,7 +13,7 @@ import '@fontsource/gowun-batang/700.css';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
 
-import './styles/dx.sayeon.css';
+import './styles/dx.sasystem.css';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/dx-overrides.css';

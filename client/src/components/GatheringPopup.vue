@@ -9,7 +9,7 @@ import { DxPopup } from 'devextreme-vue/popup';
 import { DxButton } from 'devextreme-vue/button';
 import { api } from '@/api';
 
-const KEY = 'sayeon.gathering.shown';
+const KEY = 'sasystem.gathering.shown';
 const router = useRouter();
 const visible = ref(false);
 const applied = ref(false);

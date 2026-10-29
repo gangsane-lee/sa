@@ -1,7 +1,7 @@
 /**
  * 사내 로그인 연결 시험 — API 서버의 server 폴더에서
  *
- *   npm run sso:test -- --file 응답.json          browser 방식(기본): 브라우저가 받은 인사정보 응답(localStorage sayeon.employee)을 읽어 보기
+ *   npm run sso:test -- --file 응답.json          browser 방식(기본): 브라우저가 받은 인사정보 응답(localStorage sasystem.employee)을 읽어 보기
  *   npm run sso:test -- --empno 사번              browser 방식: 서버 재확인용 사내 인사 API(sso.hrApi)만 시험
  *   npm run sso:test -- --user 회사아이디          iis 방식: 그 계정으로 AD 조회 → 사내 인사 API → 사緣에 들어올 정보
  *
@@ -53,7 +53,7 @@ if (S.mode === 'browser' && !opt('url')[0]) {
   if (!file && !empNo) {
     console.log('\n  사용법');
     console.log('    npm run sso:test -- --file 응답.json    사내 PC 브라우저가 받은 응답을 읽어 보기');
-    console.log("        (사緣 화면 F12 → 애플리케이션 → 로컬 스토리지 → 'sayeon.employee' 값을 복사해 파일로 저장)");
+    console.log("        (사緣 화면 F12 → 애플리케이션 → 로컬 스토리지 → 'sasystem.employee' 값을 복사해 파일로 저장)");
     console.log('    npm run sso:test -- --empno 사번        서버 재확인용 사내 인사 API(sso.hrApi)만 시험\n');
     process.exit(r.summary({ failText: '위 사용법으로 다시 실행해 주세요.' }) || 1);
   }

@@ -85,7 +85,7 @@ async function findPick() {
  * 신청 전이면 정규 신청과 같은 신청서(4페이지)로 간다. 신청하는 순간 이 분에게 하트가 함께 간다.
  * 사주에 입력한 생년월일은 연도만 넘긴다 (월·일은 저장하지 않음)
  */
-const SAJU_KEY = 'sayeon.sajuApply';
+const SAJU_KEY = 'sasystem.sajuApply';
 async function heart() {
   if (!applied.value) {
     try {

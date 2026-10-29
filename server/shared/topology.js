@@ -8,7 +8,7 @@ const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]
 const HOSTNAME = /^(?=.{1,253}$)[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/;
 const isHost = (h) => IPV4.test(h) || (HOSTNAME.test(h) && !/^\d+(\.\d+)*$/.test(h));
 const isPort = (p) => Number.isInteger(p) && p > 0 && p < 65536;
-/** '/sayeon' 처럼 영문·숫자·-·_ 한 단계 (빈 값 = 맨 앞) */
+/** '/sasystem' 처럼 영문·숫자·-·_ 한 단계 (빈 값 = 맨 앞) */
 const BASE_PATH = /^(\/[A-Za-z0-9_-]+)?$/;
 
 
@@ -37,9 +37,9 @@ export function resolveTopology(master, envName = 'production') {
   if (web.host && isHost(web.host) && !IPV4.test(web.host)) problems.push(`Web 서버 주소(${envName}.web.host)는 IP 로 적어 주세요 (DNS 이름은 web.dnsName)`);
   if (web.dnsName && !HOSTNAME.test(web.dnsName)) problems.push(`Web 서버 DNS 이름 형식이 맞지 않아요: '${web.dnsName}'`);
   web.https = web.https === true;
-  // 다른 iisnode 앱에 끼워 넣을 때 그 앱이 사緣을 붙인 경로 (app.use('/sayeon', …)). 사緣 전용 사이트면 비운다
+  // 다른 iisnode 앱에 끼워 넣을 때 그 앱이 사緣을 붙인 경로 (app.use('/sasystem', …)). 사緣 전용 사이트면 비운다
   api.basePath = String(api.basePath ?? '').replace(/\/+$/, '');
-  if (!BASE_PATH.test(api.basePath)) problems.push(`API 경로(${envName}.api.basePath)는 '/sayeon' 처럼 영문·숫자·-·_ 한 단계로: '${api.basePath}'`);
+  if (!BASE_PATH.test(api.basePath)) problems.push(`API 경로(${envName}.api.basePath)는 '/sasystem' 처럼 영문·숫자·-·_ 한 단계로: '${api.basePath}'`);
   // https 면 사용자 브라우저가 인증서 이름을 확인하므로 DNS 이름(인증서에 적힌 이름)으로 부른다. host(IP)는 방화벽·연결 점검용
   api.https = api.https === true;
   api.dnsName = String(api.dnsName ?? '').trim();

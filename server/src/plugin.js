@@ -1,13 +1,13 @@
 /**
  * 사緣 API 를 회사의 다른 iisnode(Express) 앱에 끼워 넣는 입구 — tools/plugin.mjs 가 이 파일을 라이브러리째 하나로 묶어
- * routes/sayeon/index.js 를 만든다. 그 앱의 main.js 에 한 줄만 더하면 된다:
+ * routes/sasystem/index.js 를 만든다. 그 앱의 main.js 에 한 줄만 더하면 된다:
  *
- *     app.use('/sayeon', require('./routes/sayeon')({ db: 그앱의mssql설정 }));   // DB 계정을 그 앱 것으로
- *     app.use('/sayeon', require('./routes/sayeon'));                          // DB 계정을 묶음 폴더 .env 로
+ *     app.use('/sasystem', require('./routes/sasystem')({ db: 그앱의mssql설정 }));   // DB 계정을 그 앱 것으로
+ *     app.use('/sasystem', require('./routes/sasystem'));                          // DB 계정을 묶음 폴더 .env 로
  *   경로는 servers.config.mjs 의 api.basePath 와 같게. 그 앱의 CORS·로그인 미들웨어보다 앞에 둔다
  *
  * 그 앱의 프로세스 안에서 돌기 때문에
- *  - 실패해도 process.exit 하지 않는다 → /sayeon/api 만 503 으로 답하고, 30초 뒤 다음 요청 때 다시 시작해 본다
+ *  - 실패해도 process.exit 하지 않는다 → /sasystem/api 만 503 으로 답하고, 30초 뒤 다음 요청 때 다시 시작해 본다
  *  - 설정은 묶음 폴더의 .env 에서만 읽는다 (runtime.plugin.js — 그 앱의 환경 변수와 섞지 않는다)
  */
 import { config, topology } from './config.js';
@@ -17,8 +17,8 @@ import { initAdmins, isAdmin, verifyAdminPassword } from './admins.js';
 import { createApp } from './app.js';
 
 const RETRY_MS = 30_000;
-const log = (...a) => console.log('[sayeon]', ...a);
-const fail = (...a) => console.error('[sayeon]', ...a);
+const log = (...a) => console.log('[sasystem]', ...a);
+const fail = (...a) => console.error('[sasystem]', ...a);
 
 let ready;
 let failedAt = 0;
@@ -89,10 +89,10 @@ function handle(req, res, next) {
 
 /**
  * 그 앱에 붙이는 미들웨어
- *  app.use('/sayeon', sayeon)                     — 그대로 미들웨어로
- *  app.use('/sayeon', sayeon({ db: mssql설정 }))   — 그 앱의 DB 접속 설정을 넘기고 미들웨어를 받는다
+ *  app.use('/sasystem', sasystem)                     — 그대로 미들웨어로
+ *  app.use('/sasystem', sasystem({ db: mssql설정 }))   — 그 앱의 DB 접속 설정을 넘기고 미들웨어를 받는다
  */
-export default function sayeon(reqOrOptions, res, next) {
+export default function sasystem(reqOrOptions, res, next) {
   if (res === undefined && next === undefined) {
     if (ready) fail('설정은 처음 한 번만 넘길 수 있어요 — main.js 에서 require(…)(…) 를 한 번만 불러 주세요');
     else {
@@ -104,4 +104,4 @@ export default function sayeon(reqOrOptions, res, next) {
   return handle(reqOrOptions, res, next);
 }
 /** 시작이 끝났는지 (묶음 점검용) */
-sayeon.whenReady = () => ensureBoot();
+sasystem.whenReady = () => ensureBoot();

@@ -51,7 +51,7 @@ const separateApp = Boolean(c.adminUser) && c.adminUser.toLowerCase() !== c.user
   if (config.store !== 'mssql') r.warn(`STORE=${config.store} — 서버는 DB를 쓰지 않는 설정이에요`, { fix: ['운영에서는 STORE=mssql'] });
   if (!c.server) (bad = true), r.fail('DB 서버 주소가 비어 있어요', { fix: ['servers.config.mjs 의 db.host'] });
   if (!SAFE_DB_NAME.test(c.database)) (bad = true), r.fail(`DB 이름 형식이 맞지 않아요: ${c.database}`, { fix: ['servers.config.mjs 의 db.name — 영문·숫자·_ 만 (예: sasystem)'] });
-  if (!c.user) (bad = true), r.fail('DB_USER(앱 계정)가 비어 있어요', { fix: ['예: DB_USER=sayeon_app'] });
+  if (!c.user) (bad = true), r.fail('DB_USER(앱 계정)가 비어 있어요', { fix: ['예: DB_USER=sasystem_app'] });
   else if (!SAFE_LOGIN.test(c.user)) (bad = true), r.fail(`DB_USER 형식이 맞지 않아요: ${c.user}`, { fix: ['영문·숫자·_ 만 쓸 수 있어요'] });
   if (!c.password) (bad = true), r.fail('DB_PASSWORD 가 비어 있어요');
   if (c.adminUser && !c.adminPassword) (bad = true), r.fail('DB_ADMIN_USER 는 있는데 DB_ADMIN_PASSWORD 가 비어 있어요');
@@ -61,7 +61,7 @@ const separateApp = Boolean(c.adminUser) && c.adminUser.toLowerCase() !== c.user
   if (!separateApp && c.user.toLowerCase() === 'sa') {
     r.warn('서버가 sa 계정을 그대로 써요', {
       reason: 'sa 는 SQL Server 전체 권한이라, 비밀번호가 새면 다른 DB까지 위험해요.',
-      fix: ['전용 계정 권장: .env 에 DB_ADMIN_USER=sa, DB_ADMIN_PASSWORD=(sa 비밀번호), DB_USER=sayeon_app, DB_PASSWORD=(새 비밀번호) 로 바꾸고 다시 실행'],
+      fix: ['전용 계정 권장: .env 에 DB_ADMIN_USER=sa, DB_ADMIN_PASSWORD=(sa 비밀번호), DB_USER=sasystem_app, DB_PASSWORD=(새 비밀번호) 로 바꾸고 다시 실행'],
     });
   }
 }

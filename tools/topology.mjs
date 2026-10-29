@@ -7,7 +7,7 @@ import { resolveTopology, isIPv4 } from '../server/shared/topology.js';
 
 export const ENV_NAMES = Object.keys(master.environments ?? {});
 
-/** @param {string} [envName] production | development (비우면 SAYEON_ENV, 그것도 없으면 production) */
-export const loadTopology = (envName = process.env.SAYEON_ENV || 'production') => resolveTopology(master, envName);
+/** @param {string} [envName] production | development (비우면 SASYSTEM_ENV, 그것도 없으면 production) */
+export const loadTopology = (envName = process.env.SASYSTEM_ENV || 'production') => resolveTopology(master, envName);
 
 export { isIPv4, master };

@@ -24,7 +24,7 @@ const router = useRouter();
 const route = useRoute();
 /** 인연 사주에서 왔는가 — 사주 인연에게 하트를 보내려고 신청하는 중이면 신청과 함께 하트가 간다 */
 const fromSaju = route.query.from === 'saju';
-const SAJU_KEY = 'sayeon.sajuApply';
+const SAJU_KEY = 'sasystem.sajuApply';
 function takeSaju() {
   try {
     const d = JSON.parse(sessionStorage.getItem(SAJU_KEY) ?? 'null');

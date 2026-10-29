@@ -1,5 +1,5 @@
 {
-  "name": "sayeon-server",
+  "name": "sasystem-server",
   "private": true,
   "version": "1.0.0",
   "description": "사緣 API 서버 — Express + MSSQL, IIS + iisnode 로 실행 (main.js · web.config)",

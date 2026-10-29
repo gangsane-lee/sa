@@ -54,7 +54,7 @@ try {
   $site = Get-Website | Where-Object { [Environment]::ExpandEnvironmentVariables($_.physicalPath).TrimEnd('\') -ieq $SiteRoot.TrimEnd('\') } | Select-Object -First 1
 } catch {}
 if (-not $site) {
-  Fail "이 폴더를 쓰는 IIS 사이트가 없어요" $null "New-Website -Name 'sayeon' -Port $WebPort -PhysicalPath '$SiteRoot'"
+  Fail "이 폴더를 쓰는 IIS 사이트가 없어요" $null "New-Website -Name 'sasystem' -Port $WebPort -PhysicalPath '$SiteRoot'"
 } else {
   Ok "사이트 '$($site.name)' · 상태 $($site.state)"
   if ($site.state -ne 'Started') { Fail '사이트가 멈춰 있어요' $null "Start-Website -Name '$($site.name)'" }
@@ -63,12 +63,12 @@ if (-not $site) {
 }
 try {
   $fw = Get-NetFirewallPortFilter -Protocol TCP -ErrorAction Stop | Where-Object { $_.LocalPort -eq "$WebPort" } | Get-NetFirewallRule | Where-Object { $_.Enabled -eq 'True' -and $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' }
-  if ($fw) { Ok "방화벽 인바운드 $WebPort 허용" } else { Warn "방화벽에 $WebPort 인바운드 허용 규칙이 안 보여요" '사내 PC 에서 접속하지 못할 수 있어요.' "New-NetFirewallRule -DisplayName 'sayeon web $WebPort' -Direction Inbound -Protocol TCP -LocalPort $WebPort -Action Allow" }
+  if ($fw) { Ok "방화벽 인바운드 $WebPort 허용" } else { Warn "방화벽에 $WebPort 인바운드 허용 규칙이 안 보여요" '사내 PC 에서 접속하지 못할 수 있어요.' "New-NetFirewallRule -DisplayName 'sasystem web $WebPort' -Direction Inbound -Protocol TCP -LocalPort $WebPort -Action Allow" }
 } catch { Info '방화벽 규칙을 확인하지 못했어요' }
 
 # ── 4. 화면 파일 ──────────────────────────────────────
 Section '4 화면 파일'
-foreach ($f in @('index.html', 'web.config', 'sayeon.config.js')) {
+foreach ($f in @('index.html', 'web.config', 'sasystem.config.js')) {
   if (Test-Path (Join-Path $SiteRoot $f)) { Ok "$f 있음" } else { Fail "$f 가 없어요" '빌드 결과를 일부만 복사했어요.' '배포 패키지의 web 폴더 전체를 사이트 폴더에 복사' }
 }
 $manifestPath = Join-Path $PSScriptRoot 'manifest.json'
@@ -82,18 +82,18 @@ if (Test-Path $manifestPath) {
   }
   if ($bad.Count -eq 0) { Ok "파일 $(@($manifest.files.PSObject.Properties).Count)개가 빌드와 같아요" } else { Fail "빌드와 다른 파일 $($bad.Count)개" (($bad | Select-Object -First 5) -join ' · ') '배포 패키지의 web 폴더를 다시 통째로 복사 (robocopy /MIR)' }
 } else { Warn 'manifest.json 이 없어 파일 비교를 건너뛰어요' $null $null }
-$cfg = Get-Content (Join-Path $SiteRoot 'sayeon.config.js') -Raw -ErrorAction SilentlyContinue
+$cfg = Get-Content (Join-Path $SiteRoot 'sasystem.config.js') -Raw -ErrorAction SilentlyContinue
 if ($SsoMode -eq 'browser') {
   if ($EmployeeUrl) { Ok "사내 인사정보 URL $EmployeeUrl" } else { Fail '사내 인사정보 URL 이 비어 있어요' '모든 사용자가 "임직원만 이용할 수 있어요" 화면으로 가요.' '개발 서버의 servers.config.mjs 에서 sso.employeeApi.url 을 채우고 다시 빌드·배포' }
-  if ($cfg -and $EmployeeUrl -and -not $cfg.Contains($EmployeeUrl)) { Warn 'sayeon.config.js 의 인사정보 URL 이 빌드 기준과 달라요' '사이트 폴더에서 직접 고쳤다면 괜찮아요.' $null }
+  if ($cfg -and $EmployeeUrl -and -not $cfg.Contains($EmployeeUrl)) { Warn 'sasystem.config.js 의 인사정보 URL 이 빌드 기준과 달라요' '사이트 폴더에서 직접 고쳤다면 괜찮아요.' $null }
 }
-if ($cfg -and -not $cfg.Contains($ApiUrl)) { Fail "sayeon.config.js 에 API 주소($ApiUrl)가 없어요" '화면이 다른 주소로 API 를 불러요.' '배포 패키지의 web 폴더를 다시 통째로 복사 (사이트 폴더에서 직접 고쳤다면 apiBase 값 확인)' } elseif ($cfg) { Ok "화면이 부를 API 주소 $ApiUrl" }
+if ($cfg -and -not $cfg.Contains($ApiUrl)) { Fail "sasystem.config.js 에 API 주소($ApiUrl)가 없어요" '화면이 다른 주소로 API 를 불러요.' '배포 패키지의 web 폴더를 다시 통째로 복사 (사이트 폴더에서 직접 고쳤다면 apiBase 값 확인)' } elseif ($cfg) { Ok "화면이 부를 API 주소 $ApiUrl" }
 
 # ── 5. 화면 응답 ──────────────────────────────────────
 Section '5 화면 응답 (이 서버에서)'
 try {
   $r = Invoke-WebRequest "http://localhost:$WebPort/" -UseBasicParsing -TimeoutSec 10
-  if ($r.StatusCode -eq 200 -and $r.Content -match 'sayeon|사緣') { Ok "화면 열림 (http://localhost:$WebPort/)" } else { Warn "화면 응답 $($r.StatusCode)" $null $null }
+  if ($r.StatusCode -eq 200 -and $r.Content -match 'sasystem|사緣') { Ok "화면 열림 (http://localhost:$WebPort/)" } else { Warn "화면 응답 $($r.StatusCode)" $null $null }
 } catch { Fail '이 서버에서 화면이 열리지 않아요' $_.Exception.Message '위 2·3 항목(IIS·URL Rewrite·사이트)을 먼저 해결' }
 # 화면 스크립트가 진짜 스크립트로 오는지 — 파일이 없으면 화면 주소 규칙이 index.html 을 대신 돌려줘 하얀 화면이 된다
 $js = Get-ChildItem (Join-Path $SiteRoot 'assets') -Filter '*.js' -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -105,7 +105,7 @@ if ($js) {
 } else { Fail 'assets 폴더에 화면 스크립트가 없어요' $null '배포 패키지의 web 폴더를 다시 통째로 복사' }
 try {
   $r = Invoke-WebRequest "http://localhost:$WebPort/saju" -UseBasicParsing -TimeoutSec 10
-  if ($r.Content -match 'sayeon.config.js') { Ok '화면 주소 새로 고침 정상 (/saju → index.html)' } else { Warn '화면 주소 규칙 응답이 이상해요' $null $null }
+  if ($r.Content -match 'sasystem.config.js') { Ok '화면 주소 새로 고침 정상 (/saju → index.html)' } else { Warn '화면 주소 규칙 응답이 이상해요' $null $null }
 } catch { Fail '화면 주소(/saju)를 새로 고치면 열리지 않아요' $_.Exception.Message 'URL Rewrite 설치 · web.config 확인' }
 
 # ── 6. API 서버 — 사용자 PC 가 직접 부른다 ─────────────

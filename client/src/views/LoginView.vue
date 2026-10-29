@@ -23,9 +23,9 @@ const account = ref('');
 const error = ref('');
 const busy = ref('');
 
-/* global __SAYEON_MOCK__ */
+/* global __SASYSTEM_MOCK__ */
 /** 가짜 데이터 테스트 계정 — 빌드(npm run build)·개발 모드(npm run dev)에서는 import 자체가 사라진다 */
-const loadSeed = () => (__SAYEON_MOCK__ ? import('@/api/mock/accounts.js') : Promise.resolve(null));
+const loadSeed = () => (__SASYSTEM_MOCK__ ? import('@/api/mock/accounts.js') : Promise.resolve(null));
 const GENDER = { M: '남', F: '여' };
 
 onMounted(async () => {
@@ -38,7 +38,7 @@ onMounted(async () => {
       }));
     } catch (e) {
       error.value = e.status === 404
-        ? '이 PC 에서는 테스트 사번 로그인이 허용되지 않았어요 — 개발 PC IP · client/.env.development.local 의 SAYEON_DEV_KEY · API 서버 .env 의 DEV_LOGIN_KEY 를 확인해 주세요.'
+        ? '이 PC 에서는 테스트 사번 로그인이 허용되지 않았어요 — 개발 PC IP · client/.env.development.local 의 SASYSTEM_DEV_KEY · API 서버 .env 의 DEV_LOGIN_KEY 를 확인해 주세요.'
         : e.message;
     }
     return;

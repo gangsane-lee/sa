@@ -116,14 +116,14 @@ r.section(`설정 web.config · servers.config.mjs — 환경 ${topology.envName
   if (!W) {
     r.fail('web.config 가 없어요', { reason: 'IIS 가 main.js 를 실행하지 못하고, 환경·DB 서버도 정해지지 않아요.', fix: ['배포 패키지의 api 폴더를 통째로 복사  또는 이 폴더에서  npm run webconfig  (개발이면  -- --env development)'] });
   } else {
-    const missing = ['SAYEON_ENV', 'API_PORT', 'DB_HOST', 'DB_NAME'].filter((k) => !W[k]);
+    const missing = ['SASYSTEM_ENV', 'API_PORT', 'DB_HOST', 'DB_NAME'].filter((k) => !W[k]);
     if (missing.length) r.warn(`web.config 에 없는 값: ${missing.join(', ')}`, { reason: '없는 값은 servers.config.mjs 값을 써요.' });
-    r.ok(`web.config — 환경 ${W.SAYEON_ENV ?? '-'} · API 포트 ${W.API_PORT ?? '-'} · DB ${W.DB_HOST ?? '-'}:${W.DB_PORT ?? '1433'}/${W.DB_NAME ?? '-'}`);
+    r.ok(`web.config — 환경 ${W.SASYSTEM_ENV ?? '-'} · API 포트 ${W.API_PORT ?? '-'} · DB ${W.DB_HOST ?? '-'}:${W.DB_PORT ?? '1433'}/${W.DB_NAME ?? '-'}`);
   }
-  if (!['production', 'development'].includes(env.SAYEON_ENV ?? 'production')) {
-    r.fail(`SAYEON_ENV 값이 맞지 않아요: ${env.SAYEON_ENV}`, { fix: ['web.config 의 SAYEON_ENV 를 production(운영) 또는 development(개발)로'] });
+  if (!['production', 'development'].includes(env.SASYSTEM_ENV ?? 'production')) {
+    r.fail(`SASYSTEM_ENV 값이 맞지 않아요: ${env.SASYSTEM_ENV}`, { fix: ['web.config 의 SASYSTEM_ENV 를 production(운영) 또는 development(개발)로'] });
   }
-  if (!env.SAYEON_ENV) r.info('web.config 에 SAYEON_ENV 가 없어 production 으로 봐요');
+  if (!env.SASYSTEM_ENV) r.info('web.config 에 SASYSTEM_ENV 가 없어 production 으로 봐요');
   r.info(`기준정보 ${MASTER_FILE ?? '(없음)'}`);
   if (T.problems.length) {
     for (const p of T.problems) r.fail(p, { fix: ['저장소 맨 위 servers.config.mjs(또는 web.config)를 고친 뒤 — 개발 서버에서 다시 패키지(npm run release)'] });
@@ -133,7 +133,7 @@ r.section(`설정 web.config · servers.config.mjs — 환경 ${topology.envName
     r.ok(`DB   ${T.db.host}:${T.db.port} / ${T.db.name}`);
     r.ok(`로그인 방식 ${T.sso.mode ?? 'browser'} · 관리자 주소 ${T.adminPath}`);
   }
-  const RESERVED = ['/', '/login', '/apply', '/me', '/saju', '/messages', '/voc', '/privacy', '/api', '/assets', '/sayeon.config.js', '/favicon.svg', '/_deploy'];
+  const RESERVED = ['/', '/login', '/apply', '/me', '/saju', '/messages', '/voc', '/privacy', '/api', '/assets', '/sasystem.config.js', '/favicon.svg', '/_deploy'];
   if (RESERVED.includes(T.adminPath.toLowerCase()) || !/^\/[A-Za-z0-9_-]+$/.test(T.adminPath)) {
     r.fail(`adminPath(${T.adminPath})가 사용자 화면 주소와 겹치거나 형식이 맞지 않아요`, { fix: ['servers.config.mjs 의 adminPath 를 한 단어 주소로 (예: /changeme)'] });
   }
@@ -259,7 +259,7 @@ else {
     }
 
     // 운영 빌드에는 개발 모드의 가짜 데이터가 없어야 한다
-    if (bundle.includes('sayeon.mock.db')) r.fail('빌드에 개발용 가짜 데이터가 들어 있어요', { fix: ['client 폴더에서  npm run build  로 다시 빌드 (npm run dev 결과물이 아닌지 확인)'] });
+    if (bundle.includes('sasystem.mock.db')) r.fail('빌드에 개발용 가짜 데이터가 들어 있어요', { fix: ['client 폴더에서  npm run build  로 다시 빌드 (npm run dev 결과물이 아닌지 확인)'] });
     else r.ok('빌드 종류: 운영 모드(가짜 데이터 없음)');
 
     // DevExtreme 라이선스
@@ -288,7 +288,7 @@ r.section(`IIS 사이트 · 포트 ${config.port}`);
       const sites = out.split(/\r?\n/).filter(Boolean).map((l) => l.split('|'));
       const mine = sites.find(([, p]) => path.resolve(p).toLowerCase() === SERVER_ROOT.toLowerCase());
       if (!mine) {
-        r.fail('이 폴더를 쓰는 IIS 사이트가 없어요', { fix: [`New-WebAppPool sayeon-api${topology.envName === 'development' ? '-dev' : ''}  →  New-Website -Name 'sayeon-api${topology.envName === 'development' ? '-dev' : ''}' -Port ${config.port} -PhysicalPath '${SERVER_ROOT}' -ApplicationPool 'sayeon-api${topology.envName === 'development' ? '-dev' : ''}'  (docs/GO-LIVE.md 1장 D)`] });
+        r.fail('이 폴더를 쓰는 IIS 사이트가 없어요', { fix: [`New-WebAppPool sasystem-api${topology.envName === 'development' ? '-dev' : ''}  →  New-Website -Name 'sasystem-api${topology.envName === 'development' ? '-dev' : ''}' -Port ${config.port} -PhysicalPath '${SERVER_ROOT}' -ApplicationPool 'sasystem-api${topology.envName === 'development' ? '-dev' : ''}'  (docs/GO-LIVE.md 1장 D)`] });
       } else {
         const [name, , ports, pool] = mine;
         if (ports.split(',').includes(String(config.port))) r.ok(`IIS 사이트 '${name}' · 포트 ${config.port} · 앱 풀 ${pool}`);
@@ -518,9 +518,9 @@ r.section(`사내 로그인 — ${{ browser: '화면이 사내 인사정보 URL 
   } else if (S.mode === 'browser') {
     const E = topology.sso.employeeApi ?? {};
     if (E.url) r.ok(`사내 인사정보 URL(브라우저가 부름) ${E.method ?? 'GET'} ${E.url}`);
-    else r.fail('사내 인사정보 URL 이 비어 있어요 (servers.config.mjs 의 sso.employeeApi.url)', { reason: '모든 사용자가 "임직원만 이용할 수 있어요" 화면으로 가요.', fix: ['개발 서버에서 servers.config.mjs 를 고쳐 다시 빌드·배포 (또는 Web 서버의 sayeon.config.js 수정)'] });
+    else r.fail('사내 인사정보 URL 이 비어 있어요 (servers.config.mjs 의 sso.employeeApi.url)', { reason: '모든 사용자가 "임직원만 이용할 수 있어요" 화면으로 가요.', fix: ['개발 서버에서 servers.config.mjs 를 고쳐 다시 빌드·배포 (또는 Web 서버의 sasystem.config.js 수정)'] });
     r.info('인사정보는 사용자 PC 브라우저가 부르므로 이 서버에서는 연결을 시험하지 않아요 — 사내 PC 에서 화면을 열어 확인');
-    r.info('응답 읽기 시험:  npm run sso:test -- --file 응답.json  (사내 PC 화면 F12 → 로컬 스토리지의 sayeon.employee 값을 파일로)');
+    r.info('응답 읽기 시험:  npm run sso:test -- --file 응답.json  (사내 PC 화면 F12 → 로컬 스토리지의 sasystem.employee 값을 파일로)');
     if (S.hrApi.url) {
       if (!URL.canParse(S.hrApi.url.replace(/{[^}]*}/g, 'x'))) r.fail(`hrApi.url 형식이 맞지 않아요: ${S.hrApi.url}`);
       else {
@@ -533,7 +533,7 @@ r.section(`사내 로그인 — ${{ browser: '화면이 사내 인사정보 URL 
   } else if (S.mode === 'iis') {
     r.ok(`로그인 헤더 ${S.headerName} 는 Web 서버(${config.trustedProxies.join(', ')})에서 온 요청만 믿어요`);
     const D = config.devLogin;
-    if (D.key && D.key.length < 16) r.warn('DEV_LOGIN_KEY 가 16자 미만이라 테스트 사번 로그인이 꺼져 있어요', { fix: ['16자 이상 무작위 값으로 (개발 PC 의 SAYEON_DEV_KEY 와 같게)'] });
+    if (D.key && D.key.length < 16) r.warn('DEV_LOGIN_KEY 가 16자 미만이라 테스트 사번 로그인이 꺼져 있어요', { fix: ['16자 이상 무작위 값으로 (개발 PC 의 SASYSTEM_DEV_KEY 와 같게)'] });
     else if (D.key) r.info(`개발 화면 테스트 사번 로그인 켜짐 — 개발 PC ${D.allowIps.join(', ') || '(없음)'} 에서만 · 사번 ${D.accounts.map((a) => a.empNo).join(', ')} · 개발을 쉬는 동안은 DEV_LOGIN_KEY 를 비워 두세요`);
     if (S.devUser) r.warn(`개발 시험 계정 DEV_SSO_USER=${S.devUser} 가 켜져 있어요`, { reason: 'IIS 없이 이 계정으로 로그인돼요 (development 환경에서만).', fix: ['시험이 끝나면 server/.env 에서 지워 주세요.'] });
     // 도메인 · AD 조회
@@ -618,7 +618,7 @@ r.section(`사내 로그인 — ${{ browser: '화면이 사내 인사정보 URL 
 
 process.exit(
   r.summary({
-    okText: `준비됐어요 → IIS 앱 풀 재시작(Restart-WebAppPool sayeon-api${topology.envName === 'development' ? '-dev' : ''}) 후 ${topology.api.https ? config.apiUrl : `http://localhost:${config.port}`}/api/health 확인`,
+    okText: `준비됐어요 → IIS 앱 풀 재시작(Restart-WebAppPool sasystem-api${topology.envName === 'development' ? '-dev' : ''}) 후 ${topology.api.https ? config.apiUrl : `http://localhost:${config.port}`}/api/health 확인`,
     failText: '✖ 항목을 고친 뒤 다시  npm run check  해 주세요. (자세한 순서: docs/GO-LIVE.md)',
   }),
 );

@@ -5,7 +5,7 @@
  */
 import { registerTheme } from 'devextreme/viz/themes';
 
-export const VIZ_THEME = 'sayeon.viz';
+export const VIZ_THEME = 'sasystem.viz';
 export const SERIES = { male: '#3B3F7A', female: '#D9677E', single: '#3B3F7A' };
 /** 사업부 비율(도넛) — 명도 차이가 큰 순서로. 라벨에 이름·%를 함께 써서 색에만 기대지 않는다 */
 export const PIE_PALETTE = ['#1428A0', '#C8243F', '#7E82C2', '#E8A0AE', '#8A8FA3', '#B07D12'];

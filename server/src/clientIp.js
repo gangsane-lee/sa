@@ -21,7 +21,7 @@ export function clientIpOf(req) {
   const ip = peerOf(req);
   if (!ip && UNDER_IISNODE && !warned) {
     warned = true;
-    console.warn('[sayeon] 사용자 IP 를 알 수 없어요 — 그 앱 web.config 의 <iisnode … promoteServerVars="REMOTE_ADDR" /> 를 넣어 주세요 (열람 기록 IP 가 비고, 로그인 확인 횟수 제한이 꺼져요)');
+    console.warn('[sasystem] 사용자 IP 를 알 수 없어요 — 그 앱 web.config 의 <iisnode … promoteServerVars="REMOTE_ADDR" /> 를 넣어 주세요 (열람 기록 IP 가 비고, 로그인 확인 횟수 제한이 꺼져요)');
   }
   return ip || '-';
 }

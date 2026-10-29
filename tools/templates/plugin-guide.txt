@@ -20,8 +20,8 @@
         app.use('__BASE_PATH__', require('./routes/__FOLDER__')({ db: dbConfig }));
       · DB 이름은 사緣 것(__DB_NAME__)을 쓴다 (그 앱 설정의 database 는 무시) — 그 계정에 __DB_NAME__ 읽기·쓰기 권한 필요
       · 사緣 전용 DB 계정을 쓰려면 대신:  app.use('__BASE_PATH__', require('./routes/__FOLDER__'));  + 4) .env 의 DB_USER · DB_PASSWORD
-      · ESM(import) 앱이면:  import sayeon from './routes/__FOLDER__/index.js';  app.use('__BASE_PATH__', sayeon({ db: dbConfig }));
-    · 그 앱이 express.json() · 세션을 먼저 써도 괜찮다 (사緣은 자기 세션을 X-Sayeon-Session 헤더로 따로 쓴다)
+      · ESM(import) 앱이면:  import sasystem from './routes/__FOLDER__/index.js';  app.use('__BASE_PATH__', sasystem({ db: dbConfig }));
+    · 그 앱이 express.json() · 세션을 먼저 써도 괜찮다 (사緣은 자기 세션을 X-Sasystem-Session 헤더로 따로 쓴다)
     · CORS · 로그인 미들웨어보다 앞이어야 하는 이유: 사緣 API 는 다른 주소의 화면(__WEB_URL__)이 부르므로
       OPTIONS 사전 확인 요청이 사緣까지 와야 하고, 사緣의 CORS(허용 화면만)가 답해야 한다
 
@@ -36,7 +36,7 @@ __HTTPS_STEP__
 
  4) 비밀 설정 — routes\__FOLDER__ 에서
       copy .env.example .env          → SESSION_SECRET · DATA_KEY 채우기 (DB 계정은 2)에서 넘겼으면 비워 둔다)
-                                         개발 화면(npm run dev)을 쓰면 DEV_LOGIN_KEY (개발 PC 의 SAYEON_DEV_KEY 와 같게)
+                                         개발 화면(npm run dev)을 쓰면 DEV_LOGIN_KEY (개발 PC 의 SASYSTEM_DEV_KEY 와 같게)
       copy config\admins.example.js config\admins.js
       node tools\hash-password.mjs "새 관리자 비밀번호"   → 결과를 admins.js 의 passwordHash 에
 
@@ -56,7 +56,7 @@ __HTTPS_STEP__
       (.env 의 CORS_ORIGINS 에 그 주소를 더하고 앱 풀 재시작)
     사내 인사 API 재확인을 켰으면
       node tools\sso-test.mjs --empno <사번>
-    실패하면 그 앱의 iisnode 로그에서 [sayeon] 로 시작하는 줄 (원인 / 해결)
+    실패하면 그 앱의 iisnode 로그에서 [sasystem] 로 시작하는 줄 (원인 / 해결)
     시작에 실패해도 그 앱은 그대로 돈다 — 사緣 API 만 503 으로 답하고, 30초 뒤 다음 요청 때 다시 시작해 본다
 
 ────────────────────────────────────────

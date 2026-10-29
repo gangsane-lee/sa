@@ -81,9 +81,9 @@ const switchAccount = () =>
     if (isDevApi) router.push({ name: 'login', query: { redirect: ADMIN_PATH } });
   });
 
-/* global __SAYEON_MOCK__ */
+/* global __SASYSTEM_MOCK__ */
 /** 가짜 데이터 모드 계정 채우기 — 빌드(npm run build)·개발 모드에서는 import 자체가 사라진다 */
-const loadAccounts = () => (__SAYEON_MOCK__ ? import('@/api/mock/accounts.js') : Promise.resolve(null));
+const loadAccounts = () => (__SASYSTEM_MOCK__ ? import('@/api/mock/accounts.js') : Promise.resolve(null));
 async function fillTest() {
   const a = isMock ? await loadAccounts() : null;
   if (!a) return;

@@ -1,12 +1,12 @@
 # ════════════════════════════════════════════════════════════════
 #  사緣 Web 서버 배포 — 배포 패키지의 web 폴더를 IIS 사이트 폴더로 옮기고 점검까지
-#    PowerShell(관리자) →  powershell -ExecutionPolicy Bypass -File <패키지>\web\_deploy\deploy-web.ps1 -SitePath D:\sites\sayeon
+#    PowerShell(관리자) →  powershell -ExecutionPolicy Bypass -File <패키지>\web\_deploy\deploy-web.ps1 -SitePath D:\sites\sasystem
 #  하는 일: 지금 사이트 폴더 백업 → 새 화면으로 교체(robocopy /MIR) → check-web.ps1 점검
-#  되돌리기:  ... deploy-web.ps1 -SitePath D:\sites\sayeon -Rollback <백업 폴더>
+#  되돌리기:  ... deploy-web.ps1 -SitePath D:\sites\sasystem -Rollback <백업 폴더>
 # ════════════════════════════════════════════════════════════════
 param(
   [Parameter(Mandatory = $true)][string]$SitePath,
-  [string]$BackupRoot = 'C:\sayeon-backup\web',
+  [string]$BackupRoot = 'C:\sasystem-backup\web',
   [string]$Rollback = ''
 )
 $ErrorActionPreference = 'Stop'
