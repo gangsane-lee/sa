@@ -12,26 +12,26 @@ flowchart LR
   U -- "http :8282" --> W["Web 서버 IIS<br/>화면 파일"]
   W -- "/api + ② 받은 인사정보" --> N["API 서버 Node · PM2 :8292"]
   N -- "③ (권장) 사번 → 재직 재확인" --> H[("사내 인사 API")]
-  N -- "mssql :1433" --> D[("MSSQL sasystem.dbo.SA_DOC")]
+  N -- "mssql :1433" --> D[("MSSQL sasystem.dbo.SA_*")]
 ```
 
 | 영역 | 기술 |
 |---|---|
 | 프론트 | Vue 3, Vite, vue-router, DevExtreme 26.1 (Complete), 커스텀 테마 `dx.sayeon.css` |
 | 백엔드 | Node.js 22.12.0, Express 5, `mssql`(tedious), `express-session` + `memorystore`(로그인 정보는 메모리 — 재시작하면 다시 로그인), `bcryptjs`, `helmet`, 로그인 실패 제한(자체 구현) |
-| DB | MSSQL — 문서 테이블 `SA_DOC` 1개, 이름·메일은 앱에서 AES-256-GCM 암호화 (TDE는 DB 쪽 선택) |
-| 배포 | Web 서버(IIS)가 화면과 `/api` 전달, API 서버 Node(PM2 1개)가 업무 처리 — 브라우저는 한 주소만 써서 CORS 불필요. 주소는 `servers.config.mjs`(마스터), 절차는 [GO-LIVE.md](GO-LIVE.md) |
+| DB | MSSQL — 목적별 표 17개(`SA_APPLICANT` · `SA_MATCH` · `SA_HEART` · `SA_MESSAGE` …, 정의 `server/shared/db/tables.js`), 이름·메일은 앱에서 AES-256-GCM 암호화 (TDE는 DB 쪽 선택) |
+| 배포 | Web 서버(IIS, https 8282)는 화면 파일만, 사용자 브라우저가 API 서버(회사 iisnode 앱의 `routes/sayeon`, https 8292)를 직접 부른다(CORS · 세션 헤더). 주소는 `servers.config.mjs`(마스터), 절차는 [GO-LIVE.md](GO-LIVE.md) |
 
-**업무 규칙은 한 파일** — `client/src/api/core/service.js`. 브라우저 개발 모드(`npm run dev`, `api/mock`)와 Node 서버(`server/`)가 이 파일을 함께 쓰고, 저장소·세션·사내 인증·관리자 확인만 끼워 넣는다(`configureService`). 그래서 화면에서 시험한 동작이 운영에서도 똑같다.
+**업무 규칙은 한 파일** — `server/shared/api/core/service.js`. 브라우저 가짜 데이터 모드(`npm run dev:mock`, `api/mock`)와 Node 서버(`server/`)가 이 파일을 함께 쓰고, 저장소·세션·사내 인증·관리자 확인만 끼워 넣는다(`configureService`). 그래서 화면에서 시험한 동작이 운영에서도 똑같다.
 
-| | 개발 모드 (`npm run dev`) | 운영 모드 (`npm run build` + 서버) |
-|---|---|---|
-| 저장소 | localStorage | MSSQL `SA_DOC` (`server/src/store.js`) |
-| 세션 | sessionStorage | express-session (HttpOnly 쿠키) |
-| 사내 인증 | 만능 테스트 계정으로 자동 입장 (`api/mock/accounts.js`) | 화면이 사내 인사정보 URL 로 확인(`auth/employee.js`) → 서버 재확인(`server/src/sso.js`) |
-| 관리자 계정 | `api/mock/accounts.js` | `server/config/admins.js` |
+| | 가짜 데이터 (`npm run dev:mock`) | 개발 (`npm run dev`) | 운영 (`npm run build`) |
+|---|---|---|---|
+| 저장소 | localStorage | 운영 API 서버 → MSSQL 목적별 표 (`server/src/store.js`) | 같음 |
+| 세션 | sessionStorage | express-session (세션 헤더 `X-Sayeon-Session`) | 같음 |
+| 사내 인증 | 만능 테스트 계정으로 자동 입장 (`api/mock/accounts.js`) | 테스트 사번 (`servers.config.mjs` 의 `devLogin` — 개발 PC · 개발 키 확인) | 인사정보 2단계 확인(`auth/employee.js`) → 서버(`server/src/sso.js`) |
+| 관리자 계정 | `api/mock/accounts.js` | `config/admins.js` (API 서버) | 같음 |
 
-모드는 **명령으로 자동** — `npm run dev` = 개발 모드, `npm run build` = 운영 모드(가짜 데이터 코드는 빌드에서 빠진다). 운영 빌드 때 `servers.config.mjs`의 `adminPath`·`sso.employeeApi`로 `sayeon.config.js`와 IIS `web.config`를 만든다.
+모드는 **명령으로 자동** (vite `define` 상수 `__SAYEON_MOCK__` · `__SAYEON_DEV_API__`) — 운영 빌드에서는 가짜 데이터·테스트 사번 코드가 빠진다. 운영 빌드 때 `servers.config.mjs`의 `adminPath`·`sso.employeeApi`·`sso.employeeCheck`·`security`로 `sayeon.config.js`와 IIS `web.config`(보안 헤더 포함)를 만든다. 테스트 사번으로 만든 신청서는 `test` 표시가 붙어 일반 사용자의 후보·하트·사주·통계에서 빠진다.
 
 ## 2. 화면
 
@@ -89,9 +89,9 @@ flowchart LR
 
 ## 4. 데이터 모델 (MSSQL)
 
-> **실제 저장 방식**: 서버는 아래 개념 모델을 문서 테이블 하나에 JSON으로 저장한다 — `SA_DOC(COLL, DOC_ID, BODY NVARCHAR(MAX), UPDATED_AT)`, 기본키 (COLL, DOC_ID).
-> 신청자·매칭·하트·후기·쪽지·열람 기록 한 건이 한 행이고, 이름·메일은 `DATA_KEY`로 AES-256-GCM 암호화한다.
-> 서버가 시작할 때 전체를 메모리로 읽고, 요청마다 바뀐 행만 한 트랜잭션으로 저장한다(그래서 PM2 인스턴스는 1개).
+> **실제 저장 방식**: 목적별 표 17개(`server/shared/db/tables.js`) — 신청서 `SA_APPLICANT` · 임직원 `SA_EMPLOYEE` · 매칭 `SA_MATCH` · 하트 `SA_HEART` · 후기 `SA_REVIEW` · 쪽지 `SA_MESSAGE` · 개선의 소리 `SA_VOC` · 블랙리스트 `SA_BLACKLIST` · 오늘의 후보 `SA_DAILY_PICK` · 본 후보 `SA_SEEN` · 사주 인연 `SA_SAJU_PICK` · 싫어요 누적 `SA_PENALTY` · 관리자 잠금 `SA_ADMIN_LOCK` · 열람 기록 `SA_AUDIT_LOG` · 기준정보 `SA_CODE` · 설정 `SA_SETTING` · 번호 `SA_SEQUENCE`.
+> 한 건이 한 행이고, 앞쪽 열(ID·사번·상태·시각 …)은 SSMS 에서 보기 위한 값, `DATA_JSON` 이 원본이다(표·열 설명은 MS_Description). 이름·메일은 `DATA_KEY`로 AES-256-GCM 암호화한다. 행 편집은 관리자 화면 `DB 표`.
+> 서버가 시작할 때 전체를 메모리로 읽고, 요청마다 바뀐 행만 한 트랜잭션으로 저장한다(그래서 이 DB 를 쓰는 서버 프로세스는 1개). 예전 문서 표 `SA_DOC` 은 처음 시작할 때 새 표로 옮긴다.
 > 사내 규모(신청자 수천 명) 기준이며, 수만 명 이상이 되면 아래 정규화 테이블로 옮긴다. 테이블은 `npm run db:setup`(또는 DB 담당자용 `server/sql/setup.sql`)이 만들고, `DB_AUTO_CREATE=true`이고 권한이 있으면 서버가 처음 켤 때 만든다 — [GO-LIVE 3단계](GO-LIVE.md#3-db--데이터베이스-계정-권한-테이블).
 
 
@@ -369,7 +369,7 @@ sa/
    ├─ ecosystem.config.cjs     PM2 설정 (인스턴스 1개, 실패 시 10초 간격 재시도)
    ├─ sql/setup.sql            DB 담당자용 DB·계정·권한·테이블 준비
    ├─ src/sso.js               ★ 사내 AD/SSO 연동
-   ├─ src/store.js             MSSQL 저장 (SA_DOC) · 시작 단계 오류 안내
+   ├─ src/store.js             MSSQL 저장 (목적별 표 — shared/db/tables.js) · 예전 SA_DOC 옮기기 · 시작 단계 오류 안내
    ├─ src/dbErrors.js          DB 오류 → 원인·해결
    ├─ src/app.js · routes.js   Express 조립 · /api 경로
    └─ scripts/                 run.mjs(실행기) · check.js(npm run check) · db-setup.js(npm run db:setup) · hash-password.js

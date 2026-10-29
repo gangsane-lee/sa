@@ -1,15 +1,24 @@
 /**
- * 화면 운영 모드 — 명령으로 자동으로 정해진다 (따로 바꿀 설정 없음)
+ * 화면 운영 모드 — 명령으로 자동으로 정해진다 (따로 바꿀 설정 없음, vite.config.js 의 define)
  *
- *  npm run dev   → 개발 모드(test): 서버 없이 브라우저 안의 가짜 데이터(mock).
- *                  로그인 화면 없이 만능 테스트 계정으로 바로 홈. 로그아웃하면 다른 테스트 계정을 고를 수 있다
- *  npm run build → 운영 모드(open): 실제 API(/api). 화면을 열 때 사내 인사정보 URL 로 임직원인지 확인한다
- *                  (가짜 데이터·테스트 계정 코드는 빌드에 들어가지 않는다)
+ *  npm run dev:mock → 가짜 데이터 모드: 서버 없이 브라우저 안의 가짜 데이터(mock).
+ *                     로그인 화면 없이 만능 테스트 계정으로 바로 홈. 로그아웃하면 다른 테스트 계정을 고를 수 있다
+ *  npm run dev      → 개발 모드: 운영 API 서버(같은 DB — 운영 데이터)를 부른다. 테스트 사번(servers.config.mjs 의 devLogin)으로 바로 로그인
+ *  npm run build    → 운영 모드: 실제 API. 화면을 열 때 사내 인사정보 URL 로 임직원인지 확인한다
+ *                     (가짜 데이터·테스트 사번 코드는 빌드에 들어가지 않는다)
  */
+/* global __SAYEON_MOCK__, __SAYEON_DEV_API__ — vite.config.js 가 넣는 상수 (빌드에서는 둘 다 false) */
 const runtime = (typeof window !== 'undefined' && window.SAYEON_CONFIG) || {};
 
-export const isTestMode = import.meta.env.DEV;
+/** 가짜 데이터 모드 (npm run dev:mock) */
+export const isMock = __SAYEON_MOCK__;
+/** 개발 모드 — 실제 API + 테스트 사번 (npm run dev) */
+export const isDevApi = __SAYEON_DEV_API__;
+/** 개발 화면(둘 중 하나) — 맨 위 '개발 모드' 띠를 보여준다 */
+export const isTestMode = isMock || isDevApi;
 export const SERVICE_MODE = isTestMode ? 'test' : 'open';
+/** 운영 화면에서 개발자 도구 단축키·오른쪽 클릭 막기 (servers.config.mjs 의 security.blockDevtools → sayeon.config.js) */
+export const BLOCK_DEVTOOLS = !isTestMode && runtime.security?.blockDevtools !== false;
 
 /**
  * API 서버 주소 — 화면은 Web 서버에서 열리고, 브라우저가 API 서버를 직접 부른다.
@@ -35,6 +44,23 @@ export const EMPLOYEE_API = {
 };
 /** 받아 온 인사정보를 저장하는 localStorage 키 */
 export const EMPLOYEE_STORAGE_KEY = typeof emp.storageKey === 'string' && emp.storageKey ? emp.storageKey : 'sayeon.employee';
+
+/**
+ * 2단계 임직원 확인 URL — 1단계(EMPLOYEE_API) 응답의 sabun · user_name 으로 POST (servers.config.mjs 의 sso.employeeCheck)
+ *  body 의 {필드} = 1단계 응답 값 · okPath/okValues: 임직원으로 볼 응답 값 (비우면 같은 사번·재직 상태로 판단)
+ */
+const chk = runtime.employeeCheck ?? {};
+export const EMPLOYEE_CHECK = {
+  url: typeof chk.url === 'string' ? chk.url.trim() : '',
+  method: String(chk.method ?? 'POST').toUpperCase() === 'GET' ? 'GET' : 'POST',
+  body: chk.body ?? { sabun: '{sabun}', user_name: '{user_name}' },
+  headers: chk.headers && typeof chk.headers === 'object' ? chk.headers : {},
+  okPath: typeof chk.okPath === 'string' ? chk.okPath.trim() : '',
+  okValues: Array.isArray(chk.okValues) ? chk.okValues.map((v) => String(v).toLowerCase()) : ['y', 'true', '1', 'ok', 'success'],
+  resultPath: typeof chk.resultPath === 'string' ? chk.resultPath : '',
+  withCredentials: chk.withCredentials !== false,
+  timeoutMs: Number(chk.timeoutMs) > 0 ? Number(chk.timeoutMs) : 8000,
+};
 
 /**
  * 관리자 화면 주소 — 사용자 화면에는 들어가는 버튼이 없고, 이 주소로 직접 들어간다.

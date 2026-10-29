@@ -12,7 +12,7 @@ import { adminApi } from '@/stores/session';
 import { AUDIT_ACTIONS } from '@shared/constants/codes';
 
 const store = new CustomStore({ key: 'id', load: () => adminApi.listAuditLogs() });
-const CAUTION = new Set(['ADMIN_ENTER_FAIL', 'REVEAL_PII', 'EXPORT', 'DELETE_APPLICANT']);
+const CAUTION = new Set(['ADMIN_ENTER_FAIL', 'REVEAL_PII', 'EXPORT', 'DELETE_APPLICANT', 'DATA_EDIT', 'DATA_DELETE', 'DATA_PURGE_TEST']);
 </script>
 
 <template>

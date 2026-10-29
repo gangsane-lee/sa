@@ -8,7 +8,7 @@
  * 만드는 것: release/routes-<환경>/routes/<basePath>/   예) routes/sayeon/
  *   index.js          서버 코드 + 라이브러리(express · mssql · 사주 …)를 하나로 묶은 파일 (CommonJS)
  *                     사용자 브라우저가 직접 부른다 (화면은 Web 서버 · CORS 로 그 화면 주소만 허용)
- *                     그 앱 main.js 에  app.use('/sayeon', require('./routes/sayeon'));  한 줄
+ *                     그 앱 main.js 에  app.use('/sayeon', require('./routes/sayeon')({ db: 그앱mssql설정 }));  한 줄
  *   package.json      이 폴더는 CommonJS (그 앱이 ESM 이어도 그대로 불러진다)
  *   web.config        이 폴더 파일을 브라우저가 내려받지 못하게 막는다 (.env · 관리자 파일 보호)
  *   .env.example      비밀번호·키 — 서버에서 .env 로 복사해 채운다
@@ -110,6 +110,8 @@ export async function buildPlugin({ target, T, outRoutes, buildId = '' }) {
       __WEB_HOST__: T.web.host,
       __DB__: `${T.db.host}:${T.db.port} / ${T.db.name}`,
       __WEB_ORIGINS__: T.webOrigins.join(' · '),
+      __DB_NAME__: T.db.name,
+      __DEV_HOST__: T.devServer.host || '-',
       __HTTPS_STEP__: T.api.https
         ? [
             '',
@@ -171,7 +173,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const size = (f) => `${(fs.statSync(path.join(dir, f)).size / 1048576).toFixed(1)}MB`;
     console.log(`  ✔ ${path.relative(ROOT, dir)}  (index.js ${size('index.js')})`);
     console.log(`  ✔ 불러오기 확인 — require('./routes/${pluginFolderOf(T)}') 가 미들웨어 함수`);
-    console.log(`\n  그 앱 main.js:  app.use('${T.api.basePath}', require('./routes/${pluginFolderOf(T)}'));`);
+    console.log(`\n  그 앱 main.js (CORS·로그인 미들웨어보다 앞에):  app.use('${T.api.basePath}', require('./routes/${pluginFolderOf(T)}')({ db: dbConfig }));`);
     console.log(`  사용자 브라우저 → ${T.apiUrl}/api   (화면 빌드 npm run build 가 이 주소를 sayeon.config.js 에 넣는다)`);
     console.log(`  허용하는 화면 주소(CORS): ${T.webOrigins.join(' · ')}`);
     console.log(`  자세한 순서: ${path.relative(ROOT, path.join(dir, '설치안내.txt'))}\n`);

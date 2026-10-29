@@ -1,3 +1,4 @@
+/* global __SAYEON_MOCK__, __SAYEON_DEV_API__ */
 import { createRouter, createWebHistory } from 'vue-router';
 import { session, restoreSession } from '@/stores/session';
 import { loadCodes } from '@/stores/codes';
@@ -7,11 +8,12 @@ import { ADMIN_PATH, isTestMode } from '@/config';
 const routes = [
   // 입구
   //  운영 모드: '임직원만 이용할 수 있어요' 안내 (인사정보 확인이 안 됐을 때만 온다)
-  //  개발 모드: 테스트 계정 고르기 (처음에는 만능 계정으로 바로 들어가고, 로그아웃하면 여기로 온다)
+  //  개발 화면: 테스트 계정(사번) 고르기 (처음에는 첫 계정으로 바로 들어가고, 로그아웃하면 여기로 온다)
+  //  (빌드 상수를 직접 써야 운영 빌드에 테스트 계정 화면이 들어가지 않는다)
   {
     path: '/login',
     name: 'login',
-    component: isTestMode ? () => import('@/views/LoginView.vue') : () => import('@/views/SsoGateView.vue'),
+    component: __SAYEON_MOCK__ || __SAYEON_DEV_API__ ? () => import('@/views/LoginView.vue') : () => import('@/views/SsoGateView.vue'),
     meta: { public: true, title: isTestMode ? '테스트 계정 고르기' : '임직원 확인' },
   },
   {
@@ -50,6 +52,7 @@ const routes = [
       { path: 'settings', name: 'admin-settings', component: () => import('@/views/admin/AdminSettings.vue'), meta: { title: '설정' } },
       { path: 'codes', name: 'admin-codes', component: () => import('@/views/admin/AdminCodes.vue'), meta: { title: '기준정보' } },
       { path: 'audit', name: 'admin-audit', component: () => import('@/views/admin/AdminAuditLog.vue'), meta: { title: '열람 기록' } },
+      { path: 'tables', name: 'admin-tables', component: () => import('@/views/admin/AdminTables.vue'), meta: { title: 'DB 표' } },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },
@@ -63,7 +66,7 @@ const router = createRouter({
 
 /**
  * 화면을 처음 열 때 (restoreSession)
- *  - 개발 모드(npm run dev)  : 로그인 화면 없이 만능 테스트 계정으로 바로 홈
+ *  - 가짜 데이터(npm run dev:mock) · 개발 모드(npm run dev): 로그인 화면 없이 첫 테스트 계정(사번)으로 바로 홈
  *  - 운영 모드(npm run build): 사내 인사정보 URL 호출 → 응답을 localStorage 에 저장 → 사번·재직 여부 확인
  *                              → 임직원이면 홈 / 아니면 '임직원만 이용할 수 있어요' 안내(/login)
  *    (인사정보 URL 설정: servers.config.mjs 의 sso.employeeApi, 호출·해석: auth/employee.js · utils/employeeInfo.js)

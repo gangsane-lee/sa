@@ -57,7 +57,12 @@ export function resolveTopology(master, envName = 'production') {
     }
   }
 
-  const sso = { ...(master.sso ?? {}), hrApi: { ...(master.sso?.hrApi ?? {}) }, employeeApi: { ...(master.sso?.employeeApi ?? {}) } };
+  const sso = {
+    ...(master.sso ?? {}),
+    hrApi: { ...(master.sso?.hrApi ?? {}) },
+    employeeApi: { ...(master.sso?.employeeApi ?? {}) },
+    employeeCheck: { ...(master.sso?.employeeCheck ?? {}) },
+  };
   // 화면(브라우저)이 API 서버를 직접 부른다 — Web 서버가 계정 헤더를 붙여 넘기는 iis 방식은 쓸 수 없다
   if (sso.mode === 'iis') problems.push("sso.mode 'iis' 는 Web 서버가 /api 를 API 서버로 넘기던 구조용이에요 — 지금은 브라우저가 API 서버를 직접 부르므로 'browser' 로 해 주세요");
   else if (!['browser', 'off'].includes(sso.mode ?? 'browser')) problems.push(`sso.mode 는 browser · off 중 하나: '${sso.mode}'`);
@@ -65,6 +70,17 @@ export function resolveTopology(master, envName = 'production') {
   // https 화면에서 http 주소는 브라우저가 막는다 (혼합 콘텐츠)
   if (web.https && !api.https) problems.push(`Web 서버가 https 면 API 서버도 https 여야 해요 — 브라우저가 https 화면에서 http API 호출을 막아요 (${envName}.api.https)`);
   if (web.https && /^http:\/\//i.test(sso.employeeApi.url ?? '')) problems.push('Web 서버가 https 면 사내 인사정보 URL 도 https 여야 해요 — 브라우저가 https 화면에서 http 호출을 막아요 (sso.employeeApi.url)');
+  if (sso.employeeCheck.url && !/^https?:\/\//i.test(sso.employeeCheck.url)) problems.push(`sso.employeeCheck.url 은 http:// 또는 https:// 로 시작해야 해요: '${sso.employeeCheck.url}'`);
+  if (web.https && /^http:\/\//i.test(sso.employeeCheck.url ?? '')) problems.push('Web 서버가 https 면 임직원 확인 URL 도 https 여야 해요 (sso.employeeCheck.url)');
+
+  // 개발 화면(npm run dev) 테스트 사번
+  const devServer = { ...(master.devServer ?? {}) };
+  if (devServer.host && !IPV4.test(devServer.host)) problems.push(`개발 서버 주소(devServer.host)는 IP 로 적어 주세요: '${devServer.host}'`);
+  const devAccounts = (master.devLogin?.accounts ?? []).filter((a) => a && typeof a === 'object');
+  for (const a of devAccounts) {
+    if (!/^[A-Za-z0-9_-]{1,30}$/.test(String(a.empNo ?? ''))) problems.push(`devLogin 테스트 사번 형식이 맞지 않아요: '${a.empNo ?? ''}' (영문·숫자 30자 이내)`);
+    if (a.gender && !['M', 'F'].includes(a.gender)) problems.push(`devLogin ${a.empNo} 의 gender 는 M 또는 F: '${a.gender}'`);
+  }
   const port = (proto, p) => (p === (proto === 'https' ? 443 : 80) ? '' : `:${p}`);
   const webProto = web.https ? 'https' : 'http';
   const apiProto = api.https ? 'https' : 'http';
@@ -77,7 +93,11 @@ export function resolveTopology(master, envName = 'production') {
     web,
     api,
     db,
-    devServer: master.devServer ?? {},
+    devServer,
+    /** 개발 화면 테스트 사번 (npm run dev) */
+    devLogin: { accounts: devAccounts },
+    /** 보안 — blockDevtools: 운영 화면에서 개발자 도구 단축키·오른쪽 클릭 막기 */
+    security: { blockDevtools: master.security?.blockDevtools !== false },
     adminPath,
     sso,
     /** 사용자가 접속하는 주소 (화면) */

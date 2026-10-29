@@ -211,4 +211,7 @@ export const AUDIT_ACTIONS = [
   { value: 'BLACKLIST_REMOVE', text: '블랙리스트 해제' },
   { value: 'SETTINGS_CHANGE', text: '설정 변경' },
   { value: 'MESSAGE_SEND', text: '쪽지 보냄' },
+  { value: 'DATA_EDIT', text: 'DB 표 행 추가·수정' },
+  { value: 'DATA_DELETE', text: 'DB 표 행 삭제' },
+  { value: 'DATA_PURGE_TEST', text: '테스트 데이터 지우기' },
 ];

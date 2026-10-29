@@ -4,6 +4,7 @@
  *   서버가 응답 헤더 X-Sayeon-Session 으로 준 값을 이 탭(sessionStorage)에 두고, 요청마다 같은 헤더로 보낸다.
  *   탭을 닫으면 사라지고, 새 탭은 화면을 열 때 사내 인사정보로 다시 로그인한다 (stores/session.js)
  */
+/* global __SAYEON_DEV_API__ */
 import { ApiError } from '@shared/api/errors.js';
 import { API_BASE } from '@/config';
 
@@ -75,6 +76,11 @@ export const api = {
     exitAdmin: () => del('/auth/admin'),
     /** 사내 SSO 확인 — employee: 화면이 사내 인사정보 URL 에서 받은 사용자 정보(browser 방식) · query: 주소창의 값 */
     sso: (hint = {}) => request('POST', '/auth/sso', { query: hint.query ?? {}, ...(hint.employee && { employee: hint.employee }) }, { timeoutMs: 20000 }),
+    // 개발 화면(npm run dev) 테스트 사번 — 운영 빌드에서는 상수 false 라 이 두 줄이 빠진다
+    ...(__SAYEON_DEV_API__ && {
+      devAccounts: () => get('/auth/dev-accounts'),
+      devLogin: (empNo) => post('/auth/dev-login', { empNo }),
+    }),
   },
 
   codes: {
@@ -178,5 +184,15 @@ export const api = {
 
     listAuditLogs: () => get('/admin/audit-logs'),
     recordExport: (count) => post('/admin/audit-logs/export', { count }),
+
+    /** DB 표 — 목적별 표 보기·행 추가·수정·삭제 */
+    tables: () => get('/admin/tables'),
+    tableRows: (coll) => get(`/admin/tables/${coll}/rows`),
+    /** id 가 없으면 추가 · { key(map 표의 행 키), doc(행 원본) } */
+    saveTableRow: (coll, id, row) => (id === null || id === undefined || id === ''
+      ? post(`/admin/tables/${coll}/rows`, row)
+      : put(`/admin/tables/${coll}/rows/${encodeURIComponent(id)}`, row)),
+    deleteTableRow: (coll, id) => del(`/admin/tables/${coll}/rows/${encodeURIComponent(id)}`),
+    purgeTestData: () => post('/admin/test-data/purge'),
   },
 };

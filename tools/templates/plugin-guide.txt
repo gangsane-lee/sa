@@ -6,7 +6,8 @@
                사용자 PC 브라우저가 직접 부른다. 이 화면 주소의 호출만 받는다(CORS): __WEB_ORIGINS__
   DB           __DB__   (이 API 만 접속)
 
-  방화벽  사용자 PC 대역 → 이 서버 __API_PORT__ · 이 서버 → DB   (Web 서버 ↔ 이 서버 통신은 없다)
+  방화벽  사용자 PC 대역 · 개발 PC(__DEV_HOST__) → 이 서버 __API_PORT__ · 이 서버 → DB   (Web 서버 ↔ 이 서버 통신은 없다)
+  https 로 온 호출만 받는다 (http 는 403)
 
 ────────────────────────────────────────
 처음 한 번
@@ -14,38 +15,42 @@
  1) 그 앱 폴더의 routes 아래에 이 폴더를 복사
       <그 앱>\routes\__FOLDER__\index.js · package.json · web.config · tools\ · config\ …
 
- 2) 그 앱 main.js 에 한 줄 — Express 앱을 만든 뒤, 그 앱의 404·오류 처리보다 앞에
-      CommonJS (require 를 쓰는 앱):  app.use('__BASE_PATH__', require('./routes/__FOLDER__'));
-      ESM (import 를 쓰는 앱)      :  import sayeon from './routes/__FOLDER__/index.js';
-                                      app.use('__BASE_PATH__', sayeon);
-    · app 은 그 앱의 Express 변수 이름에 맞춘다
+ 2) 그 앱 main.js 에 한 줄 — Express 앱(app)을 만든 바로 뒤, ★ 그 앱의 CORS · 로그인 미들웨어보다 앞에
+      그 앱의 mssql 설정(계정 포함)을 그대로 넘긴다 — 변수 이름(dbConfig)은 그 앱 main.js 에 맞춘다
+        app.use('__BASE_PATH__', require('./routes/__FOLDER__')({ db: dbConfig }));
+      · DB 이름은 사緣 것(__DB_NAME__)을 쓴다 (그 앱 설정의 database 는 무시) — 그 계정에 __DB_NAME__ 읽기·쓰기 권한 필요
+      · 사緣 전용 DB 계정을 쓰려면 대신:  app.use('__BASE_PATH__', require('./routes/__FOLDER__'));  + 4) .env 의 DB_USER · DB_PASSWORD
+      · ESM(import) 앱이면:  import sayeon from './routes/__FOLDER__/index.js';  app.use('__BASE_PATH__', sayeon({ db: dbConfig }));
     · 그 앱이 express.json() · 세션을 먼저 써도 괜찮다 (사緣은 자기 세션을 X-Sayeon-Session 헤더로 따로 쓴다)
-    · 그 앱이 모든 요청에 로그인 확인 · CORS 를 먼저 거는 구조면 이 줄을 그보다 앞에 둔다
-      (사緣 API 는 다른 주소의 화면이 부르므로 OPTIONS 사전 확인 요청이 사緣까지 와야 한다)
+    · CORS · 로그인 미들웨어보다 앞이어야 하는 이유: 사緣 API 는 다른 주소의 화면(__WEB_URL__)이 부르므로
+      OPTIONS 사전 확인 요청이 사緣까지 와야 하고, 사緣의 CORS(허용 화면만)가 답해야 한다
 
  3) 그 앱의 web.config <iisnode … /> 확인
       nodeProcessCountPerApplication="1"   ★ 필수 — 사緣은 데이터를 메모리에 두고 DB 에 저장한다.
                                             프로세스가 2개 이상이면 서로 덮어써 데이터가 사라진다
-      promoteServerVars="REMOTE_ADDR"     ★ 필요 — 사용자 IP (열람 기록 · 로그인 확인 횟수 제한). 없으면 IP 가 비고 횟수 제한이 꺼진다
+      promoteServerVars="REMOTE_ADDR,HTTPS" ★ 필요 — REMOTE_ADDR: 사용자 IP (열람 기록 · 횟수 제한 · 개발 PC 확인)
+                                            HTTPS: http 로 온 호출 거절. 그 앱이 이미 다른 값을 쓰면 쉼표로 이어 붙인다
     그 앱의 IIS 앱 풀: 고급 설정 → "겹친 재활용 사용 안 함" = True (재시작 순간 프로세스 2개 방지)
     Node.js 22 이상 (그 앱 web.config 의 nodeProcessCommandLine 이 가리키는 node.exe)
 __HTTPS_STEP__
 
  4) 비밀 설정 — routes\__FOLDER__ 에서
-      copy .env.example .env          → SESSION_SECRET · DB_USER/DB_PASSWORD · DATA_KEY 채우기
+      copy .env.example .env          → SESSION_SECRET · DATA_KEY 채우기 (DB 계정은 2)에서 넘겼으면 비워 둔다)
+                                         개발 화면(npm run dev)을 쓰면 DEV_LOGIN_KEY (개발 PC 의 SAYEON_DEV_KEY 와 같게)
       copy config\admins.example.js config\admins.js
       node tools\hash-password.mjs "새 관리자 비밀번호"   → 결과를 admins.js 의 passwordHash 에
 
- 5) DB 준비 — routes\__FOLDER__ 에서 (.env 에 DB_ADMIN_USER/DB_ADMIN_PASSWORD 를 잠시 넣고)
-      node tools\db-setup.mjs --check     바꾸지 않고 상태만
-      node tools\db-setup.mjs             DB · 앱 계정 · 테이블 만들기 → 끝나면 .env 의 DB_ADMIN_* 지우기
-    (DB 담당자가 직접 만들 때는 sql\setup.sql)
+ 5) DB 준비 — 표는 처음 시작할 때 없는 것만 자동으로 만든다 (그 계정에 표 만들기 권한이 있을 때)
+    권한이 없으면 DB 담당자가 sql\setup.sql 실행 (목적별 표 SA_APPLICANT · SA_MATCH … · 표·열 설명 포함)
+    예전 한 표(SA_DOC)에 데이터가 있으면 처음 시작할 때 새 표로 옮긴다 (SA_DOC 은 백업으로 남는다)
+    (사緣 전용 계정을 새로 만들 때만: .env 에 DB_ADMIN_USER/DB_ADMIN_PASSWORD 를 잠시 넣고  node tools\db-setup.mjs)
 
  6) 그 앱의 IIS 앱 풀 재시작
       Restart-WebAppPool <그 앱의 앱 풀 이름>
 
  7) 확인 — 사내 PC 브라우저에서 (DNS 이름 주소로 — 인증서 이름과 맞아야 한다)
       __API_URL__/api/health   → {"ok":true, …}   안 열리면 방화벽(사용자 PC → __API_PORT__) · DNS · 인증서
+    http://… 로 부르면 403 (https 만) 이 맞다
     이어서 화면 __WEB_URL__ 을 열어 로그인 확인
     "서버에 연결하지 못했어요" 면 F12 → Console 에 CORS 오류가 있는지 — 있으면 화면 주소가 위 허용 목록과 다른 것
       (.env 의 CORS_ORIGINS 에 그 주소를 더하고 앱 풀 재시작)

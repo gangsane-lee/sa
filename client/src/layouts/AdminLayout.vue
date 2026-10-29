@@ -30,6 +30,7 @@ const NAV = [
   { name: 'admin-codes', text: '기준정보', icon: 'detailslayout' },
   { name: 'admin-settings', text: '설정', icon: 'preferences' },
   { name: 'admin-audit', text: '열람 기록', icon: 'clock' },
+  { name: 'admin-tables', text: 'DB 표', icon: 'datafield' },
 ];
 
 const remainMs = computed(() => session.adminExpiresAt - now.value);

@@ -14,6 +14,7 @@ import { configureService } from '../shared/api/core/service.js';
 import { currentReq } from './context.js';
 import { clientIpOf } from './clientIp.js';
 import { apiRouter } from '../routes/index.js';
+import { UNDER_IISNODE } from './config.js';
 
 const MemoryStore = createMemoryStore(session);
 const SESSION_COOKIE = 'sayeon.sid';
@@ -43,15 +44,33 @@ export async function createApp({ config, store, directory, admin }) {
     directory,
     admin: { isAdmin: (emp) => admin.isAdmin(emp), verify: (password) => admin.verify(password) },
     allowDev: false,
+    // 개발 화면 테스트 사번 — 개발 PC · 개발 키 확인은 routes/auth.js 가 먼저 한다
+    devAccounts: () => config.devLogin.accounts,
   });
   await store.flush(); // 처음 실행이면 기본값을 저장
 
   const app = express();
   app.disable('x-powered-by');
-  // 사용자 IP — iisnode 의 x-iisnode-remote_addr · Web 서버가 붙인 X-Forwarded-For (src/clientIp.js)
+  // 사용자 IP — iisnode 의 x-iisnode-remote_addr (src/clientIp.js)
   app.use((req, res, next) => {
     req.clientIp = clientIpOf(req);
     next();
+  });
+
+  // https 로 온 호출만 — iisnode 가 넘겨 주는 HTTPS 값(promoteServerVars 에 HTTPS)으로 본다. http 로 오면 거절
+  let httpsWarned = false;
+  app.use((req, res, next) => {
+    if (!config.httpsOnly) return next();
+    const https = req.headers['x-iisnode-https'];
+    if (https === undefined) {
+      if (UNDER_IISNODE && !httpsWarned) {
+        httpsWarned = true;
+        console.warn('[sayeon] http/https 를 구분하지 못해요 — 그 앱 web.config 의 <iisnode promoteServerVars="REMOTE_ADDR,HTTPS" /> 를 확인해 주세요');
+      }
+      return next();
+    }
+    if (String(https).toLowerCase() === 'on') return next();
+    return res.status(403).json({ message: 'https 로만 접속할 수 있어요.', code: 'HTTPS_REQUIRED' });
   });
 
   // CORS — 허용한 화면 주소(Origin)에서 온 호출에만 응답 헤더를 붙인다. 사전 확인(OPTIONS)은 여기서 끝낸다
@@ -166,7 +185,7 @@ export async function createApp({ config, store, directory, admin }) {
     res.set('Cache-Control', 'no-store').type('application/javascript');
     const runtime = {
       adminPath: config.adminPath,
-      ...(config.sso.mode === 'browser' && { employeeApi: config.sso.employeeApi }),
+      ...(config.sso.mode === 'browser' && { employeeApi: config.sso.employeeApi, employeeCheck: config.sso.employeeCheck }),
       ...(config.sso.loginPage && { ssoLoginPage: config.sso.loginPage }),
     };
     res.send(`window.SAYEON_CONFIG = ${JSON.stringify(runtime)};\n`);
@@ -188,7 +207,7 @@ export async function createApp({ config, store, directory, admin }) {
   } else {
     app.use((req, res, next) => {
       if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
-      res.status(404).type('text/plain; charset=utf-8').send(`사緣 API 서버예요. 화면은 Web 서버(${config.publicUrl})에서 열어 주세요.`);
+      res.status(404).type('text/plain; charset=utf-8').send('Not Found'); // 서버 정보는 알리지 않는다
     });
   }
 

@@ -122,7 +122,7 @@ export function explainDbError(err, ctx = {}) {
         fix: [
           /CREATE DATABASE/i.test(msg) || /데이터베이스/.test(msg)
             ? 'DB를 만들 권한이 없어요 → 관리 계정으로  npm run db:setup  을 실행하거나, DB 담당자에게 DB 생성을 요청한 뒤 DB_AUTO_CREATE=false'
-            : '테이블을 만들 권한이 없어요 → 관리 계정으로  npm run db:setup  을 실행해 SA_DOC 테이블을 미리 만들어 주세요.',
+            : '표를 만들 권한이 없어요 → 관리 계정으로  npm run db:setup  을 실행하거나, DB 담당자가 sql/setup.sql 로 사緣 표(SA_…)를 미리 만들어 주세요.',
         ],
       };
     case 229:
@@ -134,9 +134,9 @@ export function explainDbError(err, ctx = {}) {
       };
     case 208:
       return {
-        title: '테이블 dbo.SA_DOC 이 없어요',
+        title: '사緣 표가 없어요',
         reason: msg,
-        fix: ['npm run db:setup  으로 테이블을 만들어 주세요.'],
+        fix: ['npm run db:setup  또는 sql/setup.sql 로 표를 만들어 주세요.'],
       };
     case 916:
     case 4060:

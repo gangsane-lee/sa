@@ -47,6 +47,17 @@ export const config = {
    * (예전 구조: Web 서버 ARR 이 /api 를 넘기며 붙이던 값)
    */
   trustedProxies: [],
+  /** https 로 온 호출만 받는다 (servers.config.mjs 의 api.https) — iisnode 가 넘겨 주는 HTTPS 값으로 판단 (src/app.js) */
+  httpsOnly: T.api.https,
+  /**
+   * 개발 화면(npm run dev) 테스트 사번 로그인 — 세 조건이 모두 맞을 때만 (servers.config.mjs 의 devLogin 설명)
+   *  key: .env 의 DEV_LOGIN_KEY (16자 이상, 비우면 꺼짐) · allowIps: 개발 PC IP · accounts: 테스트 사번
+   */
+  devLogin: {
+    key: str(env.DEV_LOGIN_KEY),
+    allowIps: [...new Set([T.devServer.host, ...str(env.DEV_LOGIN_IPS).split(',').map((x) => x.trim())].filter(Boolean))],
+    accounts: T.devLogin.accounts,
+  },
   /** (선택) API 서버가 화면도 직접 내보낼 때만 — 보통은 Web 서버(IIS)가 화면을 내보낸다 */
   clientDist: str(env.CLIENT_DIST) ? path.resolve(SERVER_ROOT, env.CLIENT_DIST) : null,
 
@@ -85,8 +96,9 @@ export const config = {
   sso: {
     /** browser: 화면이 사내 인사정보 URL 을 불러 넘긴 정보 (기본) · iis: Web 서버 Windows 인증 → AD → 인사 API · url: SSO 주소 한 줄 · off */
     mode: ['browser', 'iis', 'url', 'off'].includes(T.sso.mode) ? T.sso.mode : 'browser',
-    /** browser 방식: 브라우저가 부르는 사내 인사정보 URL (화면 설정 sayeon.config.js 로 내려간다) */
+    /** browser 방식: 브라우저가 부르는 사내 인사정보 URL · 임직원 확인 URL (화면 설정 sayeon.config.js 로 내려간다) */
     employeeApi: T.sso.employeeApi ?? {},
+    employeeCheck: T.sso.employeeCheck ?? {},
     domain: String(T.sso.domain ?? '').toUpperCase(),
     headerName: String(T.sso.header ?? 'x-sayeon-user').toLowerCase(),
     adLookup: T.sso.adLookup !== false,

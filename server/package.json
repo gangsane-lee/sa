@@ -13,6 +13,7 @@
     "sso:test": "node scripts/run.mjs sso-test",
     "webconfig": "node scripts/webconfig.js",
     "hash-password": "node scripts/hash-password.js",
+    "sql:tables": "node scripts/sql-tables.js",
     "release": "node ../tools/release.mjs",
     "plugin": "node ../tools/plugin.mjs"
   },

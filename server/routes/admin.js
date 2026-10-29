@@ -60,5 +60,13 @@ export default function admin(h) {
   r.patch('/settings', h((req) => A.updateSettings(b(req))));
   r.get('/audit-logs', h(() => A.listAuditLogs()));
   r.post('/audit-logs/export', h((req) => A.recordExport(b(req).count)));
+
+  // ── DB 표 (목적별 표 보기·고치기) · 개발 테스트 데이터 지우기 ──
+  r.get('/tables', h(() => A.tables()));
+  r.get('/tables/:coll/rows', h((req) => A.tableRows(req.params.coll)));
+  r.post('/tables/:coll/rows', h((req) => A.saveTableRow(req.params.coll, null, b(req))));
+  r.put('/tables/:coll/rows/:id', h((req) => A.saveTableRow(req.params.coll, req.params.id, b(req))));
+  r.delete('/tables/:coll/rows/:id', h((req) => A.deleteTableRow(req.params.coll, req.params.id)));
+  r.post('/test-data/purge', h(() => A.purgeTestData()));
   return r;
 }

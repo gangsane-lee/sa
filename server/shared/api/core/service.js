@@ -22,6 +22,7 @@ import {
   VOC_CATEGORIES, VOC_STATUS, SETTING_ITEMS, REFERENCE_KIND, toBool,
 } from '../../constants/codes.js';
 import { ADMIN_IDLE_MS, ADMIN_LOCK_MS, ADMIN_MAX_FAILS, ADMIN_LOCK_MINUTES } from '../../constants/policy.js';
+import { TABLES, TABLE_BY_COLL, rowsOf, cellOf, keyColsOf } from '../../db/tables.js';
 
 const DAY = 86400000;
 
@@ -68,6 +69,7 @@ const CODE_USAGE = {
  * @property {() => Promise<void>} [delay]   응답 지연 흉내 (개발 모드)
  * @property {() => string} [clientIp]       열람 기록에 남길 접속 IP
  * @property {boolean} [allowDev]            개발 모드 전용 기능(가짜 데이터 초기화 등) 허용
+ * @property {() => object[]} [devAccounts]  개발 화면(npm run dev) 테스트 사번 목록 (서버만)
  */
 let A = null;
 let db = null;
@@ -144,6 +146,8 @@ function upsertEmployee(p) {
   const fields = {
     adId: p.adId ?? '', name: p.name ?? '', gender: p.gender ?? null, division: p.division ?? null,
     team: p.team ?? '', email: p.email ?? '', retired: p.active === false,
+    // 개발 화면(npm run dev) 테스트 사번 — 일반 사용자에게 보이지 않게 표시해 둔다 (visibleTo)
+    test: p.test === true || undefined,
   };
   let e = db.employees.find((x) => x.empNo === empNo);
   if (e) Object.assign(e, fields);
@@ -259,6 +263,11 @@ const dislikesOf = (a) =>
 /** 싫어요가 기준 이상이면 추천·하트·관리자 추천 후보에서 모두 빠진다 (본인 화면에는 알리지 않음) */
 const isSanctioned = (a) => dislikesOf(a) >= db.settings.dislikeLimit;
 const matchPool = () => db.applicants.filter((a) => !isSanctioned(a) && !isBlacklisted(a.empNo));
+/**
+ * 개발 테스트 데이터 가리기 — 테스트 사번(npm run dev)으로 만든 신청서는 일반 사용자의 후보·하트·사주에 나오지 않는다.
+ * 테스트 사번은 운영 데이터를 함께 본다 (개발 화면에서 실제 화면처럼 확인)
+ */
+const visibleTo = (viewer) => (c) => !c?.test || Boolean(viewer?.test);
 
 /**
  * 본인에게 보이는 상태는 두 가지뿐: 매칭 중 / 매칭 대기 중
@@ -352,6 +361,13 @@ function safeGunghap(a, b) {
   } catch {
     return null;
   }
+}
+
+/** 관리자 'DB 표' — 표 이름(coll)으로 정의 찾기 */
+function tableOf(coll) {
+  const t = TABLE_BY_COLL[String(coll ?? '')];
+  if (!t) throw new ApiError(404, '없는 표예요.', 'NOT_FOUND');
+  return t;
 }
 
 const nicknameTaken = (nick, exceptId = null) => db.applicants.some((a) => a.nickname === nick && a.id !== exceptId);
@@ -521,9 +537,11 @@ function expireHearts() {
 
 const heartsSentToday = (app) => db.hearts.filter((h) => h.fromId === app.id && kstDate(Date.parse(h.at)) === kstDate()).length;
 // 블랙리스트도 함께 본다 — 오늘의 후보가 정해진 뒤 등록된 사람에게 하트가 가지 않도록
-const isActiveCandidate = (c) => c && RECOMMENDABLE_STATUS.includes(c.status) && !busyIds(db.matches).has(c.id) && !isSanctioned(c) && !isBlacklisted(c.empNo);
-/** 오늘의 후보·사주 추천 대상: 제재·임시 신청(정보 부족) 제외 */
-const recommendPool = () => matchPool().filter((a) => !a.quick);
+// viewer: 이 후보를 보는 사람 — 일반 사용자에게는 테스트 신청서가 후보가 될 수 없다
+const isActiveCandidate = (c, viewer) =>
+  c && RECOMMENDABLE_STATUS.includes(c.status) && !busyIds(db.matches).has(c.id) && !isSanctioned(c) && !isBlacklisted(c.empNo) && visibleTo(viewer)(c);
+/** 오늘의 후보·사주 추천 대상: 제재·임시 신청(정보 부족)·(일반 사용자에게) 테스트 신청서 제외 */
+const recommendPool = (viewer) => matchPool().filter((a) => !a.quick && visibleTo(viewer)(a));
 
 /** 오늘 볼 후보 3명을 정한다 (하루에 한 번, 이미 본 사람은 30일간 제외) */
 function ensureDaily(app) {
@@ -538,7 +556,7 @@ function ensureDaily(app) {
     if (h.fromId === app.id) exclude.add(h.toId); // 이미 하트를 보낸 상대
     if (h.toId === app.id && h.status === 'SENT') exclude.add(h.fromId); // 나에게 하트를 보낸 상대는 '받은 하트'에서 보여준다
   }
-  const picks = scoreCandidates(app, recommendPool(), db.matches, db.codes, { exclude, recommendableOnly: true, limit: DAILY_CARD_LIMIT });
+  const picks = scoreCandidates(app, recommendPool(app), db.matches, db.codes, { exclude, recommendableOnly: true, limit: DAILY_CARD_LIMIT });
   const daily = { date: today, items: picks.map((p) => ({ id: p.applicant.id, score: p.score })), cursor: 0, heartTo: null };
   db.seen[app.id] = { ...seen, ...Object.fromEntries(daily.items.map((i) => [i.id, today])) };
   db.daily[app.id] = daily;
@@ -633,7 +651,7 @@ function dashboardOf(app) {
     // 하트 응답 대기 중 (위에서 채움)
   } else if (d) {
     // 그새 다른 사람과 이어졌거나 탈퇴한 후보는 건너뛴다
-    while (d.cursor < d.items.length && !isActiveCandidate(db.applicants.find((x) => x.id === d.items[d.cursor].id))) d.cursor++;
+    while (d.cursor < d.items.length && !isActiveCandidate(db.applicants.find((x) => x.id === d.items[d.cursor].id), app)) d.cursor++;
     const curItem = d.items[d.cursor];
     const c = curItem && db.applicants.find((x) => x.id === curItem.id);
     out.daily = {
@@ -659,7 +677,7 @@ function dashboardOf(app) {
     .filter((h) => h.toId === app.id && h.status === 'SENT')
     .map((h) => {
       const from = db.applicants.find((x) => x.id === h.fromId);
-      if (!isActiveCandidate(from)) return null;
+      if (!isActiveCandidate(from, app)) return null;
       const score = scoreCandidates(app, [from], db.matches, db.codes)[0]?.score ?? null;
       return { heartId: h.id, at: h.at, card: card(from, score, app) };
     })
@@ -715,7 +733,7 @@ function recipientsOf(app) {
 function sendSajuHeart(app) {
   const pick = db.sajuPicks[app.empNo];
   const target = pick?.date === kstDate() && db.applicants.find((a) => a.id === pick.id);
-  if (!isActiveCandidate(target) || target.gender === app.gender) {
+  if (!isActiveCandidate(target, app) || target.gender === app.gender) {
     throw new ApiError(409, '그새 이 분의 상황이 바뀌었어요. 사주 인연을 다시 찾아주세요.', 'CANDIDATE_GONE');
   }
   const t = nowIso();
@@ -749,6 +767,22 @@ export const api = {
       const profile = await A.directory.identify(hint);
       if (!profile) throw new ApiError(401, '사내 인사정보로 임직원이 확인되지 않았어요.', 'SSO_FAILED');
       return startSession(profile);
+    },
+
+    /**
+     * 개발 화면(npm run dev) 테스트 사번 로그인 — 사번이 테스트 목록(servers.config.mjs 의 devLogin)에 있어야 한다.
+     * 개발 PC · 개발 키 확인은 서버 경로(routes/auth.js)가 먼저 한다
+     */
+    async devLogin(empNo) {
+      await wait();
+      const acct = (A.devAccounts?.() ?? []).find((a) => a.empNo === String(empNo ?? ''));
+      if (!acct) throw new ApiError(403, '등록된 테스트 사번이 아니에요.', 'DEV_LOGIN_DENIED');
+      return startSession({ adId: acct.empNo, ...acct, active: true, test: true });
+    },
+    /** 개발 화면의 테스트 사번 목록 */
+    async devAccounts() {
+      await wait();
+      return (A.devAccounts?.() ?? []).map(({ empNo, name, gender, division, team }) => ({ empNo, name, gender, division, team }));
     },
 
     async me() {
@@ -849,7 +883,7 @@ export const api = {
       const t = nowIso();
       const penalty = db.penalties[user.empNo]?.count ?? 0; // 탈퇴 전 받은 싫어요 횟수 이어받기
       const app = {
-        id: ++db.seq.applicant, empNo: user.empNo, ...fields,
+        id: ++db.seq.applicant, empNo: user.empNo, ...fields, ...(user.test && { test: true }),
         status: 'RECEIVED', adminMemo: '', agreedAt: t, createdAt: t, updatedAt: t, ...(penalty && { penalty }),
       };
       db.applicants.push(app);
@@ -946,7 +980,7 @@ export const api = {
       const d = ensureDaily(app);
       const item = d.items[d.cursor];
       const target = item && db.applicants.find((x) => x.id === item.id);
-      if (!isActiveCandidate(target)) {
+      if (!isActiveCandidate(target, app)) {
         if (item) d.cursor++;
         commit();
         throw new ApiError(409, '이 후보와는 지금 이어질 수 없어요. 다음 후보를 확인해 주세요.', 'CANDIDATE_GONE');
@@ -981,7 +1015,7 @@ export const api = {
         commit();
         return { ...dashboardOf(app), matched: false };
       }
-      if (userStatusOf(app) === 'MATCHING' || !isActiveCandidate(from)) {
+      if (userStatusOf(app) === 'MATCHING' || !isActiveCandidate(from, app)) {
         h.status = 'EXPIRED';
         commit();
         throw new ApiError(409, '아쉽지만 지금은 이 분과 이어질 수 없어요.', 'CANDIDATE_GONE');
@@ -1205,7 +1239,7 @@ export const api = {
       const me = { birthDate, birthTime, hobbies: [], gender, division: user.division, team: user.team };
       const busy = busyIds(db.matches);
       const already = new Set(mine ? db.hearts.filter((h) => h.fromId === mine.id).map((h) => h.toId) : []);
-      const pool = recommendPool().filter(
+      const pool = recommendPool(user).filter(
         (c) => c.gender !== gender && c.empNo !== user.empNo && RECOMMENDABLE_STATUS.includes(c.status) && !busy.has(c.id) && !already.has(c.id)
           && !(c.division === user.division && c.team.replace(/\s/g, '') === user.team.replace(/\s/g, '')),
       );
@@ -1245,7 +1279,7 @@ export const api = {
       // 하트를 보낼 수 없는 상대면 신청서를 만들기 전에 멈춘다
       // (예전: 신청서만 만들어지고 하트는 실패 → 다시 누르면 '이미 신청함'으로 막혔다)
       const gender = data?.gender ?? user.gender;
-      if (!isActiveCandidate(target) || target.gender === gender) {
+      if (!isActiveCandidate(target, user) || target.gender === gender) {
         throw new ApiError(409, '그새 이 분의 상황이 바뀌었어요. 사주 인연을 다시 찾아주세요.', 'CANDIDATE_GONE');
       }
       const created = await api.application.create(data); // 검증·블랙리스트·중복 신청 확인 포함
@@ -1306,7 +1340,7 @@ export const api = {
     async stats() {
       await wait();
       requireAdmin();
-      const apps = db.applicants;
+      const apps = db.applicants.filter((a) => !a.test); // 개발 테스트 신청서는 통계에서 뺀다
       const weekAgo = Date.now() - 7 * DAY;
       const today = kstDate();
       return {
@@ -1354,7 +1388,7 @@ export const api = {
         division: a.division, team: a.team, campus: a.campus, building: a.building, mbti: a.mbti, face: a.face, looks: a.looks,
         heightBand: a.heightBand, status: a.status, userStatus: userStatusOf(a), busy: busy.has(a.id),
         heartsIn: db.hearts.filter((h) => h.toId === a.id).length, heartsOut: db.hearts.filter((h) => h.fromId === a.id).length,
-        hasMemo: Boolean(a.adminMemo), createdAt: a.createdAt, updatedAt: a.updatedAt,
+        hasMemo: Boolean(a.adminMemo), createdAt: a.createdAt, updatedAt: a.updatedAt, test: Boolean(a.test),
       }));
     },
 
@@ -1418,7 +1452,7 @@ export const api = {
       await wait();
       requireAdmin();
       const target = findApplicant(id);
-      return scoreCandidates(target, recommendPool(), db.matches, db.codes).map(({ applicant: c, age, score, myScore, theirScore, reasons }) => ({
+      return scoreCandidates(target, recommendPool(target), db.matches, db.codes).map(({ applicant: c, age, score, myScore, theirScore, reasons }) => ({
         id: c.id, name: c.name, gender: c.gender, age, division: c.division, team: c.team, campus: c.campus,
         mbti: c.mbti, face: c.face, status: c.status, score, myScore, theirScore, reasons,
       }));
@@ -1448,6 +1482,7 @@ export const api = {
       const a = findApplicant(aId);
       const b = findApplicant(bId);
       if (a.id === b.id) throw new ApiError(400, '같은 사람끼리는 매칭할 수 없어요.', 'VALIDATION');
+      if (Boolean(a.test) !== Boolean(b.test)) throw new ApiError(400, '개발 테스트 신청서와 실제 신청서는 이어줄 수 없어요.', 'VALIDATION');
       const busy = busyIds(db.matches);
       if (busy.has(a.id) || busy.has(b.id)) throw new ApiError(409, '두 분 중 한 분은 이미 진행 중인 매칭이 있어요.', 'MATCH_BUSY');
       if (a.status === 'COUPLED' || b.status === 'COUPLED') throw new ApiError(409, '두 분 중 한 분은 이미 커플 완료 상태예요.', 'MATCH_BUSY');
@@ -1847,6 +1882,111 @@ export const api = {
       audit(user, 'EXPORT', '신청자 목록', `${count}명`);
       commit();
       return null;
+    },
+
+    // ── DB 표 (목적별 표를 그대로 보고 고친다 — 표 정의: shared/db/tables.js) ──
+    /** 표 목록 · 행 수 · 열 */
+    async tables() {
+      await wait();
+      requireAdmin();
+      const rows = rowsOf(db);
+      return TABLES.map((t) => ({
+        coll: t.coll, table: t.table, label: t.label, kind: t.kind, readOnly: Boolean(t.readOnly), key: t.key ?? null,
+        count: rows.get(t.table).length,
+        tests: t.coll === 'applicants' || t.coll === 'employees' ? rows.get(t.table).filter((r) => r.doc?.test).length : 0,
+        columns: t.cols.map(([name, , type, text]) => ({ name, type: type.split(':')[0], text })),
+      }));
+    },
+    /** 표 한 개의 행 — cells: 보기용 열 · doc: 원본(이 값을 고친다) */
+    async tableRows(coll) {
+      await wait();
+      requireAdmin();
+      const t = tableOf(coll);
+      return rowsOf(db).get(t.table).map((row) => ({
+        id: row.id,
+        key: row.keys.length === 1 ? row.keys[0] : row.keys.join('.'),
+        test: Boolean(row.doc?.test),
+        cells: Object.fromEntries(t.cols.map((col) => {
+          const v = cellOf(t, row, col);
+          return [col[0], v instanceof Date ? v.toISOString() : v];
+        })),
+        doc: clone(row.doc),
+      }));
+    },
+    /**
+     * 행 추가·수정 — id 가 없으면 추가. list 표는 원본의 키 필드(id·empNo)가 행 키, map 표는 key 로 정한다
+     * 번호(id)를 비우고 추가하면 다음 번호를 붙인다. 기록에 남는다
+     */
+    async saveTableRow(coll, id, { key, doc } = {}) {
+      await wait();
+      const user = requireAdmin();
+      const t = tableOf(coll);
+      if (t.readOnly) throw new ApiError(403, `${t.label}은(는) 여기서 고칠 수 없어요. ${t.coll === 'codes' ? '기준정보' : t.coll === 'settings' ? '설정' : '해당'} 화면을 써 주세요.`, 'READ_ONLY');
+      if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new ApiError(400, '행 내용은 { } 객체여야 해요.', 'VALIDATION');
+      if (JSON.stringify(doc).length > 100_000) throw new ApiError(400, '행 내용이 너무 커요 (100KB 이하).', 'VALIDATION');
+      const isNew = id === null || id === undefined || id === '';
+      const next = clone(doc);
+      let rowKey;
+      if (t.kind === 'list') {
+        const keyType = keyColsOf(t)[0][2];
+        if ((next[t.key] === undefined || next[t.key] === null || next[t.key] === '') && isNew && t.seq) next[t.key] = ++db.seq[t.seq];
+        if (keyType === 'int') next[t.key] = Number(next[t.key]);
+        if (keyType === 'int' ? !Number.isInteger(next[t.key]) || next[t.key] <= 0 : !String(next[t.key] ?? '').trim()) {
+          throw new ApiError(400, `행 키(${t.key})를 ${keyType === 'int' ? '1 이상의 숫자로' : ''} 넣어 주세요.`, 'VALIDATION');
+        }
+        rowKey = String(next[t.key]);
+        const list = db[t.coll];
+        const at = isNew ? -1 : list.findIndex((x) => String(x[t.key]) === String(id));
+        if (!isNew && at < 0) throw new ApiError(404, '그 행이 없어요. 새로고침해 주세요.', 'NOT_FOUND');
+        if (list.some((x, i) => i !== at && String(x[t.key]) === rowKey)) throw new ApiError(409, `${t.key} ${rowKey} 행이 이미 있어요.`, 'DUPLICATE');
+        if (t.seq && keyType === 'int' && next[t.key] > db.seq[t.seq]) db.seq[t.seq] = next[t.key]; // 다음 번호가 겹치지 않게
+        if (at < 0) list.push(next);
+        else list[at] = next;
+      } else {
+        rowKey = String(key ?? id ?? '').trim();
+        if (t.keyType === 'int' && !/^\d+$/.test(rowKey)) throw new ApiError(400, '행 키를 숫자로 넣어 주세요.', 'VALIDATION');
+        if (!rowKey) throw new ApiError(400, '행 키를 넣어 주세요.', 'VALIDATION');
+        if (!isNew && !(String(id) in db[t.coll])) throw new ApiError(404, '그 행이 없어요. 새로고침해 주세요.', 'NOT_FOUND');
+        if (rowKey !== String(id) && rowKey in db[t.coll]) throw new ApiError(409, `키 ${rowKey} 행이 이미 있어요.`, 'DUPLICATE');
+        if (!isNew && rowKey !== String(id)) delete db[t.coll][id];
+        db[t.coll][rowKey] = next;
+      }
+      audit(user, 'DATA_EDIT', `${t.table} ${rowKey}`, isNew ? '행 추가' : rowKey === String(id) ? '행 수정' : `행 수정 (키 ${id} → ${rowKey})`);
+      commit();
+      return { id: rowKey };
+    },
+    /** 행 삭제 — 신청서는 매칭·하트·쪽지까지 함께 정리한다 (신청자 관리의 삭제와 같다) */
+    async deleteTableRow(coll, id) {
+      await wait();
+      const user = requireAdmin();
+      const t = tableOf(coll);
+      if (t.readOnly) throw new ApiError(403, `${t.label}은(는) 여기서 지울 수 없어요.`, 'READ_ONLY');
+      if (t.kind === 'list') {
+        const row = db[t.coll].find((x) => String(x[t.key]) === String(id));
+        if (!row) throw new ApiError(404, '그 행이 없어요. 새로고침해 주세요.', 'NOT_FOUND');
+        if (t.coll === 'applicants') removeApplicant(row);
+        else db[t.coll] = db[t.coll].filter((x) => x !== row);
+      } else {
+        if (!(String(id) in db[t.coll])) throw new ApiError(404, '그 행이 없어요. 새로고침해 주세요.', 'NOT_FOUND');
+        delete db[t.coll][id];
+      }
+      audit(user, 'DATA_DELETE', `${t.table} ${id}`, t.coll === 'applicants' ? '신청서와 관련 매칭·하트·쪽지 삭제' : '행 삭제');
+      commit();
+      return null;
+    },
+    /** 개발 테스트 데이터 지우기 — 테스트 사번(npm run dev)의 신청서(관련 매칭·하트·쪽지 포함)와 로그인 기록 */
+    async purgeTestData() {
+      await wait();
+      const user = requireAdmin();
+      const apps = db.applicants.filter((a) => a.test);
+      for (const a of apps) removeApplicant(a);
+      const emps = db.employees.filter((e) => e.test && e.empNo !== user.empNo); // 지금 로그인한 계정은 남긴다
+      const gone = new Set(emps.map((e) => e.empNo));
+      db.employees = db.employees.filter((e) => !gone.has(e.empNo));
+      for (const m of ['sajuPicks', 'penalties', 'adminLocks']) for (const k of Object.keys(db[m])) if (gone.has(k)) delete db[m][k];
+      audit(user, 'DATA_PURGE_TEST', '개발 테스트 데이터', `신청서 ${apps.length}건 · 테스트 계정 ${emps.length}개`);
+      commit();
+      return { applicants: apps.length, employees: emps.length };
     },
   },
 

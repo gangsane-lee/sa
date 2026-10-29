@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 관리자 로그인 — 사용자 화면과 다른 주소(기본 /changeme/login)로만 들어온다.
- *  1) 사내 계정 확인 — 운영 모드: 사내 인사정보 확인(로그인 화면 없음) · 개발 모드: 테스트 계정 ID
+ *  1) 사내 계정 확인 — 운영 모드: 사내 인사정보 확인(로그인 화면 없음) · 개발 모드: 테스트 사번 · 가짜 데이터 모드: 테스트 계정 ID
  *  2) 관리자 계정인지 서버가 판단 (운영: server/config/admins.js · test: api/mock/accounts.js)
  *  3) 관리자 비밀번호 확인 → 관리자 화면
  * 비밀번호 검증·실패 횟수 제한·잠금은 서버가 하고, 이 화면은 결과만 보여준다.
@@ -11,7 +11,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxButton } from 'devextreme-vue/button';
 import { session, restoreSession, login, logout, enterAdmin, ssoLogin } from '@/stores/session';
-import { isTestMode, ADMIN_PATH } from '@/config';
+import { isTestMode, isMock, isDevApi, ADMIN_PATH } from '@/config';
 import SaLogo from '@/components/SaLogo.vue';
 
 const route = useRoute();
@@ -77,12 +77,15 @@ const switchAccount = () =>
   run(async () => {
     await logout();
     account.value = '';
+    // 개발 모드(npm run dev): 테스트 사번 고르기 화면에서 다시 들어온다
+    if (isDevApi) router.push({ name: 'login', query: { redirect: ADMIN_PATH } });
   });
 
-/** 개발 모드 계정 채우기 — 빌드(npm run build)에서는 import 자체가 사라진다 */
-const loadAccounts = () => (import.meta.env.DEV ? import('@/api/mock/accounts.js') : Promise.resolve(null));
+/* global __SAYEON_MOCK__ */
+/** 가짜 데이터 모드 계정 채우기 — 빌드(npm run build)·개발 모드에서는 import 자체가 사라진다 */
+const loadAccounts = () => (__SAYEON_MOCK__ ? import('@/api/mock/accounts.js') : Promise.resolve(null));
 async function fillTest() {
-  const a = isTestMode ? await loadAccounts() : null;
+  const a = isMock ? await loadAccounts() : null;
   if (!a) return;
   if (step.value === 'account') {
     account.value = a.TEST_ACCOUNTS.MANAGER;
@@ -111,7 +114,14 @@ async function fillTest() {
           <DxButton text="다시 확인하기" type="default" width="100%" class="card__submit" :disabled="busy" @click="retrySso" />
         </div>
 
-        <!-- 1) 사내 계정 — 개발 모드: 테스트 계정 ID -->
+        <!-- 1) 사내 계정 — 개발 모드(npm run dev): 테스트 사번 고르기 -->
+        <div v-else-if="step === 'account' && isDevApi" class="card__form">
+          <h1 class="card__title">관리자 로그인</h1>
+          <p class="card__sub">개발 모드예요. 테스트 사번으로 먼저 들어간 뒤 관리자 비밀번호를 넣어요. (그 사번이 API 서버 config/admins.js 에 있어야 해요)</p>
+          <DxButton text="테스트 사번 고르기" type="default" width="100%" class="card__submit" @click="router.push({ name: 'login', query: { redirect: ADMIN_PATH } })" />
+        </div>
+
+        <!-- 1) 사내 계정 — 가짜 데이터 모드: 테스트 계정 ID -->
         <form v-else-if="step === 'account'" class="card__form" novalidate @submit.prevent="submitAccount">
           <h1 class="card__title">관리자 로그인</h1>
           <p class="card__sub">먼저 사내 계정으로 본인을 확인해요. 관리자로 등록된 계정만 다음 단계로 넘어가요.</p>
@@ -146,7 +156,7 @@ async function fillTest() {
           <RouterLink :to="{ name: 'home' }" class="card__link">사용자 화면으로 가기</RouterLink>
         </div>
 
-        <button v-if="isTestMode && step !== 'denied'" type="button" class="card__dev" @click="fillTest">
+        <button v-if="isMock && step !== 'denied'" type="button" class="card__dev" @click="fillTest">
           개발 모드 · {{ step === 'account' ? '관리자 계정 채우기' : '관리자 비밀번호 채우기' }}
         </button>
       </div>

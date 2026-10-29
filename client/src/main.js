@@ -19,6 +19,8 @@ import './styles/base.css';
 import './styles/dx-overrides.css';
 import './styles/office.css';
 import { initOffice } from './stores/office';
+import { BLOCK_DEVTOOLS } from './config';
+import { installGuard } from './utils/guard';
 
 import App from './App.vue';
 import router from './router';
@@ -29,6 +31,9 @@ const licenseFile = Object.values(import.meta.glob('./.devextreme/license-key.js
 config({ editorStylingMode: 'outlined', ...(licenseFile?.licenseKey && { licenseKey: licenseFile.licenseKey }) });
 loadMessages(koMessages);
 locale('ko');
+
+// 운영 화면: 개발자 도구 단축키·오른쪽 클릭 막기 (보조 조치 — utils/guard.js)
+if (BLOCK_DEVTOOLS) installGuard();
 
 initOffice();
 createApp(App).use(router).mount('#app');

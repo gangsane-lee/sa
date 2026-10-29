@@ -102,10 +102,10 @@ r.section('실행 환경 (Node.js · npm · IIS · iisnode)');
 const sql = (await import('mssql')).default;
 const { config, RETIRED_ENV, topology, webConfigSettings, MASTER_FILE } = await import('../src/config.js');
 const { placeholdersOf } = await import('../src/sso.js');
-const { poolConfig, SAFE_DB_NAME, TABLE, __internals } = await import('../src/store.js');
+const { poolConfig, SAFE_DB_NAME, __internals } = await import('../src/store.js');
 const { makeCipher, ENC_PREFIX } = await import('../src/crypto.js');
 const { explainDbError } = await import('../src/dbErrors.js');
-const { inspectTable, TABLE_FIX } = await import('./lib/dbinspect.js');
+const { inspectTables, TABLE_FIX } = await import('./lib/dbinspect.js');
 
 // ═══ 2. 서버 기준정보 servers.config.mjs ═══════════════
 r.section(`설정 web.config · servers.config.mjs — 환경 ${topology.envName}`);
@@ -404,26 +404,31 @@ else {
       r.ok(`DB ${c.database} 접속`);
       const run = async (q) => (await pool.request().query(q)).recordset;
 
-      // ④ 테이블
-      const t = await inspectTable(run);
-      if (!t.exists) {
+      // ④ 표 (목적별)
+      const t = await inspectTables(run);
+      if (t.missing.length) {
         const p = (await run(`SELECT HAS_PERMS_BY_NAME(DB_NAME(), 'DATABASE', 'CREATE TABLE') AS ct, HAS_PERMS_BY_NAME('dbo', 'SCHEMA', 'ALTER') AS sa`))[0];
-        if (p.ct && p.sa) r.ok(`테이블 ${TABLE} 이 아직 없어요 — 서버를 처음 켤 때 만들어요`);
-        else r.fail(`테이블 ${TABLE} 이 없고, 계정 ${c.user} 에 만들 권한도 없어요`, { fix: ['관리 계정으로  npm run db:setup'] });
-      } else if (t.problems.length) {
-        r.fail('테이블 구조가 서버가 기대하는 모양과 달라요', { reason: t.problems.join(' · '), fix: [TABLE_FIX] });
-      } else {
-        r.ok(`테이블 ${TABLE} · 문서 ${t.count}건`);
+        if (p.ct && p.sa) r.ok(`아직 없는 표 ${t.missing.length}개 — 서버를 처음 켤 때 만들어요`);
+        else r.fail(`없는 표가 있고(${t.missing.join(', ')}), 계정 ${c.user} 에 만들 권한도 없어요`, { fix: ['관리 계정으로  npm run db:setup  또는 DB 담당자가 sql/setup.sql 실행'] });
+      }
+      if (t.problems.length) {
+        r.fail('표 구조가 서버가 기대하는 모양과 달라요', { reason: t.problems.join(' · '), fix: [TABLE_FIX] });
+      } else if (!t.missing.length) {
+        r.ok(`표 ${t.tables.length}개 · ${t.tables.filter((x) => x.count).map((x) => `${x.label} ${x.count}`).join(' · ') || '아직 데이터 없음'}`);
         // ⑤ 권한
+        const T0 = 'dbo.SA_APPLICANT';
         const p = (await run(`SELECT
-            HAS_PERMS_BY_NAME(N'${TABLE}', 'OBJECT', 'SELECT') AS s, HAS_PERMS_BY_NAME(N'${TABLE}', 'OBJECT', 'INSERT') AS i,
-            HAS_PERMS_BY_NAME(N'${TABLE}', 'OBJECT', 'UPDATE') AS u, HAS_PERMS_BY_NAME(N'${TABLE}', 'OBJECT', 'DELETE') AS d`))[0];
+            HAS_PERMS_BY_NAME(N'${T0}', 'OBJECT', 'SELECT') AS s, HAS_PERMS_BY_NAME(N'${T0}', 'OBJECT', 'INSERT') AS i,
+            HAS_PERMS_BY_NAME(N'${T0}', 'OBJECT', 'UPDATE') AS u, HAS_PERMS_BY_NAME(N'${T0}', 'OBJECT', 'DELETE') AS d`))[0];
         const lack = [['읽기', p.s], ['추가', p.i], ['수정', p.u], ['삭제', p.d]].filter(([, v]) => !v).map(([k]) => k);
         if (lack.length) r.fail(`계정 ${c.user} 에 ${lack.join('·')} 권한이 없어요`, { fix: ['관리 계정으로  npm run db:setup  (db_datareader · db_datawriter)'] });
         else r.ok('읽기·추가·수정·삭제 권한 있음');
 
         // ⑥ 암호화 키가 저장된 데이터와 맞는지
-        const rows = await run(`SELECT TOP (200) COLL, DOC_ID, BODY FROM ${TABLE} WHERE COLL IN ('applicants', 'employees', 'vocs')`);
+        const rows = [
+          ...(await run('SELECT TOP (100) DATA_JSON FROM dbo.SA_APPLICANT')).map((x) => ({ coll: 'applicants', json: x.DATA_JSON })),
+          ...(await run('SELECT TOP (100) DATA_JSON FROM dbo.SA_EMPLOYEE')).map((x) => ({ coll: 'employees', json: x.DATA_JSON })),
+        ];
         const cipher = (() => {
           try {
             return makeCipher(config.dataKey);
@@ -436,8 +441,8 @@ else {
           let plain = 0;
           let bad = 0;
           for (const row of rows) {
-            const o = JSON.parse(row.BODY);
-            for (const f of __internals.SECRET[row.COLL] ?? []) {
+            const o = JSON.parse(row.json);
+            for (const f of __internals.SECRET[row.coll] ?? []) {
               if (typeof o[f] !== 'string' || !o[f]) continue;
               if (!o[f].startsWith(ENC_PREFIX)) plain += 1;
               else {
@@ -457,7 +462,7 @@ else {
               fix: ['처음 쓰던 DATA_KEY 를 그대로 넣어 주세요. (키를 잃어버렸다면 이름·메일은 복구할 수 없어요)'],
             });
           } else if (cipher.enabled && plain) {
-            r.warn(`암호화되지 않은 이름·메일 ${plain}건이 있어요`, { reason: 'DATA_KEY 를 넣기 전에 저장된 데이터예요. 해당 신청서가 바뀌어 저장될 때 암호화돼요.' });
+            r.warn(`암호화되지 않은 이름·메일 ${plain}건이 있어요`, { reason: 'DATA_KEY 를 넣기 전에 저장된 데이터예요. 해당 행이 바뀌어 저장될 때 암호화돼요.' });
           } else if (enc) r.ok(`DATA_KEY 확인 — 암호화된 데이터 ${enc}건을 풀 수 있어요`);
         }
       }
@@ -527,6 +532,9 @@ r.section(`사내 로그인 — ${{ browser: '화면이 사내 인사정보 URL 
     }
   } else if (S.mode === 'iis') {
     r.ok(`로그인 헤더 ${S.headerName} 는 Web 서버(${config.trustedProxies.join(', ')})에서 온 요청만 믿어요`);
+    const D = config.devLogin;
+    if (D.key && D.key.length < 16) r.warn('DEV_LOGIN_KEY 가 16자 미만이라 테스트 사번 로그인이 꺼져 있어요', { fix: ['16자 이상 무작위 값으로 (개발 PC 의 SAYEON_DEV_KEY 와 같게)'] });
+    else if (D.key) r.info(`개발 화면 테스트 사번 로그인 켜짐 — 개발 PC ${D.allowIps.join(', ') || '(없음)'} 에서만 · 사번 ${D.accounts.map((a) => a.empNo).join(', ')} · 개발을 쉬는 동안은 DEV_LOGIN_KEY 를 비워 두세요`);
     if (S.devUser) r.warn(`개발 시험 계정 DEV_SSO_USER=${S.devUser} 가 켜져 있어요`, { reason: 'IIS 없이 이 계정으로 로그인돼요 (development 환경에서만).', fix: ['시험이 끝나면 server/.env 에서 지워 주세요.'] });
     // 도메인 · AD 조회
     if (S.adLookup) {

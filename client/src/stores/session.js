@@ -5,7 +5,7 @@
 import { reactive } from 'vue';
 import { api } from '@/api';
 import { ADMIN_IDLE_MS } from '@shared/constants/policy';
-import { isTestMode } from '@/config';
+import { isTestMode, isDevApi } from '@/config';
 import { fetchEmployee, clearEmployee } from '@/auth/employee';
 
 export const session = reactive({
@@ -67,12 +67,29 @@ export async function employeeLogin({ reuse = false } = {}) {
 /** 예전 이름 (안내 화면의 '다시 확인') */
 export const ssoLogin = employeeLogin;
 
-/** 개발 모드: 로그인 화면 없이 만능 테스트 계정으로 들어간다 */
+/* global __SAYEON_MOCK__ */
+/**
+ * 개발 화면: 로그인 화면 없이 첫 테스트 계정으로 들어간다
+ *  npm run dev:mock → 가짜 데이터의 만능 계정 · npm run dev → 운영 API 의 첫 테스트 사번(servers.config.mjs 의 devLogin)
+ */
 async function devLogin() {
-  // import.meta.env.DEV 를 직접 써야 운영 빌드에서 테스트 계정 파일이 빠진다
-  const seed = import.meta.env.DEV ? await import('@/api/mock/accounts.js') : null;
+  if (isDevApi) {
+    const [first] = await api.auth.devAccounts();
+    if (first) await devLoginAs(first.empNo);
+    return;
+  }
+  // __SAYEON_MOCK__ 상수를 직접 써야 운영 빌드·개발 모드에서 테스트 계정 파일이 빠진다
+  const seed = __SAYEON_MOCK__ ? await import('@/api/mock/accounts.js') : null;
   if (!seed) return;
   await login(seed.TEST_ACCOUNTS.MASTER, seed.MOCK_PASSWORD);
+}
+
+/** 개발 모드(npm run dev): 테스트 사번으로 로그인 — 운영 API 가 개발 PC · 개발 키를 확인한다 */
+export async function devLoginAs(empNo) {
+  const r = await api.auth.devLogin(empNo);
+  session.user = r.user;
+  session.adminExpiresAt = 0;
+  session.restored = true;
 }
 
 /** 화면을 처음 열 때 한 번 — 라우터가 부른다 */
@@ -110,7 +127,7 @@ export async function refreshUser() {
   }
 }
 
-/** 개발 모드: 테스트 계정 로그인 (운영은 employeeLogin) */
+/** 가짜 데이터 모드: 테스트 계정 로그인 (운영은 employeeLogin) */
 export async function login(account, password) {
   const r = await api.auth.login(account, password);
   session.user = r.user;

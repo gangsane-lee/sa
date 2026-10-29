@@ -1,7 +1,7 @@
 /**
  * DB 준비 — server 폴더에서  npm run db:setup
  *
- * .env 의 DB 설정대로 데이터베이스 · 앱 전용 로그인 · DB 사용자 · 권한 · 테이블(dbo.SA_DOC)을 만든다.
+ * .env 의 DB 설정대로 데이터베이스 · 앱 전용 로그인 · DB 사용자 · 권한 · 목적별 표(dbo.SA_APPLICANT 등 — shared/db/tables.js)를 만든다.
  * 이미 있는 것은 건너뛰므로 여러 번 실행해도 안전하다. 마지막에 앱 계정으로 읽기·쓰기까지 확인한다.
  *
  * 계정 두 가지
@@ -21,9 +21,9 @@ import { createReport } from './lib/report.js';
 // 라이브러리는 실행 환경을 확인한 뒤에 불러온다 — npm run db:setup 은 scripts/run.mjs 가 먼저 확인한다
 const sql = (await import('mssql')).default;
 const { config } = await import('../src/config.js');
-const { poolConfig, SAFE_DB_NAME, TABLE, CREATE_TABLE } = await import('../src/store.js');
+const { poolConfig, SAFE_DB_NAME, CREATE_TABLES_SQL } = await import('../src/store.js');
 const { explainDbError } = await import('../src/dbErrors.js');
-const { inspectTable, TABLE_FIX } = await import('./lib/dbinspect.js');
+const { inspectTables, TABLE_FIX } = await import('./lib/dbinspect.js');
 
 const args = new Set(process.argv.slice(2));
 const CHECK_ONLY = args.has('--check');
@@ -209,29 +209,29 @@ try {
     }
   }
 
-  // ── 6. 테이블 ───────────────────────────────────────
-  r.section(`테이블 ${TABLE}`);
+  // ── 6. 표 ─────────────────────────────────────────
+  r.section('표 (목적별 — 신청서 · 매칭 · 하트 · 쪽지 …)');
   if (!dbReady) {
     r.info('DB가 아직 없어 확인을 건너뛰어요');
   } else {
     const run = async (q) => (await admin.request().query(`USE [${c.database}]; ${q}`)).recordset;
-    let t = await inspectTable(run);
-    if (!t.exists) {
-      if (CHECK_ONLY) r.warn('아직 없어요 → 만들 예정');
+    let t = await inspectTables(run);
+    if (t.missing.length) {
+      if (CHECK_ONLY) r.warn(`아직 없는 표 ${t.missing.length}개 → 만들 예정: ${t.missing.join(', ')}`);
       else {
         try {
-          await admin.request().batch(`USE [${c.database}]; ${CREATE_TABLE}`);
-          r.ok('만들었어요');
-          t = await inspectTable(run);
+          await admin.request().batch(`USE [${c.database}]; ${CREATE_TABLES_SQL}`);
+          r.ok(`만들었어요: ${t.missing.join(', ')}`);
+          t = await inspectTables(run);
         } catch (e) {
           r.failDb(explainDbError(e, ctx(adminUser)));
         }
       }
     }
-    if (t.exists && t.problems.length) {
-      r.fail('테이블 구조가 서버가 기대하는 모양과 달라요', { reason: t.problems.join(' · '), fix: [TABLE_FIX] });
-    } else if (t.exists) {
-      r.ok(`구조 확인 · 문서 ${t.count}건${t.count ? '' : ' (서버를 처음 켜면 기본 기준정보·설정이 들어가요)'}`);
+    if (t.problems.length) {
+      r.fail('표 구조가 서버가 기대하는 모양과 달라요', { reason: t.problems.join(' · '), fix: [TABLE_FIX] });
+    } else if (!t.missing.length) {
+      r.ok(`표 ${t.tables.length}개 구조 확인 · 전체 ${t.total}행${t.total ? '' : ' (서버를 처음 켜면 기본 기준정보·설정이 들어가요)'}`);
     }
   }
 
@@ -244,14 +244,14 @@ try {
     try {
       app = await new sql.ConnectionPool(poolConfig(c, c.database, { timeoutMs: 10000 })).connect();
       r.ok('로그인 성공');
-      await app.request().query(`SELECT TOP (1) COLL FROM ${TABLE}`);
+      await app.request().query('SELECT TOP (1) SEQ_NAME FROM dbo.SA_SEQUENCE');
       r.ok('읽기 성공');
       const tx = new sql.Transaction(app);
       await tx.begin();
       try {
-        await new sql.Request(tx).query(`INSERT INTO ${TABLE} (COLL, DOC_ID, BODY) VALUES ('__setup', 'probe', N'{}')`);
-        await new sql.Request(tx).query(`UPDATE ${TABLE} SET BODY = N'{"ok":1}' WHERE COLL = '__setup' AND DOC_ID = 'probe'`);
-        await new sql.Request(tx).query(`DELETE FROM ${TABLE} WHERE COLL = '__setup' AND DOC_ID = 'probe'`);
+        await new sql.Request(tx).query("INSERT INTO dbo.SA_SEQUENCE (SEQ_NAME, LAST_NO, DATA_JSON) VALUES (N'__setup', 0, N'0')");
+        await new sql.Request(tx).query("UPDATE dbo.SA_SEQUENCE SET LAST_NO = 1, DATA_JSON = N'1' WHERE SEQ_NAME = N'__setup'");
+        await new sql.Request(tx).query("DELETE FROM dbo.SA_SEQUENCE WHERE SEQ_NAME = N'__setup'");
         r.ok('쓰기·수정·삭제 성공 (시험한 내용은 되돌렸어요)');
       } finally {
         await tx.rollback().catch(() => {});

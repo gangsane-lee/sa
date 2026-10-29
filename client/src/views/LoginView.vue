@@ -1,15 +1,17 @@
 <script setup>
 /**
- * 개발 모드(npm run dev) 계정 바꾸기 — 처음에는 만능 계정으로 바로 들어가고, 로그아웃하면 이 화면에서
- * 다른 테스트 계정을 골라 들어간다 (계정마다 상태가 달라 화면별로 나눠 시험할 수 있다).
+ * 개발 화면 계정 바꾸기 — 처음에는 첫 계정으로 바로 들어가고, 로그아웃하면 이 화면에서 다른 테스트 계정을 골라 들어간다.
+ *  npm run dev:mock : 가짜 데이터의 테스트 계정 (계정마다 상태가 달라 화면별로 나눠 시험)
+ *  npm run dev      : 운영 API 서버의 테스트 사번 (servers.config.mjs 의 devLogin — 운영 데이터가 보인다)
  * 운영 모드는 이 화면 대신 SsoGateView (사내 인사정보로 확인된 임직원만).
  */
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxButton } from 'devextreme-vue/button';
-import { login } from '@/stores/session';
-import { ADMIN_PATH } from '@/config';
+import { login, devLoginAs } from '@/stores/session';
+import { api } from '@/api';
+import { ADMIN_PATH, isDevApi } from '@/config';
 import SaLogo from '@/components/SaLogo.vue';
 import BadgeScene from '@/components/BadgeScene.vue';
 
@@ -21,21 +23,38 @@ const account = ref('');
 const error = ref('');
 const busy = ref('');
 
-/** 테스트 계정 정보 — 빌드(npm run build)에서는 import 자체가 사라진다 */
-const loadSeed = () => (import.meta.env.DEV ? import('@/api/mock/accounts.js') : Promise.resolve(null));
+/* global __SAYEON_MOCK__ */
+/** 가짜 데이터 테스트 계정 — 빌드(npm run build)·개발 모드(npm run dev)에서는 import 자체가 사라진다 */
+const loadSeed = () => (__SAYEON_MOCK__ ? import('@/api/mock/accounts.js') : Promise.resolve(null));
+const GENDER = { M: '남', F: '여' };
 
 onMounted(async () => {
+  if (isDevApi) {
+    try {
+      const list = await api.auth.devAccounts();
+      accounts.value = list.map((a, i) => ({
+        key: a.empNo, account: a.empNo, title: a.name || a.empNo, pick: i === 0,
+        desc: [GENDER[a.gender], a.division, a.team].filter(Boolean).join(' · '),
+      }));
+    } catch (e) {
+      error.value = e.status === 404
+        ? '이 PC 에서는 테스트 사번 로그인이 허용되지 않았어요 — 개발 PC IP · client/.env.development.local 의 SAYEON_DEV_KEY · API 서버 .env 의 DEV_LOGIN_KEY 를 확인해 주세요.'
+        : e.message;
+    }
+    return;
+  }
   seed.value = await loadSeed();
   if (!seed.value) return;
   accounts.value = seed.value.TEST_ACCOUNT_LIST.map((a) => ({ ...a, account: seed.value.TEST_ACCOUNTS[a.key] }));
 });
 
 async function enter(id) {
-  if (!seed.value || !id) return;
+  if ((!seed.value && !isDevApi) || !id) return;
   busy.value = id;
   error.value = '';
   try {
-    await login(id.trim(), seed.value.MOCK_PASSWORD);
+    if (isDevApi) await devLoginAs(id.trim());
+    else await login(id.trim(), seed.value.MOCK_PASSWORD);
     const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') ? route.query.redirect : '/';
     router.replace(redirect);
   } catch (e) {
@@ -60,9 +79,10 @@ async function enter(id) {
 
     <section class="panel">
       <div class="card">
-        <p class="card__eyebrow">개발 모드 · 가짜 데이터</p>
-        <h2 class="card__title">테스트 계정으로 들어가기</h2>
-        <p class="card__sub">계정마다 신청 상태가 달라요. 시험할 화면에 맞는 계정을 고르면 바로 들어가요. (운영 모드에서는 이 화면 없이 사내 인사정보로 확인해 들어와요)</p>
+        <p class="card__eyebrow">{{ isDevApi ? '개발 모드 · 운영 API 서버 (운영 데이터)' : '개발 모드 · 가짜 데이터' }}</p>
+        <h2 class="card__title">테스트 {{ isDevApi ? '사번' : '계정' }}으로 들어가기</h2>
+        <p v-if="isDevApi" class="card__sub">운영 DB 를 함께 써요. 테스트 사번으로 만든 신청·하트·쪽지는 '테스트'로 표시되고 일반 사용자에게는 보이지 않아요. (운영 모드에서는 이 화면 없이 사내 인사정보로 확인해 들어와요)</p>
+        <p v-else class="card__sub">계정마다 신청 상태가 달라요. 시험할 화면에 맞는 계정을 고르면 바로 들어가요. (운영 모드에서는 이 화면 없이 사내 인사정보로 확인해 들어와요)</p>
 
         <ul class="accts">
           <li v-for="a in accounts" :key="a.key">
@@ -79,7 +99,7 @@ async function enter(id) {
 
         <p v-if="error" class="card__error" role="alert">{{ error }}</p>
 
-        <form class="direct" novalidate @submit.prevent="enter(account)">
+        <form v-if="!isDevApi" class="direct" novalidate @submit.prevent="enter(account)">
           <label class="field__label" for="login-account">다른 계정 직접 입력 (사내 계정 ID 또는 사번)</label>
           <div class="direct__row">
             <DxTextBox
@@ -93,7 +113,10 @@ async function enter(id) {
           </div>
         </form>
 
-        <p class="card__privacy">
+        <p v-if="isDevApi" class="card__privacy">
+          관리자 화면은 <span class="mono">{{ ADMIN_PATH }}</span> — 테스트 사번을 API 서버 config/admins.js 에 넣은 경우에만 들어가요.
+        </p>
+        <p v-else class="card__privacy">
           관리자 화면은 <span class="mono">{{ ADMIN_PATH }}</span> 주소에서 만능 계정·매칭 담당자로 들어가요.
           입력한 내용은 이 브라우저에만 저장돼요 — 실제 개인정보는 넣지 마세요.
         </p>

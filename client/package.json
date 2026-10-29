@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:mock": "vite --mode mock",
     "prebuild": "node scripts/preflight.mjs",
     "build": "vite build",
     "postbuild": "node scripts/postbuild.mjs",

@@ -9,65 +9,91 @@
 
 ### 서버 구성 — 값은 `servers.config.mjs` 한 곳에서
 
-| 역할 | 주소 (지금은 가짜 — 실제 IP 로 바꿀 것) | 인터넷 | 하는 일 |
-|---|---|---|---|
-| **개발 서버** | `12.123.321.13` | **됨** | 개발·시험, **빌드와 배포 패키지 만들기** (`npm run release`) |
-| **Web 배포 운영 서버** | `10.123.321.12:8282` | 안 됨 | IIS. **화면 파일만** (API 서버와 통신하지 않는다) |
-| **API 배포 운영/개발 서버** | `https://<api.dnsName>` (`12.83.18.17:443`) | 안 됨 | **회사의 다른 iisnode 앱에 끼워 넣기** (설치 없음 — `routessayeon` 운영 · `routessayeon-dev` 개발, [D-2](#d-2-사이트를-새로-만들기-어려울-때--회사의-다른-iisnode-앱-routes-폴더에-끼워-넣기)). **사용자 PC 브라우저가 직접 부른다**. 업무 처리 · DB 접속 · (권장) 사내 인사 API 로 사번 재확인 |
-| **DB 서버** | `10.166.101.127:1433` | 안 됨 | MSSQL — 운영 DB `sasystem` · 개발 DB `sasystem_dev` |
-
-- 사용자(사내 PC)는 **Web 서버 주소**로 화면을 연다: `http://<Web 서버>:8282`, 관리자 `…/changeme`
-- 화면이 뜬 뒤 **사용자 PC 브라우저가 API 서버(`https://<api.dnsName>/sayeon/api`)를 직접** 부른다. 서버끼리 통신하는 구간은 **API → DB** 뿐이다 (Web ↔ API · Web ↔ DB 통신 없음)
-- 모두 Windows 서버. 운영 서버 3대는 인터넷이 막혀 있어 **필요한 모든 파일을 개발 서버에서 만들어 복사**한다
+| 역할 | 주소 | 종류 | 인터넷 | 하는 일 |
+|---|---|---|---|---|
+| **Web 서버** | `https://oncloud9.samsungds.net:8282` (`10.122.122.1`) | 클라우드 · Windows Server | 차단 | IIS + URL Rewrite + 사내 인증서. **화면 파일만** (`dist` 를 풀어 놓는다) |
+| **API 서버** | `https://alfadev.samsungds.net:8292/sayeon` (`10.122.122.2`) | 물리 · Windows Server | 차단 | **이미 운영 중인 IIS-iisnode 앱의 `routes` 폴더에 `routes\sayeon` 을 복사** (설치 없음, [D-2](#d-2-사이트를-새로-만들기-어려울-때--회사의-다른-iisnode-앱-routes-폴더에-끼워-넣기)). **https 로만** 받는다 |
+| **DB 서버** | `10.166.101.127:1433` · DB `sasystem` | 클라우드 · Windows Server | 차단 | MSSQL — **운영·개발이 같은 DB** · 목적별 표(`SA_APPLICANT` · `SA_MATCH` …) |
+| **개발 서버** | `10.122.122.10` (개인 PC) | 물리 | **연결** | 개발(`npm run dev`) · 빌드(`npm run build`) · API 묶음(`npm run plugin`) |
 
 ```
-[개발 서버] ── npm run release ──▶ release/<빌드번호>-production/
-                                     ├ web/   ──(복사)──▶ [Web 서버] IIS 사이트 폴더   ← deploy-web.ps1 / check-web.ps1
-                                     └ api/   ──(복사)──▶ [API 서버] IIS 사이트 폴더   ← deploy-api.ps1 (안에서 npm run check)
-                                              (main.js · web.config · routes\ … 폴더째 복사하면 끝)
-
-[사내 PC 브라우저] ──① 사내 인사정보 URL 호출 ──▶ [사내 인사정보 서버]   (사내 SSO 쿠키 함께, CORS 허용 필요)
-      │               ② 응답을 localStorage 에 저장 · 사번·재직 여부 확인 → 아니면 "임직원만 이용할 수 있어요"
-      ├── http :8282 ─────▶ [Web 서버 IIS] 화면 파일만 (html · js · css)
+[개인 PC 브라우저] ──① 사내 인사 데이터 URL (GET) ──▶ sabun · user_name  → localStorage
+      │            ──② 임직원 확인 URL (POST sabun · user_name) ──▶ 임직원이면 계속, 아니면 "임직원만 이용할 수 있어요"
       │
-      └── https :443 ─────▶ [API 서버 — 다른 iisnode 앱 /sayeon] ── ③ 받은 인사정보 확인
-           (화면 JS 가 직접 호출 ·          (+ 권장: 사번으로 사내 인사 API 재확인) → 세션
-            CORS: Web 서버 주소만 허용 ·          │ 1433
-            세션은 X-Sayeon-Session 헤더)         ▼
-                                             [DB 서버] sasystem
+      ├── https :8282 ───▶ [Web 서버 IIS] 화면 파일만
+      │
+      └── https :8292 ───▶ [API 서버 — 회사 iisnode 앱 /sayeon] ── 1433 ──▶ [DB 서버] sasystem
+           (화면 JS 가 직접 호출 · CORS: oncloud9 화면만 · 세션은 X-Sayeon-Session 헤더 · http 는 거절)
 
-  Web 서버 ↔ API 서버 통신 없음 · 방화벽: 사내 PC → Web 8282 · 사내 PC → API 443 · 사내 PC → 인사정보 URL · API → DB 1433
+[개발 PC 10.122.122.10] npm run dev (5173) ── vite 프록시 /api ── https :8292 ──▶ 같은 API · 같은 DB (테스트 사번)
+
+  Web 서버 ↔ API·DB 서버 통신 없음
+  방화벽: 사용자 PC → Web 8282 · 사용자 PC → API 8292 · 개발 PC → API 8292 · 사용자 PC → 인사 URL 2개 · API → DB 1433
 ```
 
-### 마스터 파일 `servers.config.mjs` (저장소 맨 위)
+### 개발 단계
 
-IP·포트·DB 이름·관리자 주소·로그인 방식은 **여기서만** 고친다. 아래가 이 값을 자동으로 따라간다.
+1. API · DB 서버는 미리 셋업해 둔다 (API: 그 앱 `main.js` 에 한 줄 + `routes\sayeon` · DB: 표는 처음 시작할 때 자동, 또는 `sql\setup.sql`)
+2. 개발 서버에서 `npm run dev` — 화면 5173 이 **운영 API 서버를 부르고 운영 DB 를 함께 쓴다**. 로그인 없이 **테스트 사번**으로 바로 들어간다
+3. 개발이 끝나면 개발 서버에서 `npm run build` → `client\dist` 를 압축해 Web 서버로
+4. Web 서버에서 압축을 풀고 IIS(URL Rewrite · 사내 인증서 · https 8282)로 낸다 — `dist\web.config` 가 들어 있다
+5. API 코드가 바뀌었으면 개발 서버에서 `npm run plugin` → `release\routes-production\routes\sayeon` 을 API 서버 그 앱의 `routes\sayeon` 에 덮어쓰고 앱 풀 재시작
 
-| 따라가는 곳 | 무엇이 |
-|---|---|
-| API 서버 `web.config` (패키지가 만듦) | 환경 · API 포트 · DB 서버/이름 (`appSettings` — 서버에서 직접 고쳐도 된다) |
-| API 서버 (`servers.config.mjs` 사본 · 묶음 안) | 사용자 접속 주소, **이 API 를 부를 수 있는 화면 주소(CORS — Web 서버 IP · DNS 이름)**, 관리자 주소, 로그인 방식 |
-| 화면 빌드 (`npm run build`) | Web 서버용 `web.config`(화면 주소 처리만), `sayeon.config.js`(**API 서버 주소** · 관리자 주소 · **사내 인사정보 URL**), 점검·배포 스크립트 |
-| 운영 빌드 미리보기 (`npm run preview`) | `/api` 를 개발 API 서버로 넘기는 주소 (미리보기는 빌드의 API 주소 대신 이 프록시를 쓴다) |
-| 배포 패키지·점검 | 각 서버 주소·포트로 연결 확인 |
+### 화면 모드 — 명령으로 자동
 
-비밀번호·키는 마스터에 쓰지 않는다 → API 서버 사이트 폴더의 `.env` (git·패키지에 들어가지 않음).
-IP 가 형식에 안 맞으면(예: `321`) 서버·빌드·패키지·점검이 모두 멈추고 알려 준다.
-
-### 개발 모드 · 운영 모드 — 명령으로 자동
-
-| 명령 | 모드 | 동작 |
+| 명령 (client) | 모드 | 동작 |
 |---|---|---|
-| `npm run dev` (client) | **개발 모드** | 서버 없이 브라우저 안의 가짜 데이터. **로그인 화면 없이 만능 테스트 계정으로 바로 홈**. 로그아웃하면 다른 테스트 계정을 고를 수 있다. 화면 위에 '개발 모드' 띠 |
-| `npm run build` (client) · `npm run release` | **운영 모드** | 실제 API(`/api`). 화면을 열 때 **사내 인사정보 URL** 로 임직원 확인. 가짜 데이터·테스트 계정 코드는 빌드에 들어가지 않는다(들어가면 빌드가 멈춘다) |
+| `npm run dev` | **개발 모드 · 운영 데이터** | vite 프록시로 **운영 API 서버(같은 DB)** 를 부른다. 로그인 없이 `servers.config.mjs` 의 **테스트 사번**(`devLogin`)으로 바로 홈, 로그아웃하면 다른 테스트 사번을 고른다. 화면 위 '개발 모드 · 운영 데이터' 띠 |
+| `npm run dev:mock` | **가짜 데이터 모드** | 서버 없이 브라우저 안의 가짜 데이터. 만능 테스트 계정으로 바로 홈 |
+| `npm run build` | **운영 모드** | 화면을 열 때 인사정보 2단계 확인. 가짜 데이터·테스트 사번 코드는 빌드에 들어가지 않는다(들어가면 빌드가 멈춘다) |
 
-따로 바꿀 모드 설정은 없다.
+**테스트 사번 로그인 (npm run dev)** — 운영 API 가 아래 셋이 모두 맞을 때만 받는다. 아니면 없는 API 처럼 404
+
+| 조건 | 어디서 |
+|---|---|
+| 호출한 PC 가 개발 PC | `servers.config.mjs` 의 `devServer.host` (`10.122.122.10`) — 그 앱 web.config 의 `promoteServerVars` 에 `REMOTE_ADDR` 필요 |
+| 개발 키가 같다 | API 서버 `routes\sayeon\.env` 의 `DEV_LOGIN_KEY` = 개발 PC `client\.env.development.local` 의 `SAYEON_DEV_KEY` (16자 이상, git 에 올리지 않는다 — 키는 브라우저로 내려가지 않고 vite 프록시만 붙인다) |
+| 사번이 목록에 있다 | `servers.config.mjs` 의 `devLogin.accounts` (`TEST0001` 남 · `TEST0002` 여 · `TEST0003` 관리자 시험용) |
+
+테스트 사번으로 만든 신청서에는 **'테스트' 표시**가 붙고, 일반 사용자의 후보·하트·사주·매칭·통계에 **나오지 않는다**(테스트 사번은 운영 데이터를 함께 본다). 관리자 화면 **DB 표 → 테스트 데이터 지우기**로 한 번에 지운다.
+
+### DB 표 — 목적별
+
+`sasystem` 안의 표 (정의: `server/shared/db/tables.js` · SSMS 에서 표·열 설명이 보인다)
+
+| 표 | 내용 | 표 | 내용 |
+|---|---|---|---|
+| `SA_APPLICANT` | 신청서 | `SA_DAILY_PICK` | 오늘의 후보 |
+| `SA_EMPLOYEE` | 임직원(로그인한 사람) | `SA_SEEN` | 이미 본 후보 |
+| `SA_MATCH` | 매칭 | `SA_SAJU_PICK` | 오늘의 사주 인연 |
+| `SA_HEART` | 하트 | `SA_PENALTY` | 싫어요 누적(탈퇴자) |
+| `SA_REVIEW` | 후기 | `SA_ADMIN_LOCK` | 관리자 인증 잠금 |
+| `SA_MESSAGE` | 쪽지 | `SA_AUDIT_LOG` | 열람·작업 기록 |
+| `SA_VOC` | 개선의 소리 | `SA_CODE` | 기준정보(선택 목록) |
+| `SA_BLACKLIST` | 블랙리스트 | `SA_SETTING` · `SA_SEQUENCE` | 설정 · 번호 발급 |
+
+- 앞쪽 열(ID · 사번 · 상태 · 시각 …)은 **보기용**, `DATA_JSON` 이 행 전체 원본이다. 이름·메일은 `DATA_KEY` 로 암호화된다
+- **값을 고칠 때는 관리자 화면 `DB 표`** 에서 (행 추가·수정·삭제, 열람 기록에 남는다). SSMS 에서 직접 고치면 서버가 메모리 기준으로 다시 저장할 때 덮어쓴다
+- 예전 한 표(`SA_DOC`)에 데이터가 있고 새 표가 비어 있으면 처음 시작할 때 **자동으로 옮긴다** (`SA_DOC` 은 백업으로 남는다)
+- ⚠ 서버가 데이터를 메모리에 두고 저장하므로 **이 DB 를 쓰는 사緣 API 는 하나만** (그 앱 `nodeProcessCountPerApplication="1"`, 같은 DB 로 다른 사緣 서버를 띄우지 않는다)
+
+### 보안
+
+| 구간 | 조치 |
+|---|---|
+| 화면 빌드 | 소스맵 없음 · 주석·console·debugger 제거 · 이름 압축 · 파일 이름 해시(`assets/해시.js`) · 가짜 데이터·테스트 사번 코드 제외 (빌드가 검사) |
+| 화면 (운영) | 개발자 도구 단축키(F12 · Ctrl+Shift+I/J/C · Ctrl+U)·오른쪽 클릭 막기 (`servers.config.mjs` 의 `security.blockDevtools` — 보조 조치, 브라우저 메뉴로 여는 것은 못 막는다) |
+| Web 서버 (`dist\web.config`) | CSP(부를 수 있는 곳: 자기 · API · 인사 URL) · Server 헤더 비움 · X-Powered-By 제거 · `.map`·`.config`·`.json`·`.ps1` 차단 · GET/HEAD 만 · 디렉터리 목록 끔 · 다른 사이트에 끼워 보이기 금지 |
+| API | https 로 온 호출만 · CORS 는 oncloud9 화면만 · IP 당 1분 600회 · 응답 캐시 금지 · 오류에 서버 정보 없음 · 점검(`/api/health`)은 ok 만 · 관리자는 비밀번호 + 실패 잠금 · 모든 관리자 열람·수정 기록 |
+| 비밀값 | 화면에는 없다 — DB 계정(그 앱 main.js) · 키(`routes\sayeon\.env`) · 관리자 비밀번호(`config\admins.js`) 는 API 서버에만 |
+
+> ⚠ **보안 한계**: 화면 코드는 사용자 PC 로 내려가므로 읽는 것 자체를 완전히 막을 수는 없다 — 그래서 권한 판단은 모두 API 서버가 한다. 인사정보 2단계 확인은 브라우저가 하므로 사용자가 결과를 꾸밀 수 있다. API 서버에서 인사 서버로 통신이 되면 `sso.hrApi` 로 서버 재확인을 켤 수 있다.
 
 ### 운영 표준 버전 · 경로
 
 | Node.js | npm | iisnode | URL Rewrite |
 |---|---|---|---|
-| **22.12.0** | **10.9.0** (Node 에 포함) | **0.2.26** (x64, API 서버) | **2.1** (Web·API 서버) |
+| **22** (API 서버 그 앱과 같은 것) | **10.9.0** (Node 에 포함) | 그 앱 것 | **2.1** (Web 서버) |
 
 > ⚠ **설치 경로는 영문·숫자로만** (예: `C:\apps\sa`, `C:\deploy\…`). Node.js 22.12.0 은 Windows 에서 한글이 들어간 경로의 패키지를 불러올 때 **메시지 없이 강제 종료**된다. 모든 스크립트가 먼저 확인하고 알려 준다.
 
@@ -75,18 +101,16 @@ IP 가 형식에 안 맞으면(예: `321`) 서버·빌드·패키지·점검이 
 
 ## 0. 먼저 확인·요청할 것
 
-| # | 확인할 것 | 누구에게 | 왜 |
+| # | 확인할 것 | 누구에게 | 상태 |
 |---|---|---|---|
-| 1 | 4대 서버의 **실제 IP**, Web 서버의 **사내 DNS 이름**(있으면) | IT | 지금 IP 는 가짜(`321` 은 불가능한 값) |
-| 2 | **사내 인사정보 URL** — 사내 PC 브라우저가 부를 주소, GET/POST, 보낼 값(예: 본문에 localStorage 의 `sabun`), 응답 JSON 예시, 사용자를 무엇으로 알아보는지(사내 SSO 쿠키 등) | 인사 시스템 담당 | `servers.config.mjs` 의 `sso.employeeApi` |
-| 3 | 인사정보 서버의 **CORS 허용** — 사緣 화면 주소(`http://<Web 서버>:8282`)를 허용. 쿠키를 쓰면 `Access-Control-Allow-Credentials: true` 이고 허용 주소는 `*` 가 아닌 정확한 주소 | 인사 시스템 담당 | 없으면 브라우저가 응답을 읽지 못해 **모두 안내 화면**으로 감 |
-| 4 | (권장) **서버용 사내 인사 API** — 사번으로 재직 조회, API 서버에서 접근 가능한지, API 키 | 인사 시스템 담당 | `sso.hrApi` — 브라우저가 보낸 정보를 서버가 다시 확인 |
-| 5 | **IIS 확장 설치 허용** — Web 서버: URL Rewrite 2.1 / API 서버: 끼워 넣기(D-2)면 없음, 전용 사이트(D)면 URL Rewrite 2.1 · **iisnode 0.2.26** (.msi, 오프라인 설치) | 보안·IT | Web: 화면 주소 새로 고침 / API: IIS 가 Node.js 를 실행 |
-| 6 | **방화벽** — 사내 PC → Web 8282 / **사내 PC → API 443** / 사내 PC → 인사정보 URL / API → DB 1433 / API → 인사 API(4번) | 네트워크 | **Web → API 는 필요 없다** (브라우저가 API 를 직접 부른다) |
-| 7 | 개발 API 를 **API 서버의 8293** 에서 돌려도 되는지 (그림의 "운영/개발" 겸용) | 본인 | 다르면 `servers.config.mjs` 의 `development` 수정 |
-| 8 | API 서버 **https 인증서**(`api.dnsName`)를 사내 인증 기관에서 발급 — 사내 PC 가 그 루트 인증서를 신뢰하는지, 사내 DNS 등록 · DB 백업 정책 · `DATA_KEY` 보관 위치 | IT·보안 | 6장 |
-
-> ⚠ **보안 한계**: 브라우저가 받은 인사정보는 사용자가 개발자 도구로 꾸며 보낼 수 있다. 4번(서버 재확인)을 켜면 **없는 사번·퇴직자**는 막지만 **다른 사람 사번을 입력하는 것**까지는 막지 못한다. 더 강한 확인이 필요해지면 4장의 iis 방식(Windows 인증)으로 바꿀 수 있다.
+| 1 | 서버 IP · DNS 이름 (Web `oncloud9.samsungds.net` · API `alfadev.samsungds.net`) | IT | ✅ |
+| 2 | **사내 인사 데이터 URL**(1단계) — 응답 JSON 예시(`sabun` · `user_name` 위치), 사용자를 무엇으로 알아보는지(사내 SSO 쿠키 등) | 인사 시스템 담당 | `sso.employeeApi.url` 비어 있음 |
+| 3 | **임직원 확인 URL**(2단계) — POST 본문 형식, 임직원일 때 응답(예: `result: 'Y'`) | 인사 시스템 담당 | `sso.employeeCheck` 비어 있음 |
+| 4 | 두 인사 서버의 **CORS 허용** — `https://oncloud9.samsungds.net:8282`. 쿠키를 쓰면 `Access-Control-Allow-Credentials: true`, 허용 주소는 `*` 가 아닌 정확한 주소. **두 URL 모두 https** | 인사 시스템 담당 | 없으면 모두 안내 화면으로 감 |
+| 5 | 방화벽 — 사용자 PC → Web 8282 · 사용자 PC → API 8292 · 개발 PC → API 8292 · API → DB 1433 | 네트워크 | ✅ (8292 열림) |
+| 6 | 그 앱 web.config — `nodeProcessCountPerApplication="1"` · `promoteServerVars="REMOTE_ADDR,HTTPS"` | API 서버 담당 | ✅ 가능 |
+| 7 | 그 앱 `main.js` — 사緣 줄을 **CORS 미들웨어보다 앞에**, mssql 설정을 넘긴다 | API 서버 담당 | D-2 |
+| 8 | DB 백업 정책 · `DATA_KEY` 보관 위치 · 개발 키(`DEV_LOGIN_KEY`) 보관 | IT·보안 | |
 
 ---
 
@@ -149,7 +173,9 @@ npm run release
 
 - **확인**: 마지막 줄 `배포 패키지 준비 완료`. `release\<빌드번호>-production` 폴더 통째로 운영 서버에 복사 (`--zip` 을 붙이면 zip 도 만든다)
 
-### D. API 서버 (12.83.18.17) — IIS + iisnode · 운영(8292)·개발(8293) 두 사이트
+### D. API 서버 — 사緣 전용 IIS 사이트로 낼 때 (지금은 쓰지 않음 → D-2)
+
+> 지금 API 서버(`10.122.122.2`)는 **이미 운영 중인 iisnode 앱의 `routes` 폴더에 끼워 넣는 방식(아래 D-2)** 이다. 이 D 는 사緣 전용 사이트를 따로 만들 때만 참고한다 (`servers.config.mjs` 의 `api.basePath: ''`).
 
 API 서버 폴더는 **그대로 IIS 사이트 폴더**다. 패키지의 `api` 폴더를 복사하면 끝이다.
 
@@ -220,29 +246,33 @@ C:\sites\sayeon-api-dev\      ← 'sayeon-api-dev' (포트 8293, 개발) — 개
 
 #### D-2. 사이트를 새로 만들기 어려울 때 — 회사의 다른 iisnode 앱 `routes` 폴더에 끼워 넣기
 
-> **지금 기본 배포 방식이다** (`servers.config.mjs` 의 `api.basePath` 가 `'/sayeon'`). 사緣 전용 사이트(위 D)로 돌아가려면 `basePath: ''`.
+> **지금 배포 방식이다** — API 서버 `10.122.122.2` 의 운영 중인 IIS-iisnode 앱(https 8292, 인증서 `alfadev.samsungds.net`, Node 22, `require` 방식) `routes` 폴더에 `routes\sayeon` 을 복사한다. 사緣 전용 사이트(위 D)로 돌아가려면 `basePath: ''`.
 
 API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어려우면, 이미 돌고 있는 다른 iisnode(Express) 앱에 사緣 API 를 **폴더 하나**로 넣는다. 라이브러리까지 한 파일(`index.js`)에 묶여 있어 `npm install` 이 필요 없다.
 
-1. [ ] `servers.config.mjs` 의 `api` — **`dnsName` 은 https 인증서에 적힌 DNS 이름(필수)**, `port` 는 그 앱 IIS 사이트의 https 포트(기본 443), `https: true`, `basePath` 는 붙일 경로(운영 `'/sayeon'`, 개발 `'/sayeon-dev'`)
+1. [ ] `servers.config.mjs` 의 `api` — `dnsName: 'alfadev.samsungds.net'`(인증서 이름), `port: 8292`(그 앱 IIS 사이트의 https 포트), `https: true`, `basePath: '/sayeon'` (개발 화면도 같은 API 를 쓴다 — 개발용 경로를 따로 두지 않는다)
    - **사용자 PC 브라우저**가 `https://<dnsName>/sayeon/api/…` 를 직접 부른다 → 사내 PC 가 그 이름을 찾을 수 있어야 하고(사내 DNS 등록), 인증서를 발급한 **사내 인증 기관(루트) 인증서를 사내 PC 가 신뢰**해야 한다 (보통 사내 PC 에는 배포돼 있다)
-   - 그 앱 IIS 사이트에 https 바인딩 + `<dnsName>` 인증서 (API 서버 담당), 방화벽 **사내 PC 대역 → 443**
+   - 그 앱 IIS 사이트에 https 8292 바인딩 + `alfadev.samsungds.net` 인증서, 방화벽 **사용자 PC 대역 · 개발 PC → 8292**
    - API 는 `web`(IP · DNS 이름)에서 연 화면의 호출만 받는다(CORS). 다른 주소로도 화면을 열면 묶음 `.env` 의 `CORS_ORIGINS` 에 더한다
    - 로그인 세션은 쿠키가 아니라 `X-Sayeon-Session` 헤더로 주고받는다 — 화면과 API 의 주소가 달라도 회사 브라우저의 제3자 쿠키 정책과 상관없다. 탭마다 따로이고, 탭을 닫으면 끝난다(다시 열면 인사정보로 자동 재확인)
 2. [ ] 개발 PC 에서 `npm run release` — `basePath` 가 있으면 `api\` 대신 `routes\sayeon\` 을 만든다 (묶음만: server 폴더에서 `npm run plugin`)
    화면 설정 `sayeon.config.js` 의 `apiBase` 에 `https://<dnsName>/sayeon` 이 들어간다 (Web 서버 web.config 에는 `/api` 전달이 없다)
-3. [ ] `routes\sayeon` 폴더를 그 앱의 `routes` 폴더에 복사 → 그 앱 `main.js` 에 한 줄 (그 앱의 404·오류 처리보다 앞에)
+3. [ ] `routes\sayeon` 폴더를 그 앱의 `routes` 폴더에 복사 → 그 앱 `main.js` 에 한 줄 — **그 앱의 CORS·로그인 미들웨어보다 앞에**, 그 앱의 mssql 설정(계정 포함)을 넘긴다
    ```js
-   app.use('/sayeon', require('./routes/sayeon'));
+   // 그 앱 main.js 에 이미 있는 mssql 설정 변수를 넘긴다 (변수 이름은 그 앱에 맞게). DB 이름은 사緣 것(sasystem)을 쓴다
+   app.use('/sayeon', require('./routes/sayeon')({ db: dbConfig }));
+   // 그 앱 계정 대신 사緣 전용 계정을 쓰려면 위 대신 아래 + routes\sayeon\.env 의 DB_USER · DB_PASSWORD
+   // app.use('/sayeon', require('./routes/sayeon'));
    ```
-4. [ ] 그 앱 web.config 의 `<iisnode>` — **`nodeProcessCountPerApplication="1"` 필수**(사緣은 데이터를 메모리에 두고 저장한다), **`promoteServerVars="REMOTE_ADDR"` 필요**(사용자 IP — 열람 기록 · 로그인 확인 횟수 제한. 없으면 IP 가 비고 횟수 제한이 꺼진다). Node.js 22 이상
+   - 그 앱 계정이 `sasystem` DB 에 읽기·쓰기(처음 한 번은 표 만들기) 권한이 있어야 한다. 표 만들기 권한이 없으면 DB 담당자가 `sql\setup.sql` 로 표를 미리 만든다
+4. [ ] 그 앱 web.config 의 `<iisnode>` — **`nodeProcessCountPerApplication="1"` 필수**(사緣은 데이터를 메모리에 두고 저장한다), **`promoteServerVars="REMOTE_ADDR,HTTPS"` 필요** (REMOTE_ADDR: 사용자 IP — 열람 기록 · 로그인 확인 횟수 제한 · 개발 PC 확인 / HTTPS: http 로 온 호출 거절). Node.js 22 이상
    그 앱이 모든 요청에 로그인 확인 · CORS 를 먼저 거는 구조면 사緣 줄을 그보다 **앞에** 둔다 (OPTIONS 사전 확인 요청이 사緣까지 와야 한다)
-5. [ ] `routes\sayeon\.env` · `config\admins.js` 채우기 → `node tools\db-setup.mjs` → 그 앱의 앱 풀 재시작
-6. [ ] **확인** — **사내 PC 브라우저**에서 `https://<dnsName>/sayeon/api/health` (인증서 이름과 맞아야 하므로 DNS 이름으로) → `{"ok":true …}` · 이어서 화면 로그인 · 실패하면 그 앱 iisnode 로그의 `[sayeon]` 줄 (허용하지 않은 화면 주소에서 부르면 `[sayeon] 허용하지 않은 화면 주소 …` 가 남는다)
+5. [ ] `routes\sayeon\.env` 채우기 — `SESSION_SECRET` · `DATA_KEY` (DB 계정은 3번에서 넘겼으면 비워 둔다) · 개발 화면을 쓸 거면 `DEV_LOGIN_KEY`(16자 이상, 개발 PC `client\.env.development.local` 의 `SAYEON_DEV_KEY` 와 같게) → `config\admins.js` → 그 앱의 앱 풀 재시작
+6. [ ] **확인** — **사내 PC 브라우저**에서 `https://alfadev.samsungds.net:8292/sayeon/api/health` (인증서 이름과 맞아야 하므로 DNS 이름으로) → `{"ok":true …}` · 이어서 화면 로그인 · 실패하면 그 앱 iisnode 로그의 `[sayeon]` 줄 (허용하지 않은 화면 주소에서 부르면 `[sayeon] 허용하지 않은 화면 주소 …` 가 남는다)
 
 순서 전체는 묶음 안의 `설치안내.txt`. 사緣이 시작에 실패해도 **그 앱은 그대로 돈다**(사緣 API 만 503, 30초 뒤 다시 시도). 설정은 묶음 폴더의 `.env` 에서만 읽고 그 앱의 환경 변수·세션과 섞지 않는다. 업데이트는 `index.js` 등을 덮어쓰고(`.env` · `config\admins.js` 는 그대로) 앱 풀 재시작 — `routes` 아래 파일은 iisnode 가 바뀐 것을 알아채지 못한다.
 
-### E. DB (10.166.101.127) — 운영 `sasystem`, 개발 `sasystem_dev`
+### E. DB (10.166.101.127) — `sasystem` (운영·개발 같이 씀)
 
 둘 중 하나. 둘 다 **여러 번 실행해도 안전**하다(있는 것은 건너뛴다).
 
@@ -254,12 +284,14 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
    npm run db:setup -- --check
    npm run db:setup
    ```
-   DB 만들기 → 앱 로그인(만료 없음) → DB 사용자 → 읽기·쓰기 권한(`db_datareader`·`db_datawriter`만) → 테이블 `dbo.SA_DOC` → **앱 계정으로 로그인·읽기·쓰기 시험**(되돌림)
+   DB 만들기 → 앱 로그인(만료 없음) → DB 사용자 → 읽기·쓰기 권한(`db_datareader`·`db_datawriter`만) → 목적별 표 17개(`SA_APPLICANT` …, 표·열 설명 포함) → **앱 계정으로 로그인·읽기·쓰기 시험**(되돌림)
 3. 끝나면 `.env` 에서 `DB_ADMIN_*` 지우고 `DB_AUTO_CREATE=false`
 
 **방법 B — `server\sql\setup.sql` (DB 담당자, SSMS)** — 맨 위 `@DbName`·`@AppLogin`·`@AppPass` 만 바꿔 실행(F5) → 결과 표 확인
 
-**개발 DB** — 개발 사이트 폴더(`C:\sites\sayeon-api-dev`, web.config 의 `SAYEON_ENV=development`)에서 같은 방법을 한 번 더 (`sasystem_dev`)
+**개발 DB 는 따로 없다** — 개발 화면(`npm run dev`)도 같은 API · 같은 DB 를 쓰고, 테스트 사번으로 만든 데이터는 '테스트' 표시로 가린다
+
+**그 앱 DB 계정을 넘겨받으면**(D-2 3번) 서버가 처음 시작할 때 없는 표만 만든다 (그 계정에 표 만들기 권한이 없으면 방법 B 로 표를 미리 만든다)
 
 - **확인**: `db:setup` 마지막 `✖ 0` 또는 `setup.sql` 결과 표가 "정상 · 읽기·쓰기 · 있음"
 
@@ -277,7 +309,7 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 
 서버가 시작에 실패하면 `/api` 가 500 오류를 내고, 다음 요청 때 iisnode 가 다시 띄워 본다. 원인은 사이트 폴더의 `iisnode\` 로그에 "원인 / 해결" 로 남는다.
 
-### F. Web 서버 (10.123.321.12) — IIS
+### F. Web 서버 (10.122.122.1) — IIS · https 8282 (`oncloud9.samsungds.net`)
 
 도메인 가입·Windows 인증은 **필요 없다** (로그인은 사용자 PC 브라우저가 사내 인사정보 URL 로 확인).
 
@@ -289,10 +321,11 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 3. [ ] 사이트 만들기 (폴더는 영문 경로, 인증은 기본값 — 익명 인증 켜짐 그대로)
    ```powershell
    New-Item -ItemType Directory -Force D:\sites\sayeon
-   New-Website -Name 'sayeon' -Port 8282 -PhysicalPath 'D:\sites\sayeon'
+   New-Website -Name 'sayeon' -Port 8282 -Ssl -PhysicalPath 'D:\sites\sayeon'
+   # IIS 관리자 → 사이트 'sayeon' → 바인딩 → https 8282 에 사내 인증서 'oncloud9.samsungds.net' 선택
    New-NetFirewallRule -DisplayName 'sayeon web 8282' -Direction Inbound -Protocol TCP -LocalPort 8282 -Action Allow
    ```
-4. [ ] 화면 배포 — 백업·교체·점검까지
+4. [ ] 화면 배포 — 개발 서버의 `client\dist` 압축을 풀어 사이트 폴더에 (또는 패키지의 스크립트로 백업·교체·점검까지)
    ```powershell
    powershell -ExecutionPolicy Bypass -File C:\deploy\<빌드번호>-production\web\_deploy\deploy-web.ps1 -SitePath D:\sites\sayeon
    ```
@@ -300,16 +333,16 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 
 ### G. 사내 PC 확인
 
-- [ ] 사내 PC(사내 포털에 로그인한 상태)에서 `http://<Web 서버>:8282` → **로그인 화면 없이 홈**, 화면 위 이름·사업부
+- [ ] 사내 PC(사내 포털에 로그인한 상태)에서 `https://oncloud9.samsungds.net:8282` → **로그인 화면 없이 홈**, 화면 위 이름·사업부
 - [ ] "임직원만 이용할 수 있어요" 가 뜨면 → F12 → **Console** 에 CORS 오류가 있는지(0장 3번), **Network** 에서 인사정보 URL 응답 확인 → **애플리케이션 → 로컬 스토리지** 의 `sayeon.employee` 값을 파일로 저장해 API 서버에서 `npm run sso:test -- --file 응답.json`
 - [ ] 사내망 밖·인사정보 없는 PC 에서는 안내 화면이 뜨는지
 - [ ] 관리자 담당자 PC 에서 `…/changeme` → 관리자 비밀번호 → 대시보드
 - [ ] 신청서 작성 → 하트 → 매칭 → 쪽지, 인연 사주 (리허설 계정 2개 이상)
-- [ ] 리허설 데이터 정리: 관리자 화면에서 삭제, 또는 처음 상태로 — API 서버 `Stop-WebAppPool sayeon-api` → DB `DELETE FROM sasystem.dbo.SA_DOC;` → `Start-WebAppPool sayeon-api`
+- [ ] 리허설 데이터 정리: 관리자 화면 **DB 표** 에서 행 삭제 · 개발 테스트 데이터는 **DB 표 → 테스트 데이터 지우기**
 
 ### H. 정식 오픈
 
-- 운영 빌드는 늘 정식 운영이다 (가짜 데이터 시연은 개발 서버의 `npm run dev` 로만)
+- 운영 빌드는 늘 정식 운영이다 (가짜 데이터 시연은 개발 서버의 `npm run dev:mock` 로만)
 - 기준정보: 개발 모드 관리자 화면 → 기준정보 → **[엑셀로 내보내기]** → 운영 관리자 화면 → **[파일 가져오기]** → 미리보기 → **[적용]**
 - G 리허설 데이터 정리 → 사용자 주소 공지 (관리자 주소는 공지하지 않음)
 
@@ -319,7 +352,7 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 
 | # | 어디서 | 할 일 | 확인 |
 |---|---|---|---|
-| 1 | 개발 서버 | 개발 → 개발 모드(`client` `npm run dev`, 만능 계정으로 바로)로 시험 → 개발 API(`SAYEON_ENV=development`, 8293, `sasystem_dev`)로 실제 DB 시험 | 새 기능 + 아래 6번 목록이 개발 환경에서 됨 |
+| 1 | 개발 서버 | 개발 → `npm run dev:mock`(가짜 데이터)로 화면 시험 → `npm run dev`(운영 API · 테스트 사번)로 실제 데이터 시험. API 코드를 바꿨으면 먼저 묶음을 API 서버에 올린다 | 새 기능 + 아래 6번 목록이 개발 환경에서 됨 |
 | 2 | 개발 서버 | git 커밋 | `git status` 깨끗 |
 | 3 | 개발 서버 | `npm run release` | 마지막 `배포 패키지 준비 완료`, ⚠ "커밋하지 않은 변경" 이 없을 것 |
 | 4 | API 서버 | `deploy-api.ps1` (패키지의 `api\_deploy`) — **API 먼저** | `배포 완료` · `/api/health 정상`. 점검·시작이 실패하면 **자동으로 이전 버전으로 되돌린다** |
@@ -327,7 +360,7 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 | 6 | 사내 PC | Ctrl+F5 → **새 기능** + 기본 흐름: 홈 진입 · 인연 사주 · 신청서 저장 · 쪽지 · 관리자 대시보드 | 모두 됨 |
 | 7 | 문제 시 | 되돌리기 — 각 스크립트가 마지막에 보여주는 `-Rollback <백업 폴더>` (API·Web 각각) | 이전 화면·기능으로 동작 |
 
-- DB 는 문서 한 테이블(`SA_DOC`) 구조라 **기능 추가로 DB 구조를 바꿀 일이 없다** — 코드만 바꾼다
+- DB 표의 원본은 `DATA_JSON` 이라 **기능 추가로 항목이 늘어도 표를 바꿀 일이 없다** — 코드만 바꾼다. 보기용 열을 더하려면 `server/shared/db/tables.js` 와 `npm run sql:tables`(setup.sql) 를 함께 바꾸고, 운영 DB 에는 `ALTER TABLE … ADD` 를 직접 한다
 - 기준정보(선택 목록)를 추가했다면 배포 후 관리자 화면 → 기준정보 → 엑셀 가져오기
 - API 를 먼저 배포하는 이유: 새 화면이 새 API 를 부를 수 있어서. 화면만 바뀐 경우 5번만 해도 된다 (패키지는 늘 통째로 만든다)
 - 백업 위치: API `C:\sayeon-backup\api\<시각>`, Web `C:\sayeon-backup\web\<시각>` — 가끔 오래된 것을 지운다
@@ -368,30 +401,30 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 
 ## 4. 사내 로그인 구조
 
-`servers.config.mjs` 의 `sso` 로 정한다. 로그인 화면은 없다. 개발 모드(`npm run dev`)는 로그인 없이 만능 테스트 계정으로 바로 들어간다.
+`servers.config.mjs` 의 `sso` 로 정한다. 로그인 화면은 없다. 개발 화면(`npm run dev`)은 테스트 사번, `npm run dev:mock` 은 가짜 데이터 계정으로 바로 들어간다.
 
-### browser 방식 (기본, `sso.mode: 'browser'`)
+### browser 방식 (`sso.mode: 'browser'`) — 인사정보 2단계 확인
 
-1. **화면(라우터)** — 화면을 열 때 사용자 PC 브라우저가 `sso.employeeApi.url`(사내 인사정보 URL)을 부른다. 사내 SSO 쿠키를 함께 보낸다(`withCredentials`). 본문·주소에 `{ls:키}`(localStorage 값)·`{query:이름}`(주소창 값)을 쓸 수 있다
-2. 정상 회신이면 응답을 **localStorage 의 `sayeon.employee`** 에 저장한다 (로그아웃하면 지움)
-3. 응답을 읽는다 (`client/src/utils/employeeInfo.js`) — JSON 어디에 있든 사번이 든 객체를 찾고, 필드 이름은 대소문자·`_` 무시(`SABUN`·`USER_NM`·`DIV_NM`·`EMP_STAT` 등). 재직 상태가 퇴직·휴직이면 재직 아님
-4. 임직원이면 그 정보를 **API 서버**(`/api/auth/sso`)로 보낸다 → API 서버가 같은 규칙으로 다시 읽고, `sso.hrApi.url` 이 있으면 **그 사번으로 사내 인사 API 에 다시 물어** 확인한 뒤 세션을 만든다 → 홈
+1. **사내 인사 데이터 URL** (`sso.employeeApi`) — 화면을 열 때 사용자 PC 브라우저가 부른다. 사내 SSO 쿠키를 함께 보낸다(`withCredentials`). 주소·본문에 `{ls:키}`(localStorage 값)·`{query:이름}`(주소창 값)을 쓸 수 있다
+   - 정상 회신이면 응답을 **localStorage 의 `sayeon.employee`** 에 저장하고 `sabun` · `user_name` 등을 읽는다 (`server/shared/utils/employeeInfo.js` — JSON 어디에 있든 사번이 든 객체를 찾고, 필드 이름은 대소문자·`_` 무시)
+2. **임직원 확인 URL** (`sso.employeeCheck`) — 1)에서 읽은 값으로 POST. 본문 `{ sabun: '{sabun}', user_name: '{user_name}' }` (`{필드}` = 1) 응답의 같은 이름 값)
+   - `okPath` 를 정하면 응답의 그 값이 `okValues`(예: `Y` · `true`) 중 하나일 때 임직원 · 비우면 응답에서 같은 사번을 찾고 재직 상태로 판단
+   - 응답에 같은 사람의 성별·사업부 등이 더 있으면 1)의 정보와 합친다 · 응답은 `sayeon.employee.check` 에 저장
+   - 비워 두면 1)만으로 확인한다
+3. 임직원이면 그 정보를 **API 서버**(`/api/auth/sso`)로 보낸다 → 세션 → 홈. (선택) `sso.hrApi.url` 이 있으면 API 서버가 그 사번을 인사 API 에 한 번 더 묻는다 (API 서버 → 인사 서버 통신이 될 때만)
 
 | 결과 | 화면 |
 |---|---|
-| 인사정보에서 재직 확인 | 바로 홈 |
-| 응답 없음(401·404) · 사번 없음 · 서버 재확인에서 없는 사번 | "임직원만 이용할 수 있어요" |
-| 재직 상태 휴직·퇴직 (브라우저 또는 서버 재확인) | "재직 중인 임직원만 이용할 수 있어요" |
-| 인사정보 서버 연결 실패·5xx · CORS 막힘 · 서버 재확인 인사 API 장애 | "사내 인사정보 서버에 연결하지 못했어요" |
+| 1)·2) 모두 확인 | 바로 홈 |
+| 1) 응답 없음(401·404) · 사번 없음 / 2) 임직원 아님 | "임직원만 이용할 수 있어요" |
+| 재직 상태 휴직·퇴직 | "재직 중인 임직원만 이용할 수 있어요" |
+| 인사 서버 연결 실패·5xx · CORS 막힘 | "사내 인사정보 서버에 연결하지 못했어요" |
 | API 서버 꺼짐·응답 없음(20초) | "사緣 서버에 연결하지 못했어요" |
 | `employeeApi.url` 비어 있음 | "서비스를 준비하고 있어요" |
 
-- 시험: 사내 PC 화면 F12 → 애플리케이션 → 로컬 스토리지의 `sayeon.employee` 값을 파일로 저장 → API 서버에서 `npm run sso:test -- --file 응답.json` (어느 필드에서 무엇을 읽었는지, 서버 재확인 결과까지). 서버 재확인만: `npm run sso:test -- --empno 사번`
-- ⚠ 브라우저가 보낸 정보는 꾸밀 수 있다 — `sso.hrApi` 재확인을 켜 두는 것을 권장 (0장 보안 한계)
-
-### iis 방식 (`sso.mode: 'iis'`) — 더 강한 확인이 필요할 때
-
-Web 서버 IIS 의 Windows 인증으로 `SECDS\아이디` 를 확인해 헤더로 넘기고(API 서버는 Web 서버 IP 에서 온 것만 믿음), API 서버가 AD(사번·이름·사용 여부)와 사내 인사 API 로 재직을 확인한다. 바꾸면 빌드가 `web.config` 에 계정 헤더를 넣고 `check-web.ps1` 이 Windows 인증·헤더 변수까지 점검한다. 필요: Web·API 서버 도메인 가입, Web 서버 `Web-Windows-Auth`·헤더 변수 `HTTP_X_SAYEON_USER` 허용, API 서버 IIS 앱 풀 ID 를 도메인 계정으로, 사내 PC 인트라넷 영역. 시험: `npm run sso:test -- --user 회사아이디`
+- 두 인사 서버 모두 `https://oncloud9.samsungds.net:8282` 에 CORS 를 허용하고 **https** 여야 한다 (Web 화면이 https)
+- 시험: 사내 PC 화면 F12 → Network 에서 두 호출의 응답 확인 · 애플리케이션 → 로컬 스토리지의 `sayeon.employee` · `sayeon.employee.check`
+- ⚠ 브라우저가 확인한 결과는 사용자가 꾸밀 수 있다 (0장 보안 한계)
 
 ---
 
@@ -399,26 +432,26 @@ Web 서버 IIS 의 Windows 인증으로 `SECDS\아이디` 를 확인해 헤더�
 
 | 무엇 | 어디 | 설정 |
 |---|---|---|
-| 화면 개발 (가짜 데이터) | 개발 서버 `client` → `npm run dev` | 설정 없음 — 만능 계정으로 바로 홈, 로그아웃하면 테스트 계정 고르기 |
-| 운영 빌드 + 개발 API | `client` → `npm run build` → `npm run preview` → `/api` 를 개발 API(`servers.config.mjs` 의 `development.api`, 또는 `DEV_API_PROXY`)로 | `dist\sayeon.config.js` 의 `employeeApi.url` 을 시험용 주소로 |
-| 개발 API | API 서버의 IIS 사이트 `sayeon-api-dev` (8293) — web.config `SAYEON_ENV=development`, DB `sasystem_dev` | `npm run release -- --env development` 패키지의 `deploy-api.ps1` (폴더 `C:\sites\sayeon-api-dev`) |
-| API 서버를 내 PC 에서 | `server` → `npm start` (node main.js) — IIS 없이 web.config 의 포트로 뜬다 | `server\.env` (`STORE=memory` 면 DB 없이) |
+| 화면 개발 + 운영 데이터 | 개발 서버 `client` → `npm run dev` (5173) | `client\.env.development.local` 에 `SAYEON_DEV_KEY` (= API 서버 `routes\sayeon\.env` 의 `DEV_LOGIN_KEY`). 예시: `client\.env.development.local.example` |
+| 화면 개발 (가짜 데이터) | `client` → `npm run dev:mock` | 설정 없음 — 만능 계정으로 바로 홈, 로그아웃하면 테스트 계정 고르기 |
+| 운영 빌드 미리보기 | `client` → `npm run build` → `npm run preview` → `/api` 를 운영 API(또는 `DEV_API_PROXY`)로 | 로그인은 인사정보 2단계 (`dist\sayeon.config.js` 의 URL) |
+| API 를 내 PC 에서 | `server` → `npm start` (node main.js) | `server\.env` (`STORE=memory` 면 DB 없이). ⚠ **운영 DB 를 넣고 띄우지 않는다** — 운영 API 와 서로 덮어쓴다 |
 
-⚠ 운영과 개발은 **DB 이름·API 포트가 반드시 달라야 한다** (같으면 서로 데이터를 덮어쓴다 — 점검이 막는다).
-
----
+⚠ 이 DB 를 쓰는 사緣 API 는 **API 서버의 하나뿐**이다. 개발 화면도 그 API 를 부른다.
 
 ## 6. 백업과 보안
 
-- [ ] DB 정기 백업 — 데이터는 `sasystem.dbo.SA_DOC` 한 테이블
+- [ ] DB 정기 백업 — 데이터는 `sasystem.dbo.SA_*` 표들 (`SA_DOC` 은 옮기기 전 백업 — 확인 뒤 지워도 된다)
 - [ ] `DATA_KEY` 를 DB 백업과 **다른 곳**에 보관 (없으면 이름·메일 복구 불가)
 - [ ] API 서버 사이트 폴더의 `.env`, `config\admins.js` 백업 (git·패키지에 없음)
 - [ ] DB 는 전용 계정(읽기·쓰기만), `.env` 에 `DB_ADMIN_*` 남기지 않기
 - [ ] 관리자 비밀번호 해시, 관리자 주소 비공개
 - [ ] API 서버 포트는 **사내 PC 대역**에서만 (브라우저가 직접 부른다 — 외부·다른 망은 차단). 호출은 Web 서버 화면 주소에서 온 것만 받는다(CORS)
-- [ ] 서버 재확인(`sso.hrApi`) 켜기 — 브라우저가 보낸 인사정보를 서버가 다시 확인
+- [ ] (API 서버 → 인사 서버 통신이 되면) 서버 재확인(`sso.hrApi`) 켜기 — 브라우저가 보낸 인사정보를 서버가 다시 확인
+- [ ] 개발 키(`DEV_LOGIN_KEY`)는 개발 PC 와 API 서버에만. 개발을 쉬는 동안은 API 서버 `.env` 에서 지워 테스트 사번 로그인을 끈다
+- [ ] 그 앱 web.config `promoteServerVars="REMOTE_ADDR,HTTPS"` — http 로 온 호출 거절 · 개발 PC 확인 · IP 기록
 - 개인정보 최소 수집: 생년월일은 **출생연도만** 저장한다. 인연 사주에 입력한 월·일·태어난 시간은 계산에만 쓰고 저장하지 않는다 (예전 데이터는 서버가 불러올 때 연도만 남기고 지운다)
-- 들어 있는 보호: 비밀번호를 받지 않음 · 로그인 확인 1분 30회 제한 · 세션 재발급 · 관리자 5회 실패 잠금 · 열람 기록 · 이름·메일 암호화 · 인사정보 크기 제한
+- 들어 있는 보호: 비밀번호를 받지 않음 · 로그인 확인 1분 30회 · API 1분 600회 제한 · https 만 · 세션 재발급 · 관리자 5회 실패 잠금 · 열람 기록(DB 표 수정 포함) · 이름·메일 암호화 · 인사정보 크기 제한 · 화면 빌드 난독화·소스맵 없음 · Web 보안 헤더(CSP 등) — 자세히는 맨 위 [보안](#보안)
 
 ---
 

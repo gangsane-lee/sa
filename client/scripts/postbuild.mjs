@@ -36,7 +36,11 @@ if (!fs.existsSync(path.join(DIST, 'index.html'))) fail('dist/index.html 이 없
 // 운영 빌드에는 개발 모드의 가짜 데이터·테스트 계정이 없어야 한다
 const bundle = fs.readdirSync(path.join(DIST, 'assets')).filter((f) => f.endsWith('.js')).map((f) => fs.readFileSync(path.join(DIST, 'assets', f), 'utf8')).join('\n');
 const mockIncluded = bundle.includes('sayeon.mock.db') || bundle.includes('sayeon1234');
-if (mockIncluded) fail('운영 빌드에 개발용 가짜 데이터·테스트 계정이 들어갔어요 — import.meta.env.DEV 로 감싸지 않은 mock import 를 찾아 고쳐 주세요');
+if (mockIncluded) fail('운영 빌드에 개발용 가짜 데이터·테스트 계정이 들어갔어요 — __SAYEON_MOCK__ 로 감싸지 않은 mock import 를 찾아 고쳐 주세요');
+if (bundle.includes('dev-login') || bundle.includes('dev-accounts')) fail('운영 빌드에 개발 화면 테스트 사번 로그인 호출이 들어갔어요 — __SAYEON_DEV_API__ 로 감싸 주세요');
+// 보안: 소스맵(원본 코드 지도)이 없어야 한다
+const maps = fs.readdirSync(path.join(DIST, 'assets')).filter((f) => f.endsWith('.map'));
+if (maps.length || bundle.includes('sourceMappingURL')) fail('운영 빌드에 소스맵이 들어갔어요 — vite.config.js 의 build.sourcemap 을 false 로');
 
 // 로그인 방식
 const ssoMode = T.sso.mode ?? 'browser';
@@ -58,12 +62,27 @@ if (!licensed) console.warn('  ⚠ DevExtreme 라이선스 키가 빌드에 없�
 const runtime = {
   apiBase: T.apiUrl,
   adminPath: T.adminPath,
-  ...(ssoMode === 'browser' && { employeeApi }),
+  ...(ssoMode === 'browser' && { employeeApi, ...(T.sso.employeeCheck?.url && { employeeCheck: T.sso.employeeCheck }) }),
+  security: { blockDevtools: T.security.blockDevtools },
   ...(T.sso.loginPage && { ssoLoginPage: T.sso.loginPage }),
 };
 fs.writeFileSync(path.join(DIST, 'sayeon.config.js'), `window.SAYEON_CONFIG = ${JSON.stringify(runtime, null, 2)};\n`);
 
 // 2) IIS 설정 — 화면 파일만 낸다. 사용자 브라우저가 API 서버를 직접 부르므로 /api 전달·ARR 은 없다
+//    보안 헤더: 화면이 부를 수 있는 곳(CSP connect-src)을 자기 자신 · API 서버 · 사내 인사정보 URL 로만 제한
+const originOf = (u) => {
+  try {
+    return new URL(u).origin;
+  } catch {
+    return '';
+  }
+};
+const connect = [...new Set(["'self'", originOf(T.apiUrl), originOf(employeeApi.url ?? ''), originOf(T.sso.employeeCheck?.url ?? '')].filter(Boolean))];
+const csp = [
+  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:", "font-src 'self' data:",
+  `connect-src ${connect.join(' ')}`, "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
+].join('; ');
+const xmlAttr = (v) => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 const webConfig = `<?xml version="1.0" encoding="UTF-8"?>
 <!--
   사緣 Web 서버(IIS) 설정 — npm run build 가 servers.config.mjs(${target})로 만든 파일. 직접 고치지 말고 마스터를 고쳐 다시 빌드.
@@ -74,6 +93,13 @@ const webConfig = `<?xml version="1.0" encoding="UTF-8"?>
 <configuration>
   <system.webServer>
     <rewrite>
+      <!-- 보안: 응답의 Server 헤더(IIS 버전)를 비운다 -->
+      <outboundRules>
+        <rule name="sayeon-hide-server">
+          <match serverVariable="RESPONSE_SERVER" pattern=".+" />
+          <action type="Rewrite" value="" />
+        </rule>
+      </outboundRules>
       <rules>
         <!-- 화면 주소(/saju, /messages …)를 새로 고쳐도 index.html 로 -->
         <rule name="sayeon-spa" stopProcessing="true">
@@ -91,8 +117,20 @@ const webConfig = `<?xml version="1.0" encoding="UTF-8"?>
         <hiddenSegments>
           <add segment="_deploy" />
         </hiddenSegments>
+        <!-- 원본 코드 지도·설정 파일은 내려주지 않는다 -->
+        <fileExtensions allowUnlisted="true">
+          <add fileExtension=".map" allowed="false" />
+          <add fileExtension=".config" allowed="false" />
+          <add fileExtension=".ps1" allowed="false" />
+          <add fileExtension=".json" allowed="false" />
+        </fileExtensions>
+        <verbs allowUnlisted="false">
+          <add verb="GET" allowed="true" />
+          <add verb="HEAD" allowed="true" />
+        </verbs>
       </requestFiltering>
     </security>
+    <directoryBrowse enabled="false" />
     <staticContent>
       <remove fileExtension=".woff2" />
       <mimeMap fileExtension=".woff2" mimeType="font/woff2" />
@@ -102,9 +140,13 @@ const webConfig = `<?xml version="1.0" encoding="UTF-8"?>
     </staticContent>
     <httpProtocol>
       <customHeaders>
+        <remove name="X-Powered-By" />
         <add name="X-Content-Type-Options" value="nosniff" />
         <add name="X-Frame-Options" value="DENY" />
         <add name="Referrer-Policy" value="no-referrer" />
+        <add name="Permissions-Policy" value="camera=(), microphone=(), geolocation=(), payment=(), usb=()" />
+        <add name="Cross-Origin-Opener-Policy" value="same-origin" />
+        <add name="Content-Security-Policy" value="${xmlAttr(csp)}" />
       </customHeaders>
     </httpProtocol>
   </system.webServer>
