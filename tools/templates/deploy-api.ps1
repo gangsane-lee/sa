@@ -19,6 +19,13 @@ $Site = '__APP_NAME__'
 $Pool = '__APP_NAME__'
 $Port = __API_PORT__
 $WebHost = '__WEB_HOST__'
+$Https = '__API_HTTPS__' -eq 'true'      # servers.config.mjs 의 api.https
+$CertName = '__API_DNS__'                # 인증서에 적힌 DNS 이름 (api.dnsName)
+$Proto = $(if ($Https) { 'https' } else { 'http' })
+# 상태 확인 주소 — https 면 인증서 이름과 맞아야 하므로 localhost 대신 DNS 이름
+$ApiUrl = $(if ($Https) { '__API_URL__' } else { "http://localhost:$Port" })
+# PowerShell 5.1 은 기본이 TLS 1.0 이라 https 상태 확인이 실패한다
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $Package = Split-Path -Parent $PSScriptRoot   # 패키지의 api 폴더
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 # 교체할 때 건드리지 않는 것 (서버에만 있는 비밀값·관리자·로그·백업)
@@ -36,7 +43,7 @@ function Mirror($from, $to) {
 }
 function Wait-Health {
   for ($i = 0; $i -lt 20; $i++) {
-    try { $h = Invoke-RestMethod "http://localhost:$Port/api/health" -TimeoutSec 5; if ($h.ok) { return $h } } catch {}
+    try { $h = Invoke-RestMethod "$ApiUrl/api/health" -TimeoutSec 5; if ($h.ok) { return $h } } catch {}
     Start-Sleep -Seconds 2
   }
   return $null
@@ -44,7 +51,7 @@ function Wait-Health {
 function Restart-Api {
   try { Restart-WebAppPool -Name $Pool -ErrorAction Stop } catch { Start-WebAppPool -Name $Pool -ErrorAction SilentlyContinue }
   # 첫 요청이 iisnode 로 서버를 띄운다
-  try { Invoke-WebRequest "http://localhost:$Port/api/health" -UseBasicParsing -TimeoutSec 30 | Out-Null } catch {}
+  try { Invoke-WebRequest "$ApiUrl/api/health" -UseBasicParsing -TimeoutSec 30 | Out-Null } catch {}
 }
 function Restore($from) {
   Step "되돌리기: $from → $Target"
@@ -88,13 +95,24 @@ Set-ItemProperty "IIS:\AppPools\$Pool" -Name processModel.maxProcesses -Value 1
 Good "앱 풀 $Pool — 관리 코드 없음 · 유휴 종료 끔 · 겹친 재활용 끔 · 프로세스 1개"
 $site = Get-Website -Name $Site -ErrorAction SilentlyContinue
 if (-not $site) {
-  New-Website -Name $Site -Port $Port -PhysicalPath $Target -ApplicationPool $Pool | Out-Null
-  Good "사이트 $Site 만듦 (포트 $Port)"
+  New-Website -Name $Site -Port $Port -PhysicalPath $Target -ApplicationPool $Pool -Ssl:$Https | Out-Null
+  Good "사이트 $Site 만듦 ($Proto 포트 $Port)"
 } else {
   $ports = @($site.bindings.Collection | ForEach-Object { ($_.bindingInformation -split ':')[1] })
-  if ($ports -notcontains "$Port") { New-WebBinding -Name $Site -Port $Port -Protocol http; Warn "사이트 $Site 에 포트 $Port 바인딩을 더했어요 (지금: $($ports -join ', '))" }
+  if ($ports -notcontains "$Port") { New-WebBinding -Name $Site -Port $Port -Protocol $Proto; Warn "사이트 $Site 에 포트 $Port 바인딩을 더했어요 (지금: $($ports -join ', '))" }
   if ([Environment]::ExpandEnvironmentVariables($site.physicalPath).TrimEnd('\') -ine $Target.TrimEnd('\')) { Warn "사이트 $Site 의 폴더가 $($site.physicalPath) 예요 — 이 스크립트는 $Target 에 설치해요 (-Target 로 맞춰 주세요)" }
   Good "사이트 $Site 있음"
+}
+# https — 인증서(로컬 컴퓨터개인)를 이 포트 바인딩에 연결한다
+if ($Https) {
+  $cert = Get-ChildItem Cert:LocalMachineMy | Where-Object { $_.HasPrivateKey -and $_.NotAfter -gt (Get-Date) -and ($_.DnsNameList.Unicode -contains $CertName) } | Sort-Object NotAfter -Descending | Select-Object -First 1
+  if (-not $cert) { throw "인증서가 없어요 — '$CertName' 이름의 인증서(개인 키 포함)를 '로컬 컴퓨터개인' 저장소에 가져온 뒤 다시 실행해 주세요" }
+  $b = Get-WebBinding -Name $Site -Protocol https -Port $Port
+  if (-not $b) { New-WebBinding -Name $Site -Port $Port -Protocol https; $b = Get-WebBinding -Name $Site -Protocol https -Port $Port }
+  $b.AddSslCertificate($cert.Thumbprint, 'My')
+  Good "https 인증서 연결: $CertName (만료 $($cert.NotAfter.ToString('yyyy-MM-dd')))"
+  if ($cert.NotAfter -lt (Get-Date).AddDays(30)) { Warn "인증서가 30일 안에 만료돼요 — 갱신 후 이 스크립트를 다시 실행" }
+  try { [void][Net.Dns]::GetHostAddresses($CertName) } catch { Warn "이 서버에서 $CertName 이름을 찾지 못해요 — 상태 확인을 위해 사내 DNS 등록 또는 hosts 파일에 '127.0.0.1 $CertName'" }
 }
 # iisnode 가 사이트 폴더에 로그를 쓰고(iisnode\), web.config 변경을 감지할 수 있게 앱 풀 계정에 권한
 $acct = "IIS AppPool\$Pool"
@@ -156,13 +174,13 @@ Restart-Api
 Step '7 상태 확인'
 $h = Wait-Health
 if ($h) {
-  Good "http://localhost:$Port/api/health → 정상 (저장소 $($h.store))"
+  Good "$ApiUrl/api/health → 정상 (저장소 $($h.store))"
   Write-Host ""
   Write-Host "  API 서버 배포 완료 · 환경 __ENV__ · 빌드 __BUILD_ID__" -ForegroundColor Green
   Write-Host "  다음: Web 서버에서  _deploy\check-web.ps1"
   if ($backup) { Write-Host "  되돌리기:  powershell -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Rollback `"$backup`"" }
   exit 0
 }
-Bad "40초 안에 서버가 응답하지 않아요 — 브라우저로 http://localhost:$Port/api/health 를 열어 오류 확인 · $Target\iisnode 의 최근 로그"
+Bad "40초 안에 서버가 응답하지 않아요 — 브라우저로 $ApiUrl/api/health 를 열어 오류 확인 · $Target\iisnode 의 최근 로그"
 if ($backup -and -not $NoAutoRollback) { Restore $backup }
 exit 1

@@ -5,6 +5,8 @@
 #  ✔ 정상  ⚠ 확인 권장  ✖ 이대로는 동작하지 않음
 # ════════════════════════════════════════════════════════════════
 $ErrorActionPreference = 'Continue'
+# PowerShell 5.1 은 기본이 TLS 1.0 이라 https API 서버에 붙지 못한다
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $ApiUrl     = '__API_URL__'
 $ApiHost    = '__API_HOST__'
 $ApiPort    = __API_PORT__
@@ -110,7 +112,15 @@ if ($t.TcpTestSucceeded) { Ok "API 서버 $($ApiHost):$ApiPort 연결됨" } else
 try {
   $h = Invoke-RestMethod "$ApiUrl/api/health" -TimeoutSec 5
   if ($h.ok) { Ok "API 서버 상태 정상 (저장소 $($h.store))" } else { Fail 'API 서버 상태 이상' ($h | ConvertTo-Json -Compress) $null }
-} catch { Fail 'API 서버 상태 확인 실패' $_.Exception.Message 'API 서버 사이트 폴더의 iisnode 로그 · 그 폴더에서  npm run check' }
+} catch {
+  $fix = @('API 서버 iisnode 로그 ([sayeon] 로 시작하는 줄)')
+  if ($ApiUrl -like 'https:*') {
+    $u = [Uri]$ApiUrl
+    try { [void][Net.Dns]::GetHostAddresses($u.Host) } catch { $fix += "이 서버에서 $($u.Host) 이름을 찾지 못해요 — 사내 DNS 등록 또는 hosts 파일에 '$ApiHost $($u.Host)'" }
+    $fix += "인증서: API 서버 인증서가 '$($u.Host)' 이름으로 발급됐는지 · 발급한 사내 인증 기관(루트) 인증서가 이 서버 '신뢰할 수 있는 루트 인증 기관'에 있는지"
+  }
+  Fail 'API 서버 상태 확인 실패' $_.Exception.Message $fix
+}
 try {
   $r = Invoke-WebRequest "http://localhost:$WebPort/" -UseDefaultCredentials -UseBasicParsing -TimeoutSec 10
   if ($r.StatusCode -eq 200 -and $r.Content -match 'sayeon|사緣') { Ok "이 서버에서 화면 열림 (http://localhost:$WebPort/)" } else { Warn "화면 응답 $($r.StatusCode)" $null $null }

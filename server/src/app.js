@@ -72,6 +72,27 @@ export async function createApp({ config, store, directory, admin }) {
     }),
   );
   app.use(express.json({ limit: '200kb' }));
+  // 다른 앱에 끼워 넣었는데 그 앱도 세션을 쓰면: 처리하는 동안은 사緣 세션(sayeon.sid)만 보이게 떼어 두고,
+  // 응답을 내보낼 때(그 앱 세션이 쿠키·저장을 하는 시점) 되돌려 둔다 — 두 세션이 서로의 쿠키·저장소에 섞이지 않게
+  app.use((req, res, next) => {
+    if (req.session === undefined) return next();
+    const host = { session: req.session, sessionID: req.sessionID, sessionStore: req.sessionStore };
+    const restore = () => Object.assign(req, host);
+    delete req.session;
+    delete req.sessionID;
+    delete req.sessionStore;
+    // 사緣 세션이 나중에 감싸므로 호출 순서: 사緣 세션 → 여기(되돌림) → 그 앱 세션
+    const { writeHead, end } = res;
+    res.writeHead = function (...a) {
+      restore();
+      return writeHead.apply(this, a);
+    };
+    res.end = function (...a) {
+      restore();
+      return end.apply(this, a);
+    };
+    next();
+  });
   app.use(
     session({
       name: 'sayeon.sid',

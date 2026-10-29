@@ -1,43 +1,14 @@
 /**
- * 서버 설정 — 서버 폴더(이 폴더) 안의 파일만 읽는다 (폴더째 복사해서 IIS + iisnode 로 띄운다)
- *  1) web.config 의 <appSettings>  : 환경(SAYEON_ENV) · API 포트(API_PORT) · DB 서버(DB_HOST·DB_PORT·DB_NAME)
- *     iisnode 가 환경 변수로 넘겨 주고, 점검 명령(npm run check 등)은 이 파일이 직접 읽는다
- *  2) .env                          : 비밀번호·키 (설명: .env.example) — 서버에만 두고 복사하지 않는다
- *  3) servers.config.mjs (기준정보)  : Web 서버 주소 · 관리자 주소 · 사내 로그인 방식 — 저장소에서는 맨 위,
- *                                      배포 폴더에서는 패키지가 이 폴더에 함께 넣어 준다
- * web.config 에 있는 값이 servers.config.mjs 보다 우선한다.
+ * 서버 설정 — 어디서 읽는지는 runtime.js (서버 폴더: web.config · .env · servers.config.mjs)
+ * 또는 runtime.plugin.js (다른 앱의 routes 폴더에 끼워 넣은 묶음: 묶을 때 넣은 기준정보 · 묶음 폴더의 .env)
+ * web.config(또는 묶음 .env)에 있는 API 포트·DB 값이 servers.config.mjs 보다 우선한다.
  */
-import { config as loadEnv } from 'dotenv';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { resolveTopology, isIPv4 } from '../shared/topology.js';
+import { PLUGIN, SERVER_ROOT, env, master, MASTER_FILE, webConfigSettings, readWebConfigSettings } from './runtime.js';
 
-export const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-
-/** web.config 의 <appSettings> 값 (없으면 빈 객체) */
-export function readWebConfigSettings(file = path.join(SERVER_ROOT, 'web.config')) {
-  let xml;
-  try {
-    xml = fs.readFileSync(file, 'utf8');
-  } catch {
-    return null;
-  }
-  const block = /<appSettings>([\s\S]*?)<\/appSettings>/i.exec(xml.replace(/<!--[\s\S]*?-->/g, ''))?.[1] ?? '';
-  const unxml = (s) => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-  return Object.fromEntries([...block.matchAll(/<add\s+key="([^"]+)"\s+value="([^"]*)"\s*\/>/gi)].map((m) => [m[1], unxml(m[2])]));
-}
-/** web.config 에서 읽은 값 — 점검 명령이 보여준다 (iisnode 로 돌 때는 이미 환경 변수에 들어와 있다) */
-export const webConfigSettings = readWebConfigSettings();
-for (const [k, v] of Object.entries(webConfigSettings ?? {})) if (process.env[k] === undefined) process.env[k] = v;
-loadEnv({ path: path.join(SERVER_ROOT, '.env'), quiet: true });
-
-/** 기준정보 파일 — 이 폴더 안(배포 폴더) → 한 단계 위(저장소) 순서로 찾는다 */
-export const MASTER_FILE = [path.join(SERVER_ROOT, 'servers.config.mjs'), path.join(SERVER_ROOT, '..', 'servers.config.mjs')].find((f) => fs.existsSync(f)) ?? null;
-const master = MASTER_FILE ? (await import(pathToFileURL(MASTER_FILE).href)).default : { environments: {} };
-
-const env = process.env;
+export { PLUGIN, SERVER_ROOT, MASTER_FILE, webConfigSettings, readWebConfigSettings };
 const str = (v, d = '') => (v === undefined || v === '' ? d : String(v).trim());
 const num = (v, d) => (Number.isFinite(Number(v)) && String(v).trim() !== '' ? Number(v) : d);
 const bool = (v, d) => (v === undefined || v === '' ? d : ['1', 'true', 'yes', 'y', 'on'].includes(String(v).trim().toLowerCase()));
@@ -53,7 +24,7 @@ if (str(env.DB_NAME)) T.db = { ...T.db, name: str(env.DB_NAME) };
 const sessionSecret = str(env.SESSION_SECRET);
 
 /** iisnode 로 돌고 있는가 (iisnode 가 IISNODE_VERSION 을 넣어 준다) */
-export const UNDER_IISNODE = Boolean(env.IISNODE_VERSION);
+export const UNDER_IISNODE = Boolean(process.env.IISNODE_VERSION);
 
 export const config = {
   envName: T.envName,
@@ -61,9 +32,11 @@ export const config = {
   // ── 서버 — IIS 사이트 포트(web.config 의 API_PORT). iisnode 로 돌 때 실제 연결은 iisnode 가 넘겨 주는 PORT(파이프) ──
   host: '0.0.0.0',
   port: T.api.port,
-  listen: UNDER_IISNODE ? env.PORT : null,
+  listen: UNDER_IISNODE ? process.env.PORT : null,
   /** 사용자가 접속하는 주소 = Web 서버 */
   publicUrl: T.publicUrl,
+  /** 이 API 의 주소 (Web 서버가 /api 를 넘기는 곳 — https 면 DNS 이름) */
+  apiUrl: T.apiUrl,
   /** Web 서버(IIS) IP — 이 IP 에서 온 요청만 사용자 IP(X-Forwarded-For)와 로그인 헤더를 믿는다 */
   trustedProxies: [T.web.host].filter(isIPv4),
   /** (선택) API 서버가 화면도 직접 내보낼 때만 — 보통은 Web 서버(IIS)가 화면을 내보낸다 */

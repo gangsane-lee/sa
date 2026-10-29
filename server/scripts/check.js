@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
+import https from 'node:https';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -293,7 +294,7 @@ r.section(`IIS 사이트 · 포트 ${config.port}`);
       } else {
         const [name, , ports, pool] = mine;
         if (ports.split(',').includes(String(config.port))) r.ok(`IIS 사이트 '${name}' · 포트 ${config.port} · 앱 풀 ${pool}`);
-        else r.fail(`IIS 사이트 '${name}' 의 포트(${ports})가 web.config 의 API_PORT(${config.port})와 달라요`, { fix: [`New-WebBinding -Name '${name}' -Port ${config.port} -Protocol http  (또는 web.config 의 API_PORT 를 고침)`] });
+        else r.fail(`IIS 사이트 '${name}' 의 포트(${ports})가 web.config 의 API_PORT(${config.port})와 달라요`, { fix: [`New-WebBinding -Name '${name}' -Port ${config.port} -Protocol ${topology.api.https ? 'https' : 'http'}  (또는 web.config 의 API_PORT 를 고침)`] });
       }
     }
   }
@@ -304,14 +305,39 @@ r.section(`IIS 사이트 · 포트 ${config.port}`);
   });
   if (state === 'free') r.warn(`${config.port}번 포트에서 아무것도 돌지 않아요`, { reason: 'IIS 사이트가 없거나 멈춰 있어요. (npm start 로 직접 띄울 때는 정상)', fix: ['IIS 관리자에서 사이트 시작  또는  Start-Website <사이트 이름>'] });
   else if (state === 'EADDRINUSE') {
-    const health = await fetch(`http://127.0.0.1:${config.port}/api/health`, { signal: AbortSignal.timeout(3000) })
-      .then((res) => res.json())
-      .catch(() => null);
+    // https 면 인증서 이름·사내 인증 기관을 Node 가 모르므로 확인 없이 응답만 보고, 인증서 만료는 따로 본다
+    const secure = config.apiUrl.startsWith('https:');
+    const { health, cert } = secure
+      ? await new Promise((resolve) => {
+          const req = https.get(
+            { host: '127.0.0.1', port: config.port, path: '/api/health', servername: new URL(config.apiUrl).hostname, rejectUnauthorized: false, timeout: 3000 },
+            (res) => {
+              const c = res.socket.getPeerCertificate();
+              let body = '';
+              res.on('data', (d) => (body += d)).on('end', () => {
+                try {
+                  resolve({ health: JSON.parse(body), cert: c });
+                } catch {
+                  resolve({ cert: c });
+                }
+              });
+            },
+          );
+          req.on('error', () => resolve({})).on('timeout', () => req.destroy());
+        })
+      : { health: await fetch(`http://127.0.0.1:${config.port}/api/health`, { signal: AbortSignal.timeout(3000) }).then((res) => res.json()).catch(() => null) };
+    if (cert?.valid_to) {
+      const days = Math.floor((new Date(cert.valid_to) - Date.now()) / 864e5);
+      const names = String(cert.subjectaltname ?? '');
+      if (!names.includes(`DNS:${new URL(config.apiUrl).hostname}`)) r.fail(`https 인증서 이름(${names || cert.subject?.CN})에 ${new URL(config.apiUrl).hostname} 이 없어요`, { reason: 'Web 서버가 이 이름으로 부르므로 연결을 거부해요.', fix: ['servers.config.mjs 의 api.dnsName 과 같은 이름의 인증서를 사이트 https 바인딩에 연결'] });
+      else if (days < 30) r.warn(`https 인증서가 ${days}일 뒤 만료돼요 (${cert.valid_to})`, { fix: ['인증서 갱신 → 사이트 https 바인딩에 새 인증서 연결'] });
+      else r.ok(`https 인증서 ${new URL(config.apiUrl).hostname} · 만료 ${cert.valid_to}`);
+    }
     if (health?.ok) r.ok(`사緣 API 가 이 포트에서 응답해요 (IIS + iisnode · 저장소 ${health.store})`);
     else {
       r.fail(`${config.port}번 포트에서 사緣 API 가 응답하지 않아요`, {
         reason: 'IIS 사이트는 있는데 서버가 시작하지 못했거나(이 폴더의 iisnode\\ 로그), 다른 프로그램이 포트를 쓰고 있어요.',
-        fix: [`http://localhost:${config.port}/api/health 를 열어 오류 확인 · 이 폴더 iisnode\\ 의 최근 로그`, `다른 프로그램인지: netstat -ano | findstr :${config.port}`],
+        fix: [`${secure ? config.apiUrl : `http://localhost:${config.port}`}/api/health 를 열어 오류 확인 · 이 폴더 iisnode\\ 의 최근 로그`, `다른 프로그램인지: netstat -ano | findstr :${config.port}`],
       });
     }
   } else if (state === 'EACCES') r.fail(`${config.port}번 포트를 열 권한이 없어요`, { fix: ['1024 이상 포트(예: 3000)를 쓰거나 관리자 권한으로 실행해 주세요.'] });
@@ -586,7 +612,7 @@ r.section(`사내 로그인 — ${{ browser: '화면이 사내 인사정보 URL 
 
 process.exit(
   r.summary({
-    okText: `준비됐어요 → IIS 앱 풀 재시작(Restart-WebAppPool sayeon-api${topology.envName === 'development' ? '-dev' : ''}) 후 http://localhost:${config.port}/api/health 확인`,
+    okText: `준비됐어요 → IIS 앱 풀 재시작(Restart-WebAppPool sayeon-api${topology.envName === 'development' ? '-dev' : ''}) 후 ${topology.api.https ? config.apiUrl : `http://localhost:${config.port}`}/api/health 확인`,
     failText: '✖ 항목을 고친 뒤 다시  npm run check  해 주세요. (자세한 순서: docs/GO-LIVE.md)',
   }),
 );

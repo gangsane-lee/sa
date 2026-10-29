@@ -18,9 +18,10 @@ export function peerOf(req) {
 /** 사용자 IP */
 export function clientIpOf(req) {
   const peer = peerOf(req);
-  if (config.trustedProxies.includes(peer)) {
-    const hops = String(req.headers['x-forwarded-for'] ?? '').split(',').map(norm).filter(Boolean);
-    if (hops.length) return hops.at(-1);
-  }
+  const hops = String(req.headers['x-forwarded-for'] ?? '').split(',').map(norm).filter(Boolean);
+  if (config.trustedProxies.includes(peer) && hops.length) return hops.at(-1);
+  // 다른 앱에 끼워 넣었는데 그 앱 web.config 에 promoteServerVars="REMOTE_ADDR" 가 없으면 peer 를 모른다 →
+  // 모든 사용자가 한 IP('-')로 묶여 로그인 횟수 제한에 같이 걸리지 않게 마지막 X-Forwarded-For 를 쓴다 (기록·횟수 제한용)
+  if (!peer && hops.length) return hops.at(-1);
   return peer || '-';
 }

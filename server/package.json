@@ -13,7 +13,8 @@
     "sso:test": "node scripts/run.mjs sso-test",
     "webconfig": "node scripts/webconfig.js",
     "hash-password": "node scripts/hash-password.js",
-    "release": "node ../tools/release.mjs"
+    "release": "node ../tools/release.mjs",
+    "plugin": "node ../tools/plugin.mjs"
   },
   "engines": {
     "node": ">=22.12.0",

@@ -24,18 +24,27 @@ export default {
         /** 사용자가 접속할 사내 DNS 이름 (있으면). 비우면 IP 로 접속 */
         dnsName: '',
       },
-      /** API 배포 운영 서버 — Node.js + PM2 */
-      api: { host: '12.83.18.17', port: 8292 },
+      /**
+       * API 배포 운영 서버 — 회사의 다른 iisnode 앱(IIS) routes 폴더에 사緣 묶음을 끼워 넣는다 (설치 없음, npm run release → routes/sayeon)
+       *  host    : API 서버 IP (방화벽 · 연결 점검)
+       *  dnsName : ★ https 인증서에 적힌 DNS 이름 — Web 서버가 이 이름으로 부른다 (사내 DNS 에 등록돼 있어야 한다)
+       *  port    : 그 앱 IIS 사이트의 https 포트
+       *  https   : true = Web 서버 → API 를 https 로
+       *  basePath: 그 앱 main.js 에서 붙인 경로 — app.use('/sayeon', require('./routes/sayeon'))
+       *            '' 로 비우면 사緣 전용 IIS 사이트 방식(api 폴더 + deploy-api.ps1)
+       */
+      api: { host: '12.83.18.17', dnsName: '', port: 443, https: true, basePath: '/sayeon' },
       /** DB 서버 — MSSQL */
       db: { host: '10.166.101.127', port: 1433, name: 'sasystem' },
     },
 
     // ── 개발 ─────────────────────────────────────────
-    // API 서버(운영/개발 겸용)에서 운영과 다른 포트·다른 DB 로 돌린다.
+    // 같은 API 서버(같은 앱)에 다른 경로(basePath)·다른 DB 로 끼워 넣는다.
     // ⚠ 운영과 같은 DB 이름을 쓰면 안 된다 — 서버가 데이터를 메모리에 두고 저장하는 구조라 서로 덮어쓴다
     development: {
       web: { host: '12.123.321.13', port: 5173, dnsName: '' }, // 개발 서버의 개발 화면 (npm run dev)
-      api: { host: '12.83.18.17', port: 8293 },
+      // 같은 앱에 다른 경로로 끼워 넣는다 → routes/sayeon-dev · app.use('/sayeon-dev', require('./routes/sayeon-dev'))
+      api: { host: '12.83.18.17', dnsName: '', port: 443, https: true, basePath: '/sayeon-dev' },
       db: { host: '10.166.101.127', port: 1433, name: 'sasystem_dev' },
     },
   },

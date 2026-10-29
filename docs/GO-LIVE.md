@@ -13,7 +13,7 @@
 |---|---|---|---|
 | **개발 서버** | `12.123.321.13` | **됨** | 개발·시험, **빌드와 배포 패키지 만들기** (`npm run release`) |
 | **Web 배포 운영 서버** | `10.123.321.12:8282` | 안 됨 | IIS. 화면 파일 · `/api` 를 API 서버로 전달 |
-| **API 배포 운영/개발 서버** | `12.83.18.17:8292` (개발 API `:8293`) | 안 됨 | **IIS + iisnode** (사이트 2개: 운영 8292 · 개발 8293). 업무 처리 · (권장) 사내 인사 API 로 사번 재확인 |
+| **API 배포 운영/개발 서버** | `https://<api.dnsName>` (`12.83.18.17:443`) | 안 됨 | **회사의 다른 iisnode 앱에 끼워 넣기** (설치 없음 — `routessayeon` 운영 · `routessayeon-dev` 개발, [D-2](#d-2-사이트를-새로-만들기-어려울-때--회사의-다른-iisnode-앱-routes-폴더에-끼워-넣기)). 업무 처리 · (권장) 사내 인사 API 로 사번 재확인 |
 | **DB 서버** | `10.166.101.127:1433` | 안 됨 | MSSQL — 운영 DB `sasystem` · 개발 DB `sasystem_dev` |
 
 - 사용자(사내 PC)는 **Web 서버 주소 하나**로만 들어온다: `http://<Web 서버>:8282`, 관리자 `…/changeme`
@@ -215,6 +215,27 @@ C:\sites\sayeon-api-dev\      ← 'sayeon-api-dev' (포트 8293, 개발) — 개
   - 로그: `C:\sites\sayeon-api\iisnode\` (시작 실패도 "원인 / 해결" 로 남는다)
 
 **직접 복사로 배포할 때** (스크립트 없이): 앱 풀 멈춤 → 패키지 `api` 폴더 내용을 사이트 폴더에 복사(**`.env` · `config\admins.js` 는 덮어쓰지 않음**) → 사이트 폴더에서 `npm run check` → `Start-WebAppPool sayeon-api` → `http://localhost:8292/api/health`
+
+#### D-2. 사이트를 새로 만들기 어려울 때 — 회사의 다른 iisnode 앱 `routes` 폴더에 끼워 넣기
+
+> **지금 기본 배포 방식이다** (`servers.config.mjs` 의 `api.basePath` 가 `'/sayeon'`). 사緣 전용 사이트(위 D)로 돌아가려면 `basePath: ''`.
+
+API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어려우면, 이미 돌고 있는 다른 iisnode(Express) 앱에 사緣 API 를 **폴더 하나**로 넣는다. 라이브러리까지 한 파일(`index.js`)에 묶여 있어 `npm install` 이 필요 없다.
+
+1. [ ] `servers.config.mjs` 의 `api` — **`dnsName` 은 https 인증서에 적힌 DNS 이름(필수)**, `port` 는 그 앱 IIS 사이트의 https 포트(기본 443), `https: true`, `basePath` 는 붙일 경로(운영 `'/sayeon'`, 개발 `'/sayeon-dev'`)
+   - Web 서버는 `https://<dnsName>/sayeon/api/…` 로 넘긴다 → Web 서버가 그 이름을 찾을 수 있어야 하고(사내 DNS · 없으면 Web 서버 hosts 에 `12.83.18.17 <dnsName>`), 인증서를 발급한 **사내 인증 기관(루트) 인증서를 Web 서버가 신뢰**해야 한다 (없으면 `/api` 가 502)
+   - 그 앱 IIS 사이트에 https 바인딩 + `<dnsName>` 인증서 (API 서버 담당), 방화벽 Web 서버 → 443
+2. [ ] 개발 PC 에서 `npm run release` — `basePath` 가 있으면 `api\` 대신 `routes\sayeon\` 을 만든다 (묶음만: server 폴더에서 `npm run plugin`)
+   Web 서버 web.config 의 `/api` 전달 주소도 `http://<API 서버>:<포트>/sayeon/api/…` 로 바뀐다
+3. [ ] `routes\sayeon` 폴더를 그 앱의 `routes` 폴더에 복사 → 그 앱 `main.js` 에 한 줄 (그 앱의 404·오류 처리보다 앞에)
+   ```js
+   app.use('/sayeon', require('./routes/sayeon'));
+   ```
+4. [ ] 그 앱 web.config 의 `<iisnode>` — **`nodeProcessCountPerApplication="1"` 필수**(사緣은 데이터를 메모리에 두고 저장한다), `promoteServerVars="REMOTE_ADDR"` 권장. Node.js 22 이상
+5. [ ] `routes\sayeon\.env` · `config\admins.js` 채우기 → `node tools\db-setup.mjs` → 그 앱의 앱 풀 재시작
+6. [ ] **확인** `https://<dnsName>/sayeon/api/health` (인증서 이름과 맞아야 하므로 localhost 가 아니라 DNS 이름으로) · Web 서버에서 `check-web.ps1` · 실패하면 그 앱 iisnode 로그의 `[sayeon]` 줄
+
+순서 전체는 묶음 안의 `설치안내.txt`. 사緣이 시작에 실패해도 **그 앱은 그대로 돈다**(사緣 API 만 503, 30초 뒤 다시 시도). 설정은 묶음 폴더의 `.env` 에서만 읽고 그 앱의 환경 변수·세션과 섞지 않는다. 업데이트는 `index.js` 등을 덮어쓰고(`.env` · `config\admins.js` 는 그대로) 앱 풀 재시작 — `routes` 아래 파일은 iisnode 가 바뀐 것을 알아채지 못한다.
 
 ### E. DB (10.166.101.127) — 운영 `sasystem`, 개발 `sasystem_dev`
 

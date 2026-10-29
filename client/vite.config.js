@@ -27,7 +27,8 @@ export default defineConfig(({ mode }) => {
       fs: { allow: ['.', SHARED] },
       // npm run preview 도 이 설정을 쓴다 (운영 빌드를 실제 API 서버와 붙여 볼 때)
       proxy: {
-        '/api': { target: env.DEV_API_PROXY || dev.apiUrl, changeOrigin: true },
+        // API 서버가 https(사내 인증 기관 인증서)면 Node 가 인증서를 모르므로 이 PC 의 프록시만 확인을 끈다
+        '/api': { target: env.DEV_API_PROXY || dev.apiUrl, changeOrigin: true, secure: false },
       },
     },
     build: {

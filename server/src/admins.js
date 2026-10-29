@@ -12,6 +12,7 @@ import { SERVER_ROOT } from './config.js';
 const FILE = path.join(SERVER_ROOT, 'config', 'admins.js');
 let current = { accounts: [], password: '', passwordHash: '' };
 let loadedAt = 0;
+let watching = false;
 
 async function reload() {
   if (!fs.existsSync(FILE)) {
@@ -38,6 +39,8 @@ async function reload() {
 
 export async function initAdmins() {
   await reload();
+  if (watching) return; // 끼워 넣은 묶음이 시작을 다시 시도할 때 감시를 겹쳐 걸지 않는다
+  watching = true;
   // 파일이 바뀌면 다시 읽는다 (3초마다 확인)
   fs.watchFile(FILE, { interval: 3000 }, (cur) => {
     if (cur.mtimeMs !== loadedAt) reload();
