@@ -12,6 +12,13 @@ export const isTestMode = import.meta.env.DEV;
 export const SERVICE_MODE = isTestMode ? 'test' : 'open';
 
 /**
+ * API 서버 주소 — 화면은 Web 서버에서 열리고, 브라우저가 API 서버를 직접 부른다.
+ * 운영 빌드 때 servers.config.mjs 의 API 주소(예: https://sayeon-api.corp/sayeon)가 sayeon.config.js 로 들어온다.
+ * 비어 있으면 같은 주소의 /api (API 서버가 화면도 낼 때 · npm run preview 프록시)
+ */
+export const API_BASE = `${typeof runtime.apiBase === 'string' ? runtime.apiBase.trim().replace(/\/+$/, '') : ''}/api`;
+
+/**
  * 운영 모드 입구 — 사내 인사정보 URL (servers.config.mjs 의 sso.employeeApi → 빌드 때 sayeon.config.js 로 들어온다)
  *  url · method(GET|POST) · body(POST 본문, {ls:키} = localStorage 값 · {query:이름} = 주소창 값)
  *  resultPath(응답에서 사용자 정보 위치, 비우면 자동) · withCredentials(사내 SSO 쿠키를 함께 보냄)

@@ -5,7 +5,7 @@
  */
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { resolveTopology, isIPv4 } from '../shared/topology.js';
+import { resolveTopology } from '../shared/topology.js';
 import { PLUGIN, SERVER_ROOT, env, master, MASTER_FILE, webConfigSettings, readWebConfigSettings } from './runtime.js';
 
 export { PLUGIN, SERVER_ROOT, MASTER_FILE, webConfigSettings, readWebConfigSettings };
@@ -35,10 +35,18 @@ export const config = {
   listen: UNDER_IISNODE ? process.env.PORT : null,
   /** 사용자가 접속하는 주소 = Web 서버 */
   publicUrl: T.publicUrl,
-  /** 이 API 의 주소 (Web 서버가 /api 를 넘기는 곳 — https 면 DNS 이름) */
+  /** 이 API 의 주소 (사용자 브라우저가 직접 부르는 곳 — https 면 DNS 이름) */
   apiUrl: T.apiUrl,
-  /** Web 서버(IIS) IP — 이 IP 에서 온 요청만 사용자 IP(X-Forwarded-For)와 로그인 헤더를 믿는다 */
-  trustedProxies: [T.web.host].filter(isIPv4),
+  /**
+   * 이 API 를 부를 수 있는 화면 주소(origin) — servers.config.mjs 의 Web 서버(IP · DNS 이름) + .env 의 CORS_ORIGINS(쉼표로 여러 개)
+   * 화면이 다른 서버(Web 서버)에서 열리고 브라우저가 이 API 를 직접 부르므로, 여기 없는 화면의 호출은 브라우저가 막는다
+   */
+  corsOrigins: [...new Set([...T.webOrigins, ...str(env.CORS_ORIGINS).split(',').map((o) => o.trim().replace(/\/+$/, '')).filter(Boolean)])],
+  /**
+   * 앞단 프록시 — 없음. 브라우저가 API 를 직접 부르므로 X-Forwarded-For · 로그인 헤더는 사용자가 꾸밀 수 있어 믿지 않는다
+   * (예전 구조: Web 서버 ARR 이 /api 를 넘기며 붙이던 값)
+   */
+  trustedProxies: [],
   /** (선택) API 서버가 화면도 직접 내보낼 때만 — 보통은 Web 서버(IIS)가 화면을 내보낸다 */
   clientDist: str(env.CLIENT_DIST) ? path.resolve(SERVER_ROOT, env.CLIENT_DIST) : null,
 
@@ -50,8 +58,6 @@ export const config = {
   session: {
     secret: sessionSecret || crypto.randomBytes(32).toString('hex'),
     secretMissing: !sessionSecret,
-    /** https로 접속하면 true. http(IP 주소 접속)면 false여야 로그인이 유지된다 */
-    cookieSecure: bool(env.COOKIE_SECURE, false),
     idleHours: num(env.SESSION_IDLE_HOURS, 8),
   },
 
@@ -113,6 +119,7 @@ export const RETIRED_ENV = {
   SSO_URL: MOVED, SSO_LOGIN_PAGE: MOVED, SSO_RESULT_PATH: MOVED, SSO_TIMEOUT_MS: MOVED, SSO_API_KEY_HEADER: MOVED,
   HR_LOOKUP_URL: MOVED, HR_SEARCH_URL: MOVED,
   SSO_HEADER: MOVED, SSO_PROXY_SECRET: 'Web 서버 IP 확인으로 바뀌었어요 (servers.config.mjs 의 web.host)', SSO_PROXY_SECRET_HEADER: MOVED,
+  COOKIE_SECURE: '쿠키를 쓰지 않아요 — 로그인 세션은 화면이 헤더(X-Sayeon-Session)로 보내요',
   AUTH_LOGIN_URL: '운영은 사내 SSO로만 들어와요. ID/비밀번호 로그인은 없어졌어요',
   SSO_TOKEN_COOKIE: '쓰지 않아요', SSO_VERIFY_URL: '쓰지 않아요', SSO_MODE: MOVED,
 };

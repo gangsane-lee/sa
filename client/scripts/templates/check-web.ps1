@@ -8,15 +8,13 @@ $ErrorActionPreference = 'Continue'
 # PowerShell 5.1 은 기본이 TLS 1.0 이라 https API 서버에 붙지 못한다
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $ApiUrl     = '__API_URL__'
-$ApiHost    = '__API_HOST__'
 $ApiPort    = __API_PORT__
 $WebPort    = __WEB_PORT__
-$ServerVar  = '__SERVER_VAR__'
-$Domain     = '__DOMAIN__'
 $EnvName    = '__ENV__'
 $SsoMode    = '__SSO_MODE__'
 $EmployeeUrl = '__EMPLOYEE_URL__'
 $BuildId    = '__BUILD_ID__'
+$PublicUrl  = '__PUBLIC_URL__'
 
 $SiteRoot = Split-Path -Parent $PSScriptRoot
 $script:ok = 0; $script:warn = 0; $script:fail = 0
@@ -29,34 +27,25 @@ function Section($t) { Write-Host ""; Write-Host "[$t]" -ForegroundColor Cyan }
 Write-Host ""
 Write-Host "사緣 Web 서버 점검 · 환경 $EnvName · 빌드 $BuildId" -ForegroundColor Cyan
 Write-Host "  사이트 폴더 $SiteRoot"
+Write-Host "  이 서버는 화면 파일만 내요. 사용자 PC 브라우저가 API 서버($ApiUrl)를 직접 불러요"
 
 # ── 1. 서버 ───────────────────────────────────────────
 Section '1 서버'
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if ($isAdmin) { Ok '관리자 권한으로 실행 중' } else { Warn '관리자 권한이 아니에요' 'IIS 설정 일부를 읽지 못할 수 있어요.' 'PowerShell 을 "관리자 권한으로 실행" 한 뒤 다시 실행' }
-$cs = Get-CimInstance Win32_ComputerSystem
-if ($SsoMode -ne 'iis') { Info "로그인 방식 $SsoMode — 화면이 사내 인사정보 URL 로 확인해요 (이 서버의 도메인 가입·Windows 인증은 필요 없음)" }
-elseif ($cs.PartOfDomain) { Ok "도메인 가입: $($cs.Domain)" } else { Fail '이 서버가 도메인에 가입돼 있지 않아요' 'Windows 인증(AD SSO)은 도메인에 가입된 서버에서만 동작해요.' "IT 부서에 $Domain 도메인 가입을 요청해 주세요" }
+Info "로그인 방식 $SsoMode — 화면이 사내 인사정보 URL 로 확인해요 (이 서버의 도메인 가입·Windows 인증은 필요 없음)"
 
 # ── 2. IIS 구성 요소 ──────────────────────────────────
 Section '2 IIS 구성 요소'
 $w3 = Get-Service W3SVC -ErrorAction SilentlyContinue
 if ($w3 -and $w3.Status -eq 'Running') { Ok 'IIS(W3SVC) 실행 중' } else { Fail 'IIS 가 설치·실행되어 있지 않아요' $null '서버 관리자 → 역할 추가 → 웹 서버(IIS)' }
 Import-Module WebAdministration -ErrorAction SilentlyContinue
-if ($SsoMode -eq 'iis') { try {
-  $wa = Get-WindowsFeature Web-Windows-Auth -ErrorAction Stop
-  if ($wa.Installed) { Ok 'Windows 인증 기능 설치됨' } else { Fail 'Windows 인증 기능이 없어요' $null 'Install-WindowsFeature Web-Windows-Auth  (인터넷 없이 설치 가능)' }
-} catch { Info 'Windows 인증 기능 설치 여부를 확인하지 못했어요 (서버 OS 가 아니면 정상)' } }
-if (Test-Path "$env:windir\System32\inetsrv\rewrite.dll") { Ok 'URL Rewrite 설치됨' } else { Fail 'URL Rewrite 가 없어요' 'web.config 의 /api 전달·화면 주소 규칙을 쓰려면 필요해요. 없으면 사이트 전체가 500.19 오류' '개발 서버에서 IIS URL Rewrite 2.1 설치 파일(.msi)을 받아 복사해 설치' }
-if (Test-Path "$env:ProgramFiles\IIS\Application Request Routing\requestRouter.dll") { Ok 'ARR(Application Request Routing) 설치됨' } else { Fail 'ARR 이 없어요' '/api 요청을 API 서버로 넘기려면 필요해요.' '개발 서버에서 ARR 3.0 설치 파일(.msi)을 받아 복사해 설치' }
 try {
-  $proxy = Get-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/proxy' -Name enabled -ErrorAction Stop
-  if ($proxy.Value -eq $true) { Ok 'ARR 프록시 켜짐' } else { Fail 'ARR 프록시가 꺼져 있어요' $null "Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/proxy' -Name enabled -Value True" }
-} catch { Warn 'ARR 프록시 설정을 읽지 못했어요' $_.Exception.Message 'ARR 설치 후 다시 실행' }
-if ($SsoMode -eq 'iis') { try {
-  $vars = @(Get-WebConfiguration -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/rewrite/allowedServerVariables/add' -ErrorAction Stop | ForEach-Object { $_.name })
-  if ($vars -contains $ServerVar) { Ok "로그인 헤더 변수 허용됨 ($ServerVar)" } else { Fail "로그인 헤더 변수($ServerVar)가 허용되어 있지 않아요" 'IIS 가 사용자 계정을 API 서버로 넘기지 못해 /api 가 500 오류가 나요.' "Add-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/rewrite/allowedServerVariables' -Name '.' -Value @{name='$ServerVar'}" }
-} catch { Warn '허용된 서버 변수를 읽지 못했어요' $_.Exception.Message 'URL Rewrite 설치 후 다시 실행' } }
+  $sc = Get-WindowsFeature Web-Static-Content -ErrorAction Stop
+  if ($sc.Installed) { Ok '정적 콘텐츠 기능 설치됨' } else { Fail '정적 콘텐츠 기능이 없어요' '화면 파일(.js · .css)을 내지 못해 하얀 화면이 떠요.' 'Install-WindowsFeature Web-Static-Content  (인터넷 없이 설치 가능)' }
+} catch { Info '정적 콘텐츠 기능 설치 여부를 확인하지 못했어요 (서버 OS 가 아니면 Windows 기능 → IIS → 일반 HTTP 기능 → 정적 콘텐츠)' }
+if (Test-Path "$env:windir\System32\inetsrv\rewrite.dll") { Ok 'URL Rewrite 설치됨' } else { Fail 'URL Rewrite 가 없어요' 'web.config 의 화면 주소 규칙을 쓰려면 필요해요. 없으면 사이트 전체가 500.19 오류' '개발 서버에서 IIS URL Rewrite 2.1 설치 파일(.msi)을 받아 복사해 설치' }
+Info 'ARR(Application Request Routing)은 필요 없어요 — 이 서버는 /api 를 넘기지 않아요'
 
 # ── 3. 사이트 ─────────────────────────────────────────
 Section '3 IIS 사이트'
@@ -71,12 +60,6 @@ if (-not $site) {
   if ($site.state -ne 'Started') { Fail '사이트가 멈춰 있어요' $null "Start-Website -Name '$($site.name)'" }
   $ports = @($site.bindings.Collection | ForEach-Object { ($_.bindingInformation -split ':')[1] })
   if ($ports -contains "$WebPort") { Ok "포트 $WebPort 바인딩" } else { Fail "포트 $WebPort 바인딩이 없어요 (지금: $($ports -join ', '))" $null "New-WebBinding -Name '$($site.name)' -Port $WebPort -Protocol http" }
-  if ($SsoMode -eq 'iis') { try {
-    $win = (Get-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $site.name -Filter 'system.webServer/security/authentication/windowsAuthentication' -Name enabled).Value
-    $anon = (Get-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $site.name -Filter 'system.webServer/security/authentication/anonymousAuthentication' -Name enabled).Value
-    if ($win -eq $true) { Ok 'Windows 인증 켜짐' } else { Fail 'Windows 인증이 꺼져 있어요' '사용자 계정을 알 수 없어 모두 안내 화면으로 가요.' "Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Location '$($site.name)' -Filter 'system.webServer/security/authentication/windowsAuthentication' -Name enabled -Value True" }
-    if ($anon -eq $false) { Ok '익명 인증 꺼짐' } else { Fail '익명 인증이 켜져 있어요' '브라우저가 Windows 계정을 보내지 않아요.' "Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Location '$($site.name)' -Filter 'system.webServer/security/authentication/anonymousAuthentication' -Name enabled -Value False" }
-  } catch { Warn '인증 설정을 읽지 못했어요' $_.Exception.Message $null } }
 }
 try {
   $fw = Get-NetFirewallPortFilter -Protocol TCP -ErrorAction Stop | Where-Object { $_.LocalPort -eq "$WebPort" } | Get-NetFirewallRule | Where-Object { $_.Enabled -eq 'True' -and $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' }
@@ -104,65 +87,51 @@ if ($SsoMode -eq 'browser') {
   if ($EmployeeUrl) { Ok "사내 인사정보 URL $EmployeeUrl" } else { Fail '사내 인사정보 URL 이 비어 있어요' '모든 사용자가 "임직원만 이용할 수 있어요" 화면으로 가요.' '개발 서버의 servers.config.mjs 에서 sso.employeeApi.url 을 채우고 다시 빌드·배포' }
   if ($cfg -and $EmployeeUrl -and -not $cfg.Contains($EmployeeUrl)) { Warn 'sayeon.config.js 의 인사정보 URL 이 빌드 기준과 달라요' '사이트 폴더에서 직접 고쳤다면 괜찮아요.' $null }
 }
+if ($cfg -and -not $cfg.Contains($ApiUrl)) { Fail "sayeon.config.js 에 API 주소($ApiUrl)가 없어요" '화면이 다른 주소로 API 를 불러요.' '배포 패키지의 web 폴더를 다시 통째로 복사 (사이트 폴더에서 직접 고쳤다면 apiBase 값 확인)' } elseif ($cfg) { Ok "화면이 부를 API 주소 $ApiUrl" }
 
-# ── 5. 연결 ───────────────────────────────────────────
-Section '5 연결'
-$t = Test-NetConnection $ApiHost -Port $ApiPort -WarningAction SilentlyContinue
-if ($t.TcpTestSucceeded) { Ok "API 서버 $($ApiHost):$ApiPort 연결됨" } else { Fail "API 서버 $($ApiHost):$ApiPort 에 연결하지 못했어요" 'API 서버가 꺼져 있거나 방화벽에 막혔어요.' @('API 서버 IIS 사이트·앱 풀이 시작돼 있는지 · 사이트 폴더에서  npm run check', "API 서버 방화벽에서 이 Web 서버 → $ApiPort 허용") }
+# ── 5. 화면 응답 ──────────────────────────────────────
+Section '5 화면 응답 (이 서버에서)'
 try {
-  $h = Invoke-RestMethod "$ApiUrl/api/health" -TimeoutSec 5
-  if ($h.ok) { Ok "API 서버 상태 정상 (저장소 $($h.store))" } else { Fail 'API 서버 상태 이상' ($h | ConvertTo-Json -Compress) $null }
+  $r = Invoke-WebRequest "http://localhost:$WebPort/" -UseBasicParsing -TimeoutSec 10
+  if ($r.StatusCode -eq 200 -and $r.Content -match 'sayeon|사緣') { Ok "화면 열림 (http://localhost:$WebPort/)" } else { Warn "화면 응답 $($r.StatusCode)" $null $null }
+} catch { Fail '이 서버에서 화면이 열리지 않아요' $_.Exception.Message '위 2·3 항목(IIS·URL Rewrite·사이트)을 먼저 해결' }
+# 화면 스크립트가 진짜 스크립트로 오는지 — 파일이 없으면 화면 주소 규칙이 index.html 을 대신 돌려줘 하얀 화면이 된다
+$js = Get-ChildItem (Join-Path $SiteRoot 'assets') -Filter '*.js' -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($js) {
+  try {
+    $r = Invoke-WebRequest "http://localhost:$WebPort/assets/$($js.Name)" -UseBasicParsing -TimeoutSec 10
+    if ($r.Headers['Content-Type'] -match 'javascript') { Ok "화면 스크립트 응답 정상 ($($r.Headers['Content-Type']))" } else { Fail "화면 스크립트가 $($r.Headers['Content-Type']) 로 와요" '브라우저가 실행하지 않아 하얀 화면이 떠요.' '정적 콘텐츠 기능 · .js MIME 형식(IIS 관리자 → MIME 형식) 확인' }
+  } catch { Fail "화면 스크립트(/assets/$($js.Name))가 열리지 않아요" $_.Exception.Message '정적 콘텐츠 기능 확인' }
+} else { Fail 'assets 폴더에 화면 스크립트가 없어요' $null '배포 패키지의 web 폴더를 다시 통째로 복사' }
+try {
+  $r = Invoke-WebRequest "http://localhost:$WebPort/saju" -UseBasicParsing -TimeoutSec 10
+  if ($r.Content -match 'sayeon.config.js') { Ok '화면 주소 새로 고침 정상 (/saju → index.html)' } else { Warn '화면 주소 규칙 응답이 이상해요' $null $null }
+} catch { Fail '화면 주소(/saju)를 새로 고치면 열리지 않아요' $_.Exception.Message 'URL Rewrite 설치 · web.config 확인' }
+
+# ── 6. API 서버 — 사용자 PC 가 직접 부른다 ─────────────
+Section '6 API 서버 (참고 — 이 서버와는 통신하지 않아요)'
+Info "사용자 PC 대역 → API 서버 $ApiPort 가 열려 있어야 해요 (이 Web 서버 → API 는 필요 없음)"
+try {
+  $r = Invoke-WebRequest "$ApiUrl/api/health" -UseBasicParsing -TimeoutSec 5 -Headers @{ Origin = $PublicUrl }
+  Ok "이 서버에서도 API 상태 확인됨 ($ApiUrl/api/health)"
+  if ($r.Headers['Access-Control-Allow-Origin'] -eq $PublicUrl) { Ok "API 서버가 이 화면 주소($PublicUrl)의 호출을 허용해요" }
+  else { Fail "API 서버가 화면 주소 $PublicUrl 를 허용하지 않아요" '브라우저가 API 응답을 막아 로그인할 수 없어요.' @('API 서버의 기준정보(servers.config.mjs 의 web) 확인 후 묶음 다시 만들기', "또는 API 서버 .env 에 CORS_ORIGINS=$PublicUrl → 앱 풀 재시작") }
 } catch {
-  $fix = @('API 서버 iisnode 로그 ([sayeon] 로 시작하는 줄)')
-  if ($ApiUrl -like 'https:*') {
-    $u = [Uri]$ApiUrl
-    try { [void][Net.Dns]::GetHostAddresses($u.Host) } catch { $fix += "이 서버에서 $($u.Host) 이름을 찾지 못해요 — 사내 DNS 등록 또는 hosts 파일에 '$ApiHost $($u.Host)'" }
-    $fix += "인증서: API 서버 인증서가 '$($u.Host)' 이름으로 발급됐는지 · 발급한 사내 인증 기관(루트) 인증서가 이 서버 '신뢰할 수 있는 루트 인증 기관'에 있는지"
-  }
-  Fail 'API 서버 상태 확인 실패' $_.Exception.Message $fix
+  Info "이 서버에서는 API 서버에 닿지 않아요 — 서버끼리 막혀 있으면 정상이에요 ($($_.Exception.Message))"
 }
-try {
-  $r = Invoke-WebRequest "http://localhost:$WebPort/" -UseDefaultCredentials -UseBasicParsing -TimeoutSec 10
-  if ($r.StatusCode -eq 200 -and $r.Content -match 'sayeon|사緣') { Ok "이 서버에서 화면 열림 (http://localhost:$WebPort/)" } else { Warn "화면 응답 $($r.StatusCode)" $null $null }
-} catch { Fail '이 서버에서 화면이 열리지 않아요' $_.Exception.Message '위 2·3 항목(URL Rewrite·사이트·인증)을 먼저 해결' }
-try {
-  $h2 = Invoke-RestMethod "http://localhost:$WebPort/api/health" -UseDefaultCredentials -TimeoutSec 10
-  if ($h2.ok) { Ok 'IIS → API 서버 전달(/api) 정상' } else { Fail 'IIS → API 전달 응답 이상' $null $null }
-} catch { Fail 'IIS 가 /api 를 API 서버로 넘기지 못했어요' $_.Exception.Message @('ARR 설치·프록시 켜짐 확인 (2단계)', "API 서버 방화벽: 이 서버 → $ApiPort") }
-if ($SsoMode -eq 'browser' -and $EmployeeUrl) {
-  try {
-    $u = [Uri]$EmployeeUrl
-    $t2 = Test-NetConnection $u.Host -Port $u.Port -WarningAction SilentlyContinue
-    if ($t2.TcpTestSucceeded) { Ok "사내 인사정보 서버 $($u.Host):$($u.Port) 연결됨 (이 서버 기준)" } else { Warn "이 서버에서 사내 인사정보 서버 $($u.Host):$($u.Port) 에 연결되지 않아요" '인사정보는 사용자 PC 브라우저가 부르므로, 사내 PC 에서 열리면 괜찮아요.' '사내 PC 브라우저에서 인사정보 URL 을 직접 열어 JSON 이 오는지 확인' }
-  } catch { Warn '인사정보 URL 형식을 읽지 못했어요' $EmployeeUrl $null }
-}
+Info "사내 PC 브라우저에서 $ApiUrl/api/health 를 열어 {""ok"":true …} 가 보이는지 확인해 주세요"
+if ($ApiUrl -like 'https:*') { Info '인증서 경고가 뜨면: 인증서 이름이 주소와 같은지 · 사내 인증 기관(루트) 인증서가 사용자 PC 에 배포됐는지' }
+if ($SsoMode -eq 'browser' -and $EmployeeUrl) { Info "사내 인사정보 URL($EmployeeUrl)도 사용자 PC 브라우저가 직접 불러요" }
 
-# ── 6. 로그인 ─────────────────────────────────────────
-if ($SsoMode -eq 'iis') {
-Section "6 로그인 시험 — 지금 로그인한 Windows 계정($env:USERDOMAIN$env:USERNAME)으로"
-  try {
-    $sso = Invoke-RestMethod "http://localhost:$WebPort/api/auth/sso" -Method Post -Body '{}' -ContentType 'application/json' -Headers @{ 'X-Requested-With' = 'sayeon' } -UseDefaultCredentials -TimeoutSec 20
-    Ok "로그인 성공 — 사번 $($sso.user.empNo) · $($sso.user.name)"
-    Info '사용자 PC 에서도 같은 주소로 들어오면 바로 홈이 열려야 해요'
-  } catch {
-    $code = $null; if ($_.ErrorDetails -and $_.ErrorDetails.Message) { try { $code = ($_.ErrorDetails.Message | ConvertFrom-Json -ErrorAction Stop).code } catch {} }
-    switch ($code) {
-      'SSO_FAILED' { Fail '이 계정이 확인되지 않았어요 (SSO_FAILED)' 'API 서버가 로그인 헤더를 못 받았거나(Web 서버 IP 불일치), AD·인사 API 에서 확인되지 않았어요.' @('API 서버 사이트 폴더 iisnode\ 로그의 [sso] 줄 확인', 'API 서버에서  npm run sso:test -- --user 이계정ID') }
-      'SSO_UNAVAILABLE' { Fail 'AD 또는 사내 인사 API 연결 실패' $_.ErrorDetails.Message 'API 서버에서  npm run sso:test -- --user 이계정ID' }
-      'NOT_ACTIVE_EMPLOYEE' { Warn '재직 중이 아닌 계정으로 확인됐어요' '연결은 정상이에요.' $null }
-      default { Fail "로그인 시험 실패 ($code)" $_.Exception.Message 'API 서버 사이트 폴더의 iisnode 로그' }
-    }
-  }
-} else {
-Section '6 로그인 — 사용자 PC 에서 확인'
-  Info '사내 인사정보는 사용자 PC 브라우저가 직접 불러요. 사내 PC 에서 사이트를 열어 확인해 주세요:'
-  Info '  임직원 → 바로 홈 / 아니면 "임직원만 이용할 수 있어요" 화면'
-  Info '  안내 화면이 뜨면 브라우저 F12 → Console·Network 에서 인사정보 URL 응답(CORS 오류 여부) 확인'
-}
+# ── 7. 로그인 ─────────────────────────────────────────
+Section '7 로그인 — 사용자 PC 에서 확인'
+Info '사내 PC 에서 사이트를 열어 확인해 주세요:'
+Info '  임직원 → 바로 홈 / 아니면 "임직원만 이용할 수 있어요" 화면'
+Info '  "서버에 연결하지 못했어요" 면: 브라우저 F12 → Console 의 CORS 오류(API 서버가 허용한 화면 주소) · Network 에서 API 주소가 열리는지(방화벽·인증서)'
 
 Write-Host ""
 Write-Host "────────────────────────────────────────"
 Write-Host "  [OK] $($script:ok)   [주의] $($script:warn)   [실패] $($script:fail)"
 if ($script:fail -gt 0) { Write-Host "  [실패] 항목을 고친 뒤 다시 실행해 주세요. (docs/GO-LIVE.md)" -ForegroundColor Red; exit 1 }
-Write-Host "  Web 서버 준비 완료 — 사내 PC 에서 $('__PUBLIC_URL__') 로 접속해 확인해 주세요." -ForegroundColor Green
+Write-Host "  Web 서버 준비 완료 — 사내 PC 에서 $PublicUrl 로 접속해 확인해 주세요." -ForegroundColor Green
 exit 0

@@ -7,6 +7,7 @@
  *
  * 만드는 것: release/routes-<환경>/routes/<basePath>/   예) routes/sayeon/
  *   index.js          서버 코드 + 라이브러리(express · mssql · 사주 …)를 하나로 묶은 파일 (CommonJS)
+ *                     사용자 브라우저가 직접 부른다 (화면은 Web 서버 · CORS 로 그 화면 주소만 허용)
  *                     그 앱 main.js 에  app.use('/sayeon', require('./routes/sayeon'));  한 줄
  *   package.json      이 폴더는 CommonJS (그 앱이 ESM 이어도 그대로 불러진다)
  *   web.config        이 폴더 파일을 브라우저가 내려받지 못하게 막는다 (.env · 관리자 파일 보호)
@@ -108,15 +109,15 @@ export async function buildPlugin({ target, T, outRoutes, buildId = '' }) {
       __WEB_URL__: T.publicUrl,
       __WEB_HOST__: T.web.host,
       __DB__: `${T.db.host}:${T.db.port} / ${T.db.name}`,
+      __WEB_ORIGINS__: T.webOrigins.join(' · '),
       __HTTPS_STEP__: T.api.https
         ? [
             '',
             ` 3-1) https — 그 앱의 IIS 사이트에 https 바인딩(포트 ${T.api.port})과 '${T.api.dnsName}' 인증서가 있어야 한다`,
             `      Get-WebBinding -Name <그 앱의 사이트 이름>   → https *:${T.api.port}: 이 보이는지`,
             `      인증서: 로컬 컴퓨터\\개인 저장소에 '${T.api.dnsName}' (Get-ChildItem Cert:\\LocalMachine\\My | Select Subject, NotAfter)`,
-            `    · Web 서버(${T.web.host})가 '${T.api.dnsName}' 이름을 찾을 수 있어야 한다 — 사내 DNS 등록 (없으면 Web 서버 hosts 파일에 '${T.api.host} ${T.api.dnsName}')`,
-            '    · 인증서를 발급한 사내 인증 기관(루트) 인증서가 Web 서버의 "신뢰할 수 있는 루트 인증 기관"에 있어야 한다 (없으면 /api 가 502)',
-            `    · API 서버 방화벽: Web 서버 ${T.web.host} → ${T.api.port} 허용`,
+            `    · 사용자 PC 가 '${T.api.dnsName}' 이름을 찾을 수 있어야 한다 — 사내 DNS 등록`,
+            '    · 인증서를 발급한 사내 인증 기관(루트) 인증서가 사용자 PC 의 "신뢰할 수 있는 루트 인증 기관"에 있어야 한다 (보통 사내 PC 에는 배포돼 있다)',
           ].join('\n')
         : '',
     }).reduce((acc, [k, v]) => acc.split(k).join(v), s);
@@ -171,7 +172,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.log(`  ✔ ${path.relative(ROOT, dir)}  (index.js ${size('index.js')})`);
     console.log(`  ✔ 불러오기 확인 — require('./routes/${pluginFolderOf(T)}') 가 미들웨어 함수`);
     console.log(`\n  그 앱 main.js:  app.use('${T.api.basePath}', require('./routes/${pluginFolderOf(T)}'));`);
-    console.log(`  Web 서버 /api → ${T.apiUrl}/api   (화면 빌드 npm run build 가 이 주소로 web.config 를 만든다)`);
+    console.log(`  사용자 브라우저 → ${T.apiUrl}/api   (화면 빌드 npm run build 가 이 주소를 sayeon.config.js 에 넣는다)`);
+    console.log(`  허용하는 화면 주소(CORS): ${T.webOrigins.join(' · ')}`);
     console.log(`  자세한 순서: ${path.relative(ROOT, path.join(dir, '설치안내.txt'))}\n`);
   } catch (e) {
     console.log(`  ✖ ${e.message}\n`);

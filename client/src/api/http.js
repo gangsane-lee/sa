@@ -1,20 +1,46 @@
 /**
  * 실서버 API 클라이언트 — 엔드포인트 명세는 docs/DESIGN.md "5. API 명세" 참고
- * 인증은 서버가 발급한 HttpOnly 세션 쿠키로 처리하므로 토큰을 JS에서 다루지 않는다.
+ * 화면(Web 서버)과 API 서버의 주소가 달라 쿠키 대신 세션 헤더로 로그인을 이어 간다:
+ *   서버가 응답 헤더 X-Sayeon-Session 으로 준 값을 이 탭(sessionStorage)에 두고, 요청마다 같은 헤더로 보낸다.
+ *   탭을 닫으면 사라지고, 새 탭은 화면을 열 때 사내 인사정보로 다시 로그인한다 (stores/session.js)
  */
 import { ApiError } from '@shared/api/errors.js';
+import { API_BASE } from '@/config';
+
+const SESSION_HEADER = 'X-Sayeon-Session';
+const SESSION_KEY = 'sayeon.session';
+/** 저장소를 쓸 수 없는 브라우저면 이 화면을 여는 동안만 메모리에 둔다 */
+let memorySession = '';
+const readSession = () => {
+  try {
+    return sessionStorage.getItem(SESSION_KEY) ?? '';
+  } catch {
+    return memorySession;
+  }
+};
+const writeSession = (v) => {
+  memorySession = v;
+  try {
+    if (v) sessionStorage.setItem(SESSION_KEY, v);
+    else sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* 메모리 값만 쓴다 */
+  }
+};
 
 /** @param {{ timeoutMs?: number }} [opt] timeoutMs: 이 시간 안에 응답이 없으면 연결 실패로 본다 (입구 확인처럼 화면이 기다리는 요청) */
 async function request(method, path, body, { timeoutMs = 0 } = {}) {
   let res;
   try {
-    res = await fetch(`/api${path}`, {
+    const sid = readSession();
+    res = await fetch(`${API_BASE}${path}`, {
       method,
-      credentials: 'same-origin',
+      credentials: 'omit',
       ...(timeoutMs && { signal: AbortSignal.timeout(timeoutMs) }),
       headers: {
         // 서버는 이 헤더가 없는 상태 변경 요청을 거절한다 (CSRF 방어 보조)
         'X-Requested-With': 'sayeon',
+        ...(sid && { [SESSION_HEADER]: sid }),
         ...(body !== undefined && { 'Content-Type': 'application/json' }),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -23,6 +49,8 @@ async function request(method, path, body, { timeoutMs = 0 } = {}) {
     throw new ApiError(0, '서버에 연결하지 못했어요. 사내망 연결을 확인한 뒤 다시 시도해 주세요.', 'NETWORK');
   }
 
+  const issued = res.headers.get(SESSION_HEADER);
+  if (issued) writeSession(issued);
   if (res.status === 204) return null;
   const data = await res.json().catch(() => null);
   if (!res.ok) {
@@ -41,7 +69,7 @@ export const api = {
   auth: {
     // 운영은 사내 인사정보로만 들어온다 (ID/비밀번호 로그인 없음 — 개발 모드의 계정 로그인은 api/mock)
     me: () => request('GET', '/auth/me', undefined, { timeoutMs: 15000 }),
-    logout: () => post('/auth/logout'),
+    logout: () => post('/auth/logout').finally(() => writeSession('')),
     /** @returns {{ adminExpiresAt }} */
     enterAdmin: (password) => post('/auth/admin', { password }),
     exitAdmin: () => del('/auth/admin'),

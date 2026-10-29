@@ -24,7 +24,7 @@ export function buildApiWebConfig(T) {
   <appSettings>
     <!-- 환경: production(운영) | development(개발) -->
     <add key="SAYEON_ENV" value="${xml(T.envName)}" />
-    <!-- 이 사이트의 IIS 포트 (사이트 바인딩과 같게). Web 서버가 /api 를 이 포트로 넘긴다 -->
+    <!-- 이 사이트의 IIS 포트 (사이트 바인딩과 같게). 사용자 PC 브라우저가 이 포트로 API 를 부른다 -->
     <add key="API_PORT" value="${xml(T.api.port)}" />
     <!-- DB 서버 (MSSQL). 계정·비밀번호는 .env 의 DB_USER · DB_PASSWORD -->
     <add key="DB_HOST" value="${xml(T.db.host)}" />
@@ -47,7 +47,7 @@ export function buildApiWebConfig(T) {
     </rewrite>
     <!--
       nodeProcessCountPerApplication="1" : 데이터를 메모리에 두는 구조라 반드시 1개
-      promoteServerVars="REMOTE_ADDR"    : 요청을 보낸 곳(Web 서버 IP)을 x-iisnode-remote_addr 헤더로 — 사용자 IP 확인용
+      promoteServerVars="REMOTE_ADDR"    : 요청을 보낸 곳(사용자 PC IP)을 x-iisnode-remote_addr 헤더로 — 사용자 IP 확인용
       logDirectory="iisnode"             : 서버 로그 (이 폴더의 iisnode\\)
       nodeProcessCommandLine             : node.exe 위치가 다르면 고친다
     -->

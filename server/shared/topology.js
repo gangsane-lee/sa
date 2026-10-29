@@ -34,12 +34,13 @@ export function resolveTopology(master, envName = 'production') {
   const api = role('api', 'API 서버');
   const db = role('db', 'DB 서버');
   if (!/^[A-Za-z0-9_]{1,100}$/.test(db.name ?? '')) problems.push(`DB 이름(${envName}.db.name)은 영문·숫자·_ 만: '${db.name ?? ''}'`);
-  if (web.host && isHost(web.host) && !IPV4.test(web.host)) problems.push(`Web 서버 주소(${envName}.web.host)는 IP 로 적어 주세요 — API 서버가 이 IP 에서 온 요청만 믿어요 (DNS 이름은 web.dnsName)`);
+  if (web.host && isHost(web.host) && !IPV4.test(web.host)) problems.push(`Web 서버 주소(${envName}.web.host)는 IP 로 적어 주세요 (DNS 이름은 web.dnsName)`);
   if (web.dnsName && !HOSTNAME.test(web.dnsName)) problems.push(`Web 서버 DNS 이름 형식이 맞지 않아요: '${web.dnsName}'`);
+  web.https = web.https === true;
   // 다른 iisnode 앱에 끼워 넣을 때 그 앱이 사緣을 붙인 경로 (app.use('/sayeon', …)). 사緣 전용 사이트면 비운다
   api.basePath = String(api.basePath ?? '').replace(/\/+$/, '');
   if (!BASE_PATH.test(api.basePath)) problems.push(`API 경로(${envName}.api.basePath)는 '/sayeon' 처럼 영문·숫자·-·_ 한 단계로: '${api.basePath}'`);
-  // https 면 Web 서버가 인증서 이름을 확인하므로 DNS 이름(인증서에 적힌 이름)으로 부른다. host(IP)는 방화벽·연결 점검용
+  // https 면 사용자 브라우저가 인증서 이름을 확인하므로 DNS 이름(인증서에 적힌 이름)으로 부른다. host(IP)는 방화벽·연결 점검용
   api.https = api.https === true;
   api.dnsName = String(api.dnsName ?? '').trim();
   if (api.dnsName && !HOSTNAME.test(api.dnsName)) problems.push(`API 서버 DNS 이름(${envName}.api.dnsName) 형식이 맞지 않아요: '${api.dnsName}'`);
@@ -57,11 +58,19 @@ export function resolveTopology(master, envName = 'production') {
   }
 
   const sso = { ...(master.sso ?? {}), hrApi: { ...(master.sso?.hrApi ?? {}) }, employeeApi: { ...(master.sso?.employeeApi ?? {}) } };
-  if (!['browser', 'iis', 'off'].includes(sso.mode ?? 'browser')) problems.push(`sso.mode 는 browser · iis · off 중 하나: '${sso.mode}'`);
+  // 화면(브라우저)이 API 서버를 직접 부른다 — Web 서버가 계정 헤더를 붙여 넘기는 iis 방식은 쓸 수 없다
+  if (sso.mode === 'iis') problems.push("sso.mode 'iis' 는 Web 서버가 /api 를 API 서버로 넘기던 구조용이에요 — 지금은 브라우저가 API 서버를 직접 부르므로 'browser' 로 해 주세요");
+  else if (!['browser', 'off'].includes(sso.mode ?? 'browser')) problems.push(`sso.mode 는 browser · off 중 하나: '${sso.mode}'`);
   if (sso.employeeApi.url && !/^https?:\/\//i.test(sso.employeeApi.url)) problems.push(`sso.employeeApi.url 은 http:// 또는 https:// 로 시작해야 해요: '${sso.employeeApi.url}'`);
-  const webName = web.dnsName || web.host;
+  // https 화면에서 http 주소는 브라우저가 막는다 (혼합 콘텐츠)
+  if (web.https && !api.https) problems.push(`Web 서버가 https 면 API 서버도 https 여야 해요 — 브라우저가 https 화면에서 http API 호출을 막아요 (${envName}.api.https)`);
+  if (web.https && /^http:\/\//i.test(sso.employeeApi.url ?? '')) problems.push('Web 서버가 https 면 사내 인사정보 URL 도 https 여야 해요 — 브라우저가 https 화면에서 http 호출을 막아요 (sso.employeeApi.url)');
+  const port = (proto, p) => (p === (proto === 'https' ? 443 : 80) ? '' : `:${p}`);
+  const webProto = web.https ? 'https' : 'http';
   const apiProto = api.https ? 'https' : 'http';
-  const apiPort = api.port === (api.https ? 443 : 80) ? '' : `:${api.port}`;
+  const apiPort = port(apiProto, api.port);
+  /** 화면이 열리는 주소들 — API 서버가 이 출처(origin)의 호출만 받는다 (IP · DNS 이름 둘 다) */
+  const webOrigins = [...new Set([web.dnsName, web.host].filter(Boolean).map((h) => `${webProto}://${h}${port(webProto, web.port)}`))];
   const adminPath = `/${String(master.adminPath ?? 'changeme').replace(/^\/+|\/+$/g, '') || 'changeme'}`;
   return {
     envName,
@@ -71,9 +80,10 @@ export function resolveTopology(master, envName = 'production') {
     devServer: master.devServer ?? {},
     adminPath,
     sso,
-    /** 사용자가 접속하는 주소 */
-    publicUrl: `http://${webName}:${web.port}`,
-    /** Web 서버(IIS)가 /api 를 넘길 주소 — /api/… 는 이 뒤에 붙는다 (다른 앱에 끼워 넣었으면 basePath 까지) */
+    /** 사용자가 접속하는 주소 (화면) */
+    publicUrl: webOrigins[0] ?? '',
+    webOrigins,
+    /** 사용자 브라우저가 직접 부르는 API 주소 — /api/… 는 이 뒤에 붙는다 (다른 앱에 끼워 넣었으면 basePath 까지) */
     apiUrl: `${apiProto}://${api.dnsName || api.host}${apiPort}${api.basePath}`,
     problems,
   };

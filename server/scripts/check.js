@@ -176,11 +176,9 @@ if (!fs.existsSync(envFile)) {
   const isTest = false; // 운영 빌드는 늘 정식 운영 (개발 모드는 서버 없이 npm run dev)
   const raw = (k) => (env[k] ?? '').trim();
 
-  // 쿠키 — http(IP·DNS) 로 접속하면 COOKIE_SECURE=false
-  const https = config.publicUrl.startsWith('https:');
-  if (config.session.cookieSecure && !https) {
-    r.fail('http 로 접속하는데 COOKIE_SECURE=true 예요', { reason: '브라우저가 http 에서는 보안 쿠키를 저장하지 않아 로그인해도 바로 풀려요.', fix: ['COOKIE_SECURE=false (Web 서버에 https 를 붙이면 true)'] });
-  }
+  // 화면 주소 — 브라우저가 이 API 를 직접 부르므로 화면이 열리는 주소(origin)를 허용해야 한다
+  if (config.corsOrigins.length) r.ok(`이 API 를 부를 수 있는 화면 주소: ${config.corsOrigins.join(' · ')}`);
+  else r.fail('이 API 를 부를 수 있는 화면 주소가 없어요', { reason: '브라우저가 모든 호출을 막아요.', fix: ['servers.config.mjs 의 web(host · port · dnsName) 확인 또는 .env 의 CORS_ORIGINS'] });
 
   // 세션 · 암호화
   if (config.session.secretMissing) {
@@ -203,7 +201,7 @@ if (!fs.existsSync(envFile)) {
   } else if (config.store === 'memory') {
     r[isTest ? 'warn' : 'fail']('STORE=memory — 서버를 다시 켜면 데이터가 모두 사라져요', { fix: ['운영은 STORE=mssql'] });
   }
-  for (const k of ['DB_ENCRYPT', 'DB_TRUST_CERT', 'DB_AUTO_CREATE', 'COOKIE_SECURE']) {
+  for (const k of ['DB_ENCRYPT', 'DB_TRUST_CERT', 'DB_AUTO_CREATE']) {
     if (raw(k) && !BOOL_WORDS.includes(raw(k).toLowerCase())) r.warn(`${k} 값은 true 또는 false 로 적어 주세요: ${raw(k)}`, { reason: '알 수 없는 값은 false 로 처리돼요.' });
   }
   if (raw('DB_ADMIN_USER') || raw('DB_ADMIN_PASSWORD')) {

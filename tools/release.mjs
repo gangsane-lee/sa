@@ -157,9 +157,10 @@ ok(`패키지 안에서 서버 코드 불러오기 성공 (web.config 환경 ${t
 // ── 5. 안내 ──
 const guide = `사緣 배포 패키지 ${info.buildId} (${target})
 만든 때 ${new Date().toLocaleString('ko-KR')} · 커밋 ${commit || '-'}
-Web  ${T.publicUrl}   (IIS 사이트 — 화면 · /api 를 API 서버로)
-API  ${T.apiUrl}   (${PLUGIN_MODE ? `다른 iisnode 앱에 끼워 넣기 — routes\\${pluginFolderOf(T)} 폴더째 복사` : `IIS + iisnode 사이트 ${appName} — api 폴더째 복사`})
-DB   ${T.db.host}:${T.db.port} / ${T.db.name}
+Web  ${T.publicUrl}   (IIS 사이트 — 화면 파일만. 서버끼리 통신 없음)
+API  ${T.apiUrl}   (사용자 PC 브라우저가 직접 부름 · ${PLUGIN_MODE ? `다른 iisnode 앱에 끼워 넣기 — routes\\${pluginFolderOf(T)} 폴더째 복사` : `IIS + iisnode 사이트 ${appName} — api 폴더째 복사`})
+DB   ${T.db.host}:${T.db.port} / ${T.db.name}   (API 서버만 접속)
+방화벽  사용자 PC 대역 → Web ${T.web.port} · 사용자 PC 대역 → API ${T.api.port} · API → DB ${T.db.port}  (Web ↔ API 통신 없음)
 
 배포 순서 (자세한 내용: docs/GO-LIVE.md)
  1) 이 폴더를 통째로 운영 서버에 복사 (USB·공유폴더). 영문 경로에 둔다 — 예) C:\\deploy\\${path.basename(out)}
@@ -167,7 +168,7 @@ ${
   PLUGIN_MODE
     ? ` 2) API 서버 ${T.api.host} — routes\\${pluginFolderOf(T)} 폴더를 그 앱의 routes 폴더에 복사 (.env · config\\admins.js 는 덮어쓰지 말 것)
     처음이면 그 앱 main.js 에  app.use('${T.api.basePath}', require('./routes/${pluginFolderOf(T)}'));  한 줄 → routes\\${pluginFolderOf(T)}\\설치안내.txt
-    → 그 앱의 IIS 앱 풀 재시작 → ${T.apiUrl}/api/health${T.api.https ? `\n    (https — 그 앱 사이트에 '${T.api.dnsName}' 인증서 바인딩, Web 서버가 이 이름을 찾고 인증서를 믿어야 한다)` : ''}`
+    → 그 앱의 IIS 앱 풀 재시작 → ${T.apiUrl}/api/health${T.api.https ? `\n    (https — 그 앱 사이트에 '${T.api.dnsName}' 인증서 바인딩, 사용자 PC 가 이 이름을 찾고 인증서를 믿어야 한다)` : ''}`
     : ` 2) API 서버 ${T.api.host}  — PowerShell
       powershell -ExecutionPolicy Bypass -File api\\_deploy\\deploy-api.ps1
     → 확인·백업·교체(.env · admins.js 는 그대로)·npm run check·앱 풀 재시작·상태 확인까지 한다. 점검 실패면 이전 버전으로 자동으로 되돌린다
@@ -175,8 +176,9 @@ ${
 }
  3) Web 서버 ${T.web.host} — PowerShell(관리자)
       powershell -ExecutionPolicy Bypass -File web\\_deploy\\deploy-web.ps1 -SitePath <IIS 사이트 폴더>
-    → 백업·교체·check-web.ps1(IIS 구성·파일·API 연결)까지 한다
- 4) 사내 PC 에서 ${T.publicUrl} → 로그인 화면 없이 홈이 열리는지, 새로 넣은 기능 확인
+    → 백업·교체·check-web.ps1(IIS 구성·파일·화면 응답)까지 한다
+ 4) 사내 PC 브라우저에서 ${T.apiUrl}/api/health → {"ok":true …} (안 열리면 방화벽 · DNS · 인증서)
+    → ${T.publicUrl} → 로그인 화면 없이 홈이 열리는지, 새로 넣은 기능 확인
 되돌리기: 각 스크립트가 마지막에 보여주는 -Rollback 명령
 `;
 fs.writeFileSync(path.join(out, '배포안내.txt'), `\uFEFF${guide.replace(/\n/g, '\r\n')}`);

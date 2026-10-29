@@ -2,10 +2,13 @@
  * ★ 사緣 서버 기준정보 (마스터) — 서버 주소·포트·DB 이름은 여기에서만 고친다.
  *
  * 이 파일을 읽어 자동으로 맞춰지는 곳
- *  - API 서버 설정 (server/src/config.js)     : 포트 · 접속 주소 · DB 서버/이름 · 믿을 수 있는 Web 서버 IP
- *  - 화면 빌드 (client, npm run build)         : Web 서버용 IIS 설정(web.config) · 화면 설정(sayeon.config.js: 관리자 주소·사내 인사정보 URL)
+ *  - API 서버 설정 (server/src/config.js)     : 포트 · DB 서버/이름 · 이 API 를 부를 수 있는 화면 주소(CORS)
+ *  - 화면 빌드 (client, npm run build)         : Web 서버용 IIS 설정(web.config) · 화면 설정(sayeon.config.js: API 주소·관리자 주소·사내 인사정보 URL)
  *  - 배포 패키지 (npm run release)             : Web·API 서버에 복사할 폴더와 점검 스크립트
  *  - 점검 (npm run check · check-web.ps1)      : 각 서버 연결 확인
+ *
+ * 통신 구조: 사용자 PC 브라우저 → Web 서버(화면 파일) · 사용자 PC 브라우저 → API 서버(/api) · API 서버 → DB 서버
+ *           Web 서버와 API 서버는 서로 통신하지 않는다
  *
  * 비밀번호·키는 여기에 쓰지 않는다 → API 서버의 server/.env
  * IP 를 바꾼 뒤에는: 화면은 다시 빌드해 Web 서버에 복사, API 서버는 이 파일만 바꾸고 pm2 restart
@@ -17,19 +20,19 @@ export default {
   environments: {
     // ── 운영 ─────────────────────────────────────────
     production: {
-      /** Web 배포 운영 서버 — IIS. 빌드한 화면 파일을 두고, /api 는 API 서버로 넘긴다 */
+      /** Web 배포 운영 서버 — IIS. 빌드한 화면 파일만 둔다 (https: true 로 하면 https 로 접속) */
       web: {
         host: '10.123.321.12',
         port: 8282,
-        /** 사용자가 접속할 사내 DNS 이름 (있으면). 비우면 IP 로 접속 */
+        /** 사용자가 접속할 사내 DNS 이름 (있으면). 비우면 IP 로 접속. API 서버는 IP · DNS 이름 두 화면 주소를 모두 받는다 */
         dnsName: '',
       },
       /**
        * API 배포 운영 서버 — 회사의 다른 iisnode 앱(IIS) routes 폴더에 사緣 묶음을 끼워 넣는다 (설치 없음, npm run release → routes/sayeon)
        *  host    : API 서버 IP (방화벽 · 연결 점검)
-       *  dnsName : ★ https 인증서에 적힌 DNS 이름 — Web 서버가 이 이름으로 부른다 (사내 DNS 에 등록돼 있어야 한다)
-       *  port    : 그 앱 IIS 사이트의 https 포트
-       *  https   : true = Web 서버 → API 를 https 로
+       *  dnsName : ★ https 인증서에 적힌 DNS 이름 — 사용자 PC 브라우저가 이 이름으로 부른다 (사내 DNS 에 등록돼 있어야 한다)
+       *  port    : 그 앱 IIS 사이트의 https 포트 (방화벽: 사용자 PC 대역 → 이 포트)
+       *  https   : true = 브라우저 → API 를 https 로
        *  basePath: 그 앱 main.js 에서 붙인 경로 — app.use('/sayeon', require('./routes/sayeon'))
        *            '' 로 비우면 사緣 전용 IIS 사이트 방식(api 폴더 + deploy-api.ps1)
        */

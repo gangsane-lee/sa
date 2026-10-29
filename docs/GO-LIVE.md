@@ -12,11 +12,12 @@
 | 역할 | 주소 (지금은 가짜 — 실제 IP 로 바꿀 것) | 인터넷 | 하는 일 |
 |---|---|---|---|
 | **개발 서버** | `12.123.321.13` | **됨** | 개발·시험, **빌드와 배포 패키지 만들기** (`npm run release`) |
-| **Web 배포 운영 서버** | `10.123.321.12:8282` | 안 됨 | IIS. 화면 파일 · `/api` 를 API 서버로 전달 |
-| **API 배포 운영/개발 서버** | `https://<api.dnsName>` (`12.83.18.17:443`) | 안 됨 | **회사의 다른 iisnode 앱에 끼워 넣기** (설치 없음 — `routessayeon` 운영 · `routessayeon-dev` 개발, [D-2](#d-2-사이트를-새로-만들기-어려울-때--회사의-다른-iisnode-앱-routes-폴더에-끼워-넣기)). 업무 처리 · (권장) 사내 인사 API 로 사번 재확인 |
+| **Web 배포 운영 서버** | `10.123.321.12:8282` | 안 됨 | IIS. **화면 파일만** (API 서버와 통신하지 않는다) |
+| **API 배포 운영/개발 서버** | `https://<api.dnsName>` (`12.83.18.17:443`) | 안 됨 | **회사의 다른 iisnode 앱에 끼워 넣기** (설치 없음 — `routessayeon` 운영 · `routessayeon-dev` 개발, [D-2](#d-2-사이트를-새로-만들기-어려울-때--회사의-다른-iisnode-앱-routes-폴더에-끼워-넣기)). **사용자 PC 브라우저가 직접 부른다**. 업무 처리 · DB 접속 · (권장) 사내 인사 API 로 사번 재확인 |
 | **DB 서버** | `10.166.101.127:1433` | 안 됨 | MSSQL — 운영 DB `sasystem` · 개발 DB `sasystem_dev` |
 
-- 사용자(사내 PC)는 **Web 서버 주소 하나**로만 들어온다: `http://<Web 서버>:8282`, 관리자 `…/changeme`
+- 사용자(사내 PC)는 **Web 서버 주소**로 화면을 연다: `http://<Web 서버>:8282`, 관리자 `…/changeme`
+- 화면이 뜬 뒤 **사용자 PC 브라우저가 API 서버(`https://<api.dnsName>/sayeon/api`)를 직접** 부른다. 서버끼리 통신하는 구간은 **API → DB** 뿐이다 (Web ↔ API · Web ↔ DB 통신 없음)
 - 모두 Windows 서버. 운영 서버 3대는 인터넷이 막혀 있어 **필요한 모든 파일을 개발 서버에서 만들어 복사**한다
 
 ```
@@ -27,13 +28,15 @@
 
 [사내 PC 브라우저] ──① 사내 인사정보 URL 호출 ──▶ [사내 인사정보 서버]   (사내 SSO 쿠키 함께, CORS 허용 필요)
       │               ② 응답을 localStorage 에 저장 · 사번·재직 여부 확인 → 아니면 "임직원만 이용할 수 있어요"
-      │ http :8282
-      ▼
-[Web 서버 IIS] ── 화면 파일 · /api 만 API 서버로
-      ▼
-[API 서버 IIS + iisnode :8292] ── ③ 받은 인사정보 확인 (+ 권장: 사번으로 사내 인사 API 재확인) → 세션
-      ▼
-[DB 서버] sasystem
+      ├── http :8282 ─────▶ [Web 서버 IIS] 화면 파일만 (html · js · css)
+      │
+      └── https :443 ─────▶ [API 서버 — 다른 iisnode 앱 /sayeon] ── ③ 받은 인사정보 확인
+           (화면 JS 가 직접 호출 ·          (+ 권장: 사번으로 사내 인사 API 재확인) → 세션
+            CORS: Web 서버 주소만 허용 ·          │ 1433
+            세션은 X-Sayeon-Session 헤더)         ▼
+                                             [DB 서버] sasystem
+
+  Web 서버 ↔ API 서버 통신 없음 · 방화벽: 사내 PC → Web 8282 · 사내 PC → API 443 · 사내 PC → 인사정보 URL · API → DB 1433
 ```
 
 ### 마스터 파일 `servers.config.mjs` (저장소 맨 위)
@@ -43,9 +46,9 @@ IP·포트·DB 이름·관리자 주소·로그인 방식은 **여기서만** �
 | 따라가는 곳 | 무엇이 |
 |---|---|
 | API 서버 `web.config` (패키지가 만듦) | 환경 · API 포트 · DB 서버/이름 (`appSettings` — 서버에서 직접 고쳐도 된다) |
-| API 서버 (`servers.config.mjs` 사본) | 사용자 접속 주소, 믿을 Web 서버 IP, 관리자 주소, 로그인 방식 |
-| 화면 빌드 (`npm run build`) | Web 서버용 `web.config`(API 서버 주소로 전달), `sayeon.config.js`(관리자 주소 · **사내 인사정보 URL**), 점검·배포 스크립트 |
-| 운영 빌드 미리보기 (`npm run preview`) | `/api` 를 개발 API 서버로 넘기는 주소 |
+| API 서버 (`servers.config.mjs` 사본 · 묶음 안) | 사용자 접속 주소, **이 API 를 부를 수 있는 화면 주소(CORS — Web 서버 IP · DNS 이름)**, 관리자 주소, 로그인 방식 |
+| 화면 빌드 (`npm run build`) | Web 서버용 `web.config`(화면 주소 처리만), `sayeon.config.js`(**API 서버 주소** · 관리자 주소 · **사내 인사정보 URL**), 점검·배포 스크립트 |
+| 운영 빌드 미리보기 (`npm run preview`) | `/api` 를 개발 API 서버로 넘기는 주소 (미리보기는 빌드의 API 주소 대신 이 프록시를 쓴다) |
 | 배포 패키지·점검 | 각 서버 주소·포트로 연결 확인 |
 
 비밀번호·키는 마스터에 쓰지 않는다 → API 서버 사이트 폴더의 `.env` (git·패키지에 들어가지 않음).
@@ -78,10 +81,10 @@ IP 가 형식에 안 맞으면(예: `321`) 서버·빌드·패키지·점검이 
 | 2 | **사내 인사정보 URL** — 사내 PC 브라우저가 부를 주소, GET/POST, 보낼 값(예: 본문에 localStorage 의 `sabun`), 응답 JSON 예시, 사용자를 무엇으로 알아보는지(사내 SSO 쿠키 등) | 인사 시스템 담당 | `servers.config.mjs` 의 `sso.employeeApi` |
 | 3 | 인사정보 서버의 **CORS 허용** — 사緣 화면 주소(`http://<Web 서버>:8282`)를 허용. 쿠키를 쓰면 `Access-Control-Allow-Credentials: true` 이고 허용 주소는 `*` 가 아닌 정확한 주소 | 인사 시스템 담당 | 없으면 브라우저가 응답을 읽지 못해 **모두 안내 화면**으로 감 |
 | 4 | (권장) **서버용 사내 인사 API** — 사번으로 재직 조회, API 서버에서 접근 가능한지, API 키 | 인사 시스템 담당 | `sso.hrApi` — 브라우저가 보낸 정보를 서버가 다시 확인 |
-| 5 | **IIS 확장 설치 허용** — Web 서버: URL Rewrite 2.1 · ARR 3.0 / API 서버: URL Rewrite 2.1 · **iisnode 0.2.26** (.msi, 오프라인 설치) | 보안·IT | Web: `/api` 전달 / API: IIS 가 Node.js(main.js)를 실행 |
-| 6 | **방화벽** — 사내 PC → Web 8282 / 사내 PC → 인사정보 URL / Web → API 8292 / API → DB 1433 / API → 인사 API(4번) / 개발 서버 → API 8293·DB | 네트워크 | 사내 PC → API 8292 는 **막는 것을 권장** |
+| 5 | **IIS 확장 설치 허용** — Web 서버: URL Rewrite 2.1 / API 서버: 끼워 넣기(D-2)면 없음, 전용 사이트(D)면 URL Rewrite 2.1 · **iisnode 0.2.26** (.msi, 오프라인 설치) | 보안·IT | Web: 화면 주소 새로 고침 / API: IIS 가 Node.js 를 실행 |
+| 6 | **방화벽** — 사내 PC → Web 8282 / **사내 PC → API 443** / 사내 PC → 인사정보 URL / API → DB 1433 / API → 인사 API(4번) | 네트워크 | **Web → API 는 필요 없다** (브라우저가 API 를 직접 부른다) |
 | 7 | 개발 API 를 **API 서버의 8293** 에서 돌려도 되는지 (그림의 "운영/개발" 겸용) | 본인 | 다르면 `servers.config.mjs` 의 `development` 수정 |
-| 8 | https 인증서 계획, DB 백업 정책, `DATA_KEY` 보관 위치 | IT·보안 | 6장 |
+| 8 | API 서버 **https 인증서**(`api.dnsName`)를 사내 인증 기관에서 발급 — 사내 PC 가 그 루트 인증서를 신뢰하는지, 사내 DNS 등록 · DB 백업 정책 · `DATA_KEY` 보관 위치 | IT·보안 | 6장 |
 
 > ⚠ **보안 한계**: 브라우저가 받은 인사정보는 사용자가 개발자 도구로 꾸며 보낼 수 있다. 4번(서버 재확인)을 켜면 **없는 사번·퇴직자**는 막지만 **다른 사람 사번을 입력하는 것**까지는 막지 못한다. 더 강한 확인이 필요해지면 4장의 iis 방식(Windows 인증)으로 바꿀 수 있다.
 
@@ -127,7 +130,6 @@ IP 가 형식에 안 맞으면(예: `321`) 서버·빌드·패키지·점검이 
 | `node-v22.12.0-x64.msi` (nodejs.org) | API 서버 |
 | **iisnode** `iisnode-full-v0.2.26-x64.msi` (github.com/Azure/iisnode/releases) | API 서버 |
 | IIS **URL Rewrite 2.1** (`rewrite_amd64_ko-KR.msi` 등) | Web 서버 · API 서버 |
-| IIS **ARR 3.0** (`requestRouter_amd64.msi`) | Web 서버 |
 
 IIS 는 Windows Server 에 들어 있어 인터넷 없이 켤 수 있다. DB 드라이버·사주 라이브러리 등 Node 라이브러리는 배포 패키지의 `api\node_modules` 에 들어간다 (서버에서 `npm install` 할 일 없음).
 
@@ -175,7 +177,7 @@ C:\sites\sayeon-api-dev\      ← 'sayeon-api-dev' (포트 8293, 개발) — 개
    ```powershell
    powershell -ExecutionPolicy Bypass -File C:\deploy\<빌드번호>-production\api\_deploy\deploy-api.ps1
    ```
-   앱 풀 `sayeon-api`(관리 코드 없음 · 유휴 종료 끔 · 겹친 재활용 끔 · 프로세스 1개)과 사이트 `sayeon-api`(포트 8292, 폴더 `C:\sites\sayeon-api`), 방화벽(Web 서버 IP → 8292)을 만들고 파일을 놓은 뒤, **`.env`·관리자 파일을 만들라는 안내와 함께 멈춘다**
+   앱 풀 `sayeon-api`(관리 코드 없음 · 유휴 종료 끔 · 겹친 재활용 끔 · 프로세스 1개)과 사이트 `sayeon-api`(포트 8292, 폴더 `C:\sites\sayeon-api`), 방화벽(→ 8292 인바운드 — 사용자 PC 브라우저가 직접 부른다)을 만들고 파일을 놓은 뒤, **`.env`·관리자 파일을 만들라는 안내와 함께 멈춘다**
 4. [ ] `C:\sites\sayeon-api\web.config` 의 `<appSettings>` 확인 — 패키지가 기준정보로 채워 둔다
 
    | 키 | 운영 | 개발 사이트 |
@@ -223,17 +225,20 @@ C:\sites\sayeon-api-dev\      ← 'sayeon-api-dev' (포트 8293, 개발) — 개
 API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어려우면, 이미 돌고 있는 다른 iisnode(Express) 앱에 사緣 API 를 **폴더 하나**로 넣는다. 라이브러리까지 한 파일(`index.js`)에 묶여 있어 `npm install` 이 필요 없다.
 
 1. [ ] `servers.config.mjs` 의 `api` — **`dnsName` 은 https 인증서에 적힌 DNS 이름(필수)**, `port` 는 그 앱 IIS 사이트의 https 포트(기본 443), `https: true`, `basePath` 는 붙일 경로(운영 `'/sayeon'`, 개발 `'/sayeon-dev'`)
-   - Web 서버는 `https://<dnsName>/sayeon/api/…` 로 넘긴다 → Web 서버가 그 이름을 찾을 수 있어야 하고(사내 DNS · 없으면 Web 서버 hosts 에 `12.83.18.17 <dnsName>`), 인증서를 발급한 **사내 인증 기관(루트) 인증서를 Web 서버가 신뢰**해야 한다 (없으면 `/api` 가 502)
-   - 그 앱 IIS 사이트에 https 바인딩 + `<dnsName>` 인증서 (API 서버 담당), 방화벽 Web 서버 → 443
+   - **사용자 PC 브라우저**가 `https://<dnsName>/sayeon/api/…` 를 직접 부른다 → 사내 PC 가 그 이름을 찾을 수 있어야 하고(사내 DNS 등록), 인증서를 발급한 **사내 인증 기관(루트) 인증서를 사내 PC 가 신뢰**해야 한다 (보통 사내 PC 에는 배포돼 있다)
+   - 그 앱 IIS 사이트에 https 바인딩 + `<dnsName>` 인증서 (API 서버 담당), 방화벽 **사내 PC 대역 → 443**
+   - API 는 `web`(IP · DNS 이름)에서 연 화면의 호출만 받는다(CORS). 다른 주소로도 화면을 열면 묶음 `.env` 의 `CORS_ORIGINS` 에 더한다
+   - 로그인 세션은 쿠키가 아니라 `X-Sayeon-Session` 헤더로 주고받는다 — 화면과 API 의 주소가 달라도 회사 브라우저의 제3자 쿠키 정책과 상관없다. 탭마다 따로이고, 탭을 닫으면 끝난다(다시 열면 인사정보로 자동 재확인)
 2. [ ] 개발 PC 에서 `npm run release` — `basePath` 가 있으면 `api\` 대신 `routes\sayeon\` 을 만든다 (묶음만: server 폴더에서 `npm run plugin`)
-   Web 서버 web.config 의 `/api` 전달 주소도 `http://<API 서버>:<포트>/sayeon/api/…` 로 바뀐다
+   화면 설정 `sayeon.config.js` 의 `apiBase` 에 `https://<dnsName>/sayeon` 이 들어간다 (Web 서버 web.config 에는 `/api` 전달이 없다)
 3. [ ] `routes\sayeon` 폴더를 그 앱의 `routes` 폴더에 복사 → 그 앱 `main.js` 에 한 줄 (그 앱의 404·오류 처리보다 앞에)
    ```js
    app.use('/sayeon', require('./routes/sayeon'));
    ```
-4. [ ] 그 앱 web.config 의 `<iisnode>` — **`nodeProcessCountPerApplication="1"` 필수**(사緣은 데이터를 메모리에 두고 저장한다), `promoteServerVars="REMOTE_ADDR"` 권장. Node.js 22 이상
+4. [ ] 그 앱 web.config 의 `<iisnode>` — **`nodeProcessCountPerApplication="1"` 필수**(사緣은 데이터를 메모리에 두고 저장한다), **`promoteServerVars="REMOTE_ADDR"` 필요**(사용자 IP — 열람 기록 · 로그인 확인 횟수 제한. 없으면 IP 가 비고 횟수 제한이 꺼진다). Node.js 22 이상
+   그 앱이 모든 요청에 로그인 확인 · CORS 를 먼저 거는 구조면 사緣 줄을 그보다 **앞에** 둔다 (OPTIONS 사전 확인 요청이 사緣까지 와야 한다)
 5. [ ] `routes\sayeon\.env` · `config\admins.js` 채우기 → `node tools\db-setup.mjs` → 그 앱의 앱 풀 재시작
-6. [ ] **확인** `https://<dnsName>/sayeon/api/health` (인증서 이름과 맞아야 하므로 localhost 가 아니라 DNS 이름으로) · Web 서버에서 `check-web.ps1` · 실패하면 그 앱 iisnode 로그의 `[sayeon]` 줄
+6. [ ] **확인** — **사내 PC 브라우저**에서 `https://<dnsName>/sayeon/api/health` (인증서 이름과 맞아야 하므로 DNS 이름으로) → `{"ok":true …}` · 이어서 화면 로그인 · 실패하면 그 앱 iisnode 로그의 `[sayeon]` 줄 (허용하지 않은 화면 주소에서 부르면 `[sayeon] 허용하지 않은 화면 주소 …` 가 남는다)
 
 순서 전체는 묶음 안의 `설치안내.txt`. 사緣이 시작에 실패해도 **그 앱은 그대로 돈다**(사緣 API 만 503, 30초 뒤 다시 시도). 설정은 묶음 폴더의 `.env` 에서만 읽고 그 앱의 환경 변수·세션과 섞지 않는다. 업데이트는 `index.js` 등을 덮어쓰고(`.env` · `config\admins.js` 는 그대로) 앱 풀 재시작 — `routes` 아래 파일은 iisnode 가 바뀐 것을 알아채지 못한다.
 
@@ -280,22 +285,18 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
    ```powershell
    Install-WindowsFeature Web-Server -IncludeManagementTools
    ```
-2. [ ] C 단계의 **URL Rewrite 2.1**, **ARR 3.0** 설치
-3. [ ] ARR 프록시 켜기 (관리자 PowerShell)
-   ```powershell
-   Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.webServer/proxy' -Name enabled -Value True
-   ```
-4. [ ] 사이트 만들기 (폴더는 영문 경로, 인증은 기본값 — 익명 인증 켜짐 그대로)
+2. [ ] C 단계의 **URL Rewrite 2.1** 설치 (ARR 은 필요 없다 — 이 서버는 `/api` 를 넘기지 않는다)
+3. [ ] 사이트 만들기 (폴더는 영문 경로, 인증은 기본값 — 익명 인증 켜짐 그대로)
    ```powershell
    New-Item -ItemType Directory -Force D:\sites\sayeon
    New-Website -Name 'sayeon' -Port 8282 -PhysicalPath 'D:\sites\sayeon'
    New-NetFirewallRule -DisplayName 'sayeon web 8282' -Direction Inbound -Protocol TCP -LocalPort 8282 -Action Allow
    ```
-5. [ ] 화면 배포 — 백업·교체·점검까지
+4. [ ] 화면 배포 — 백업·교체·점검까지
    ```powershell
    powershell -ExecutionPolicy Bypass -File C:\deploy\<빌드번호>-production\web\_deploy\deploy-web.ps1 -SitePath D:\sites\sayeon
    ```
-- **확인**: `check-web.ps1` 이 `[실패] 0` ([7-2](#7-2-check-webps1--web-서버) 읽는 법) — 사내 인사정보 URL 설정, **IIS → API 전달** 정상. 로그인은 G 단계에서 사내 PC 로 확인
+- **확인**: `check-web.ps1` 이 `[실패] 0` ([7-2](#7-2-check-webps1--web-서버) 읽는 법) — 정적 파일·화면 스크립트 응답, 화면 설정의 API 주소, 사내 인사정보 URL 설정. API 연결·로그인은 G 단계에서 **사내 PC** 로 확인 (Web 서버에서 API 에 닿지 않아도 정상)
 
 ### G. 사내 PC 확인
 
@@ -349,7 +350,8 @@ API 서버가 오프라인이라 Node·iisnode 설치나 사이트 생성이 어
 | 관리자 추가·삭제·비밀번호 | API 서버 사이트 폴더 `config\admins.js` | 자동 (3초) |
 | 관리자 주소 | `servers.config.mjs` 의 `adminPath` | release → 둘 다 배포 |
 | 기준정보(사업부·캠퍼스 등) | 관리자 화면 → 기준정보 → 엑셀 일괄 변경 | 바로 |
-| https | Web 서버 IIS 인증서 바인딩 + API `.env` 의 `COOKIE_SECURE=true` | restart |
+| Web 서버 https | Web 서버 IIS 인증서 바인딩 + `servers.config.mjs` 의 `web.https: true` (API·인사정보 URL 도 https 여야 함) | release → 둘 다 배포 |
+| 화면을 다른 주소로도 열 때 | API 서버 묶음 `.env` 의 `CORS_ORIGINS` (쉼표로 여러 개) — 또는 `servers.config.mjs` 의 `web` | 앱 풀 재시작 |
 
 - 운영 서버에서 `servers.config.mjs` 를 직접 고쳐도 동작은 하지만, **다음 배포 때 패키지 값으로 덮어써진다**. 늘 개발 서버에서 고치고 커밋한다
 - 앱 풀을 재시작하면 접속 중인 사용자는 다시 확인 과정을 거친다(자동이라 대부분 모름)
@@ -413,7 +415,7 @@ Web 서버 IIS 의 Windows 인증으로 `SECDS\아이디` 를 확인해 헤더�
 - [ ] API 서버 사이트 폴더의 `.env`, `config\admins.js` 백업 (git·패키지에 없음)
 - [ ] DB 는 전용 계정(읽기·쓰기만), `.env` 에 `DB_ADMIN_*` 남기지 않기
 - [ ] 관리자 비밀번호 해시, 관리자 주소 비공개
-- [ ] API 8292 는 Web 서버 IP 에서만 (사내 PC 직접 접근 차단 권장)
+- [ ] API 서버 포트는 **사내 PC 대역**에서만 (브라우저가 직접 부른다 — 외부·다른 망은 차단). 호출은 Web 서버 화면 주소에서 온 것만 받는다(CORS)
 - [ ] 서버 재확인(`sso.hrApi`) 켜기 — 브라우저가 보낸 인사정보를 서버가 다시 확인
 - 개인정보 최소 수집: 생년월일은 **출생연도만** 저장한다. 인연 사주에 입력한 월·일·태어난 시간은 계산에만 쓰고 저장하지 않는다 (예전 데이터는 서버가 불러올 때 연도만 남기고 지운다)
 - 들어 있는 보호: 비밀번호를 받지 않음 · 로그인 확인 1분 30회 제한 · 세션 재발급 · 관리자 5회 실패 잠금 · 열람 기록 · 이름·메일 암호화 · 인사정보 크기 제한
@@ -428,7 +430,7 @@ Web 서버 IIS 의 Windows 인증으로 `SECDS\아이디` 를 확인해 헤더�
 |---|---|
 | 1 실행 환경 | Node 22.12.0 · npm · **IIS · iisnode · URL Rewrite** · node.exe 경로 · 설치 경로 한글 여부 |
 | 2 설정 | **web.config**(환경·API 포트·DB 서버), `servers.config.mjs` 형식, 운영/개발 겹침, 관리자 주소, **이 서버가 기준정보의 API 서버가 맞는지** |
-| 3 `.env` | 예전 항목·오타, `SESSION_SECRET`·`DATA_KEY`, 쿠키, 남은 관리 계정 |
+| 3 `.env` | 예전 항목·오타, `SESSION_SECRET`·`DATA_KEY`, 이 API 를 부를 수 있는 화면 주소(CORS), 남은 관리 계정 |
 | 4 패키지 | 라이브러리 · main.js · routes · shared(업무 규칙) |
 | 5 화면 빌드 | API 서버가 화면도 낼 때(`CLIENT_DIST`)만 — 보통은 건너뜀 |
 | 6 IIS 사이트 · 포트 | 이 폴더를 쓰는 IIS 사이트 · 포트가 web.config 의 API_PORT 와 같은지 · `/api/health` 응답 |
@@ -442,12 +444,13 @@ Web 서버 IIS 의 Windows 인증으로 `SECDS\아이디` 를 확인해 헤더�
 
 | 구역 | 확인하는 것 |
 |---|---|
-| 1 서버 | 관리자 권한, 로그인 방식 (iis 방식이면 도메인 가입) |
-| 2 IIS 구성 요소 | IIS 실행, URL Rewrite, ARR, ARR 프록시 켜짐 (iis 방식이면 Windows 인증 기능·계정 헤더 변수) |
-| 3 사이트 | 이 폴더의 사이트, 8282 바인딩, 방화벽 (iis 방식이면 Windows 인증 켬·익명 끔) |
-| 4 화면 파일 | 필수 파일, **모든 파일이 빌드와 같은지(해시 비교)**, 사내 인사정보 URL 설정 |
-| 5 연결 | API 서버 포트·상태, 이 서버에서 화면 열림, **IIS → API 전달**, 인사정보 서버 연결(참고) |
-| 6 로그인 | browser: 사내 PC 에서 확인하는 방법 안내 / iis: 지금 Windows 계정으로 로그인 시험 |
+| 1 서버 | 관리자 권한, 로그인 방식 |
+| 2 IIS 구성 요소 | IIS 실행, 정적 콘텐츠 기능, URL Rewrite (ARR 은 필요 없음) |
+| 3 사이트 | 이 폴더의 사이트, 8282 바인딩, 방화벽 |
+| 4 화면 파일 | 필수 파일, **모든 파일이 빌드와 같은지(해시 비교)**, 사내 인사정보 URL · **API 주소** 설정 |
+| 5 화면 응답 | 이 서버에서 화면 열림, **화면 스크립트가 javascript 로 오는지**(아니면 하얀 화면), 화면 주소 새로 고침 |
+| 6 API 서버 (참고) | 이 서버에서 닿으면 상태·**CORS 허용**까지 확인, 닿지 않아도 정상(서버끼리 통신 없음) — 사내 PC 에서 확인하는 방법 안내 |
+| 7 로그인 | 사내 PC 에서 확인하는 방법 안내 |
 
 `[실패]` 마다 원인과 **그대로 실행할 PowerShell 명령**이 나온다.
 
@@ -457,7 +460,8 @@ Web 서버 IIS 의 Windows 인증으로 `SECDS\아이디` 를 확인해 헤더�
 |---|---|
 | 명령이 메시지 없이 꺼짐 | Node 22.12 + 한글 경로 → 영문 경로로 |
 | 화면 전체가 500.19 오류 | URL Rewrite 미설치 → C 단계 msi 설치 |
-| "사緣 서버에 연결하지 못했어요" | IIS → API 전달 실패: ARR 프록시·API 방화벽·API 서버 꺼짐 (`check-web.ps1` 2·5번, API 서버 `http://localhost:8292/api/health` · 사이트 폴더 `iisnode\` 로그) |
+| "사緣 서버에 연결하지 못했어요" | 브라우저가 API 서버에 닿지 못함. 사내 PC F12 → Console 에 **CORS 오류**면 화면 주소가 API 의 허용 목록에 없음(묶음 `.env` 의 `CORS_ORIGINS` · 그 앱 iisnode 로그의 `[sayeon] 허용하지 않은 화면 주소`) / Network 에서 API 요청이 실패면 사내 PC → API 443 방화벽 · DNS 이름 · 인증서 신뢰 (사내 PC 브라우저에서 `https://<dnsName>/sayeon/api/health`) / 503 이면 사緣 시작 실패(그 앱 iisnode 로그) |
+| 화면이 하얗게만 나옴 | F12 → Console 에 `MIME type "text/html"` 이면 화면 파일 누락·하위 경로 배포·정적 콘텐츠 기능 없음 (`check-web.ps1` 2·4·5번) / 주소창에 IE 아이콘이면 Edge IE 모드 → 사이트 목록에서 제외 요청 |
 | 모두 "임직원만 이용할 수 있어요" | 사내 PC F12 → Console 에 **CORS 오류**면 인사정보 서버에 CORS 허용 요청(0장 3번) / Network 에서 인사정보 URL 응답이 401·302 면 사내 포털 로그인·쿠키 / 응답은 오는데 안 되면 `npm run sso:test -- --file 응답.json` |
 | "사내 인사정보 서버에 연결하지 못했어요" | 사내 PC → 인사정보 URL 네트워크·주소, 인사정보 서버 5xx / 서버 재확인을 켰으면 API 서버 → 인사 API 방화벽·`SSO_API_KEY` |
 | "서비스를 준비하고 있어요" | `sso.employeeApi.url` 비어 있음 → 채우고 다시 빌드·배포 |

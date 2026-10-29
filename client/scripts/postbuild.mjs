@@ -2,8 +2,9 @@
  * 빌드 뒤처리 — npm run build 가 자동으로 실행한다(postbuild).
  * servers.config.mjs(마스터)의 값으로 Web 서버(IIS)에 둘 파일을 dist 에 만든다.
  *
- *   dist/web.config              IIS 설정: /api → API 서버로 전달(iis 방식이면 로그인 계정 헤더 포함) · 화면 주소 처리 · 캐시
- *   dist/sayeon.config.js        화면 설정 (관리자 주소 · 사내 인사정보 URL) — 빌드는 늘 운영 모드
+ *   dist/web.config              IIS 설정: 화면 주소 처리 · 캐시 (Web 서버는 화면 파일만 낸다 — /api 를 넘기지 않는다)
+ *   dist/sayeon.config.js        화면 설정 (API 서버 주소 · 관리자 주소 · 사내 인사정보 URL) — 빌드는 늘 운영 모드
+ *                                사용자 브라우저가 이 API 주소를 직접 부른다
  *   dist/_deploy/                Web 서버 점검·배포 스크립트와 파일 목록 (웹으로는 열리지 않는다)
  *       check-web.ps1 · deploy-web.ps1 · manifest.json · build.json
  *
@@ -25,7 +26,7 @@ const fail = (m) => {
   process.exit(1);
 };
 
-console.log(`\n[postbuild] 대상 환경 ${target} · Web ${T.publicUrl} → API ${T.apiUrl}`);
+console.log(`\n[postbuild] 대상 환경 ${target} · 화면 ${T.publicUrl} · 브라우저가 부를 API ${T.apiUrl}`);
 if (T.problems.length) {
   console.warn('  ⚠ servers.config.mjs 확인이 필요해요 (배포 전에 고쳐야 해요):');
   for (const p of T.problems) console.warn(`    - ${p}`);
@@ -55,43 +56,25 @@ if (!licensed) console.warn('  ⚠ DevExtreme 라이선스 키가 빌드에 없�
 
 // 1) 화면 설정 (빌드에 들어 있던 개발용 sayeon.config.js 를 덮어쓴다) — 배포 뒤 이 파일만 고쳐도 반영된다
 const runtime = {
+  apiBase: T.apiUrl,
   adminPath: T.adminPath,
   ...(ssoMode === 'browser' && { employeeApi }),
   ...(T.sso.loginPage && { ssoLoginPage: T.sso.loginPage }),
 };
 fs.writeFileSync(path.join(DIST, 'sayeon.config.js'), `window.SAYEON_CONFIG = ${JSON.stringify(runtime, null, 2)};\n`);
 
-// 2) IIS 설정 — Windows 인증 계정 헤더는 iis 방식일 때만
-const iis = ssoMode === 'iis';
-const serverVar = `HTTP_${String(T.sso.header ?? 'x-sayeon-user').toUpperCase().replace(/-/g, '_')}`;
-const xml = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-const needs = iis
-  ? `  필요: IIS · Windows 인증 · URL Rewrite · ARR(프록시 켜짐) · 허용 서버 변수 ${serverVar}  → _deploy/check-web.ps1 이 확인
-  Windows 인증 켜기·익명 끄기는 IIS 관리자(사이트 → 인증)에서 한다 (이 파일로는 바꿀 수 없게 잠겨 있다)`
-  : `  필요: IIS · URL Rewrite · ARR(프록시 켜짐)  → _deploy/check-web.ps1 이 확인
-  로그인 방식 ${ssoMode}: 화면이 사내 인사정보 URL 로 임직원을 확인한다 (Windows 인증 필요 없음 · 익명 인증 그대로)`;
-const apiRule = iis
-  ? `        <!-- /api → API 서버. Windows 인증으로 확인한 계정(DOMAIN\\아이디)을 헤더로 넘긴다 (사용자가 보낸 같은 헤더는 덮어쓴다) -->
-        <rule name="sayeon-api" stopProcessing="true">
-          <match url="^api/(.*)" />
-          <serverVariables>
-            <set name="${serverVar}" value="{LOGON_USER}" />
-          </serverVariables>`
-  : `        <!-- /api → API 서버 -->
-        <rule name="sayeon-api" stopProcessing="true">
-          <match url="^api/(.*)" />`;
+// 2) IIS 설정 — 화면 파일만 낸다. 사용자 브라우저가 API 서버를 직접 부르므로 /api 전달·ARR 은 없다
 const webConfig = `<?xml version="1.0" encoding="UTF-8"?>
 <!--
   사緣 Web 서버(IIS) 설정 — npm run build 가 servers.config.mjs(${target})로 만든 파일. 직접 고치지 말고 마스터를 고쳐 다시 빌드.
-${needs}
+  필요: IIS(정적 콘텐츠) · URL Rewrite(화면 주소 새로 고침)  → _deploy/check-web.ps1 이 확인
+  /api 는 이 서버를 거치지 않는다 — 사용자 PC 브라우저 → ${T.apiUrl}/api  (API 서버 방화벽: 사용자 PC 대역 → ${T.api.port})
+  로그인 방식 ${ssoMode}: 화면이 사내 인사정보 URL 로 임직원을 확인한다 (Windows 인증 필요 없음 · 익명 인증 그대로)
 -->
 <configuration>
   <system.webServer>
     <rewrite>
       <rules>
-${apiRule}
-          <action type="Rewrite" url="${xml(T.apiUrl)}/api/{R:1}" />
-        </rule>
         <!-- 화면 주소(/saju, /messages …)를 새로 고쳐도 index.html 로 -->
         <rule name="sayeon-spa" stopProcessing="true">
           <match url=".*" />
@@ -170,7 +153,7 @@ fs.writeFileSync(path.join(deployDir, 'manifest.json'), JSON.stringify({ buildId
 const BOM = '﻿';
 const values = {
   __API_URL__: T.apiUrl, __API_HOST__: T.api.host, __API_PORT__: String(T.api.port), __WEB_PORT__: String(T.web.port),
-  __SERVER_VAR__: serverVar, __DOMAIN__: T.sso.domain ?? '', __ENV__: target, __SSO_MODE__: ssoMode, __EMPLOYEE_URL__: String(employeeApi.url ?? ''),
+  __ENV__: target, __SSO_MODE__: ssoMode, __EMPLOYEE_URL__: String(employeeApi.url ?? ''),
   __BUILD_ID__: buildId, __PUBLIC_URL__: T.publicUrl,
 };
 for (const name of ['check-web.ps1', 'deploy-web.ps1']) {

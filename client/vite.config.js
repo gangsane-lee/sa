@@ -1,9 +1,30 @@
+import fs from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { loadTopology } from '../tools/topology.mjs';
 
 const SHARED = fileURLToPath(new URL('../server/shared', import.meta.url));
+const BUILT_CONFIG = fileURLToPath(new URL('./dist/sayeon.config.js', import.meta.url));
+
+// npm run preview: 운영 빌드의 화면 설정에는 운영 API 주소(apiBase)가 들어 있다 → 미리보기에서는 비워서
+// 같은 주소의 /api 를 부르게 하고, 아래 proxy 가 개발 API 서버로 넘긴다
+const previewConfig = {
+  name: 'sayeon-preview-config',
+  configurePreviewServer(server) {
+    server.middlewares.use('/sayeon.config.js', (req, res, next) => {
+      let text;
+      try {
+        text = fs.readFileSync(BUILT_CONFIG, 'utf8');
+      } catch {
+        return next();
+      }
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(text.replace(/"apiBase":\s*"[^"]*"/, '"apiBase": ""'));
+    });
+  },
+};
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -12,7 +33,7 @@ export default defineConfig(({ mode }) => {
   const dev = loadTopology('development');
 
   return {
-    plugins: [vue()],
+    plugins: [vue(), previewConfig],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),

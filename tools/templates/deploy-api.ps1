@@ -18,7 +18,7 @@ $ErrorActionPreference = 'Stop'
 $Site = '__APP_NAME__'
 $Pool = '__APP_NAME__'
 $Port = __API_PORT__
-$WebHost = '__WEB_HOST__'
+# 이 API 를 부르는 곳 = 사용자 PC 브라우저 (Web 서버는 화면 파일만 내고 이 서버와 통신하지 않는다)
 $Https = '__API_HTTPS__' -eq 'true'      # servers.config.mjs 의 api.https
 $CertName = '__API_DNS__'                # 인증서에 적힌 DNS 이름 (api.dnsName)
 $Proto = $(if ($Https) { 'https' } else { 'http' })
@@ -118,10 +118,10 @@ if ($Https) {
 $acct = "IIS AppPool\$Pool"
 & icacls $Target /grant "${acct}:(OI)(CI)M" /T /Q | Out-Null
 Good "폴더 권한: $acct 수정 가능"
-# 방화벽 — Web 서버에서만 이 포트로
+# 방화벽 — 사용자 PC 브라우저가 직접 부르므로 사내 PC 대역에서 이 포트로
 if (-not (Get-NetFirewallRule -DisplayName "sayeon $Site $Port" -ErrorAction SilentlyContinue)) {
-  New-NetFirewallRule -DisplayName "sayeon $Site $Port" -Direction Inbound -Protocol TCP -LocalPort $Port -RemoteAddress $WebHost -Action Allow | Out-Null
-  Good "방화벽: $WebHost → $Port 허용 규칙을 만들었어요 (개발 서버에서도 붙어야 하면 RemoteAddress 에 추가)"
+  New-NetFirewallRule -DisplayName "sayeon $Site $Port" -Direction Inbound -Protocol TCP -LocalPort $Port -Action Allow | Out-Null
+  Good "방화벽: → $Port 인바운드 허용 규칙을 만들었어요"; Warn "보안 정책상 범위를 좁혀야 하면 규칙 `"sayeon $Site $Port`" 의 원격 주소를 사내 PC 대역으로 (Set-NetFirewallRule -DisplayName ... -RemoteAddress 10.0.0.0/8 등)"
 }
 
 # ── 3. 백업 ──────────────────────────────────────────

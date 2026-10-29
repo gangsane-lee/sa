@@ -1,6 +1,8 @@
 /**
  * Express 앱 조립 — 서비스(업무 규칙)에 저장소·세션·사내 인증·관리자 확인을 연결하고,
- * /api 를 내보낸다. 화면은 보통 Web 서버(IIS)가 내보내고, CLIENT_DIST 를 정하면 여기서도 내보낸다.
+ * /api 를 내보낸다. 화면은 Web 서버(IIS)가 내보내고(CLIENT_DIST 를 정하면 여기서도), 사용자 브라우저가 이 API 를 직접 부른다.
+ *  - 화면과 API 의 주소가 달라 브라우저가 막지 않게 CORS 로 Web 서버 주소(config.corsOrigins)만 허용한다
+ *  - 로그인 세션은 쿠키 대신 헤더(X-Sayeon-Session)로 주고받는다 — 다른 주소의 쿠키(제3자 쿠키)는 브라우저·회사 정책이 막을 수 있다
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,6 +16,9 @@ import { clientIpOf } from './clientIp.js';
 import { apiRouter } from '../routes/index.js';
 
 const MemoryStore = createMemoryStore(session);
+const SESSION_COOKIE = 'sayeon.sid';
+/** 로그인 세션 헤더 — 서버가 응답에 실어 주면 화면이 보관했다가 다음 요청마다 그대로 보낸다 (client/src/api/http.js) */
+export const SESSION_HEADER = 'X-Sayeon-Session';
 
 /**
  * @param {object} deps
@@ -49,6 +54,34 @@ export async function createApp({ config, store, directory, admin }) {
     next();
   });
 
+  // CORS — 허용한 화면 주소(Origin)에서 온 호출에만 응답 헤더를 붙인다. 사전 확인(OPTIONS)은 여기서 끝낸다
+  const origins = new Set(config.corsOrigins);
+  const refused = new Set();
+  app.use((req, res, next) => {
+    const origin = req.get('Origin');
+    const preflight = req.method === 'OPTIONS' && Boolean(req.get('Access-Control-Request-Method'));
+    if (!origin || !origins.has(origin)) {
+      if (!preflight) return next(); // 같은 주소(화면을 이 서버가 낼 때 · 개발 미리보기 프록시)거나 브라우저가 아닌 호출
+      if (refused.size < 20 && !refused.has(origin)) {
+        refused.add(origin);
+        console.warn(`[sayeon] 허용하지 않은 화면 주소 ${origin} 에서 호출했어요 — 맞는 주소면 servers.config.mjs 의 web(host · dnsName · port) 또는 .env 의 CORS_ORIGINS 에 넣어 주세요 (지금: ${[...origins].join(', ') || '없음'})`);
+      }
+      return res.status(403).end();
+    }
+    res.vary('Origin');
+    res.set('Access-Control-Allow-Origin', origin);
+    res.set('Access-Control-Expose-Headers', SESSION_HEADER);
+    if (!preflight) return next();
+    res.set({
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE',
+      'Access-Control-Allow-Headers': `Content-Type, X-Requested-With, ${SESSION_HEADER}`,
+      'Access-Control-Max-Age': '600',
+    });
+    // 공인 대역 주소의 화면이 사설 대역 API 를 부를 때 브라우저가 묻는다 (Private Network Access)
+    if (req.get('Access-Control-Request-Private-Network') === 'true') res.set('Access-Control-Allow-Private-Network', 'true');
+    return res.status(204).end();
+  });
+
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -66,8 +99,8 @@ export async function createApp({ config, store, directory, admin }) {
           formAction: ["'self'"],
         },
       },
-      // http(IP 주소)로 운영하면 https 강제 헤더를 보내지 않는다
-      strictTransportSecurity: config.session.cookieSecure,
+      // https 강제(HSTS)는 이 주소 전체(끼워 넣은 앱 포함)에 걸리므로 IIS 가 정한다
+      strictTransportSecurity: false,
       crossOriginEmbedderPolicy: false,
     }),
   );
@@ -93,22 +126,40 @@ export async function createApp({ config, store, directory, admin }) {
     };
     next();
   });
-  app.use(
-    session({
-      name: 'sayeon.sid',
-      secret: config.session.secret,
-      resave: false,
-      saveUninitialized: false,
-      rolling: true,
-      store: new MemoryStore({ checkPeriod: 15 * 60 * 1000, ttl: config.session.idleHours * 3600 * 1000 }),
-      cookie: {
-        httpOnly: true,
-        sameSite: 'strict',
-        secure: config.session.cookieSecure,
-        maxAge: config.session.idleHours * 3600 * 1000,
-      },
-    }),
-  );
+  // 로그인 세션 — express-session 은 쿠키로만 주고받으므로, 앞에서 요청 헤더를 쿠키처럼 넣어 주고
+  // 내보낼 쿠키(Set-Cookie: sayeon.sid=…)는 응답 헤더 X-Sayeon-Session 으로 바꿔 보낸다 (브라우저에 쿠키를 남기지 않는다)
+  const sessionMiddleware = session({
+    name: SESSION_COOKIE,
+    secret: config.session.secret,
+    resave: false,
+    saveUninitialized: false,
+    rolling: true,
+    store: new MemoryStore({ checkPeriod: 15 * 60 * 1000, ttl: config.session.idleHours * 3600 * 1000 }),
+    cookie: { httpOnly: true, sameSite: 'strict', maxAge: config.session.idleHours * 3600 * 1000 },
+  });
+  app.use((req, res, next) => {
+    const { setHeader } = res;
+    res.setHeader = function (name, value) {
+      if (String(name).toLowerCase() !== 'set-cookie') return setHeader.call(this, name, value);
+      const rest = [];
+      for (const c of [].concat(value)) {
+        if (String(c).startsWith(`${SESSION_COOKIE}=`)) setHeader.call(this, SESSION_HEADER, decodeURIComponent(String(c).slice(SESSION_COOKIE.length + 1).split(';')[0]));
+        else rest.push(c); // 그 앱(끼워 넣은 곳)의 쿠키는 그대로
+      }
+      if (rest.length) return setHeader.call(this, name, rest);
+      this.removeHeader(name);
+      return this;
+    };
+    const cookie = req.headers.cookie;
+    const token = String(req.get(SESSION_HEADER) ?? '');
+    if (token && token.length <= 200) req.headers.cookie = `${SESSION_COOKIE}=${encodeURIComponent(token)}`;
+    else delete req.headers.cookie;
+    sessionMiddleware(req, res, (err) => {
+      if (cookie === undefined) delete req.headers.cookie;
+      else req.headers.cookie = cookie;
+      next(err);
+    });
+  });
 
   // 화면 설정 — servers.config.mjs 값으로 만들어 내려준다 (캐시 금지, CLIENT_DIST 로 화면을 직접 낼 때만)
   app.get('/sayeon.config.js', (req, res) => {
