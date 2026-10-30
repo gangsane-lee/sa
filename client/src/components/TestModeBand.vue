@@ -3,13 +3,18 @@
  * 개발 화면 표시 — 모든 화면 맨 위에 띄운다
  *  npm run dev:mock : 가짜 데이터 (실제 정보 입력 금지)
  *  npm run dev      : 운영 API 서버 · 운영 DB (테스트 사번으로 만든 데이터는 '테스트' 표시)
+ *  npm run dev:sso  : 운영 API 서버 · 사내 인사정보 2단계 로그인 (디버깅)
  */
-import { isDevApi } from '@/config';
+import { isDevApi, isSsoDebug } from '@/config';
 </script>
 
 <template>
   <div class="tband" role="note">
-    <template v-if="isDevApi">
+    <template v-if="isSsoDebug">
+      <b>개발 모드 · 인사 확인 디버깅</b>
+      <span>운영처럼 사내 인사정보 2단계로 들어가요. 단계별 기록은 F12 → Console 의 [인사 확인] 묶음에서 볼 수 있어요.</span>
+    </template>
+    <template v-else-if="isDevApi">
       <b>개발 모드 · 운영 데이터</b>
       <span>운영 API 서버와 운영 DB 를 써요. 테스트 사번으로 만든 신청·하트·쪽지는 '테스트'로 표시되고 일반 사용자에게는 보이지 않아요.</span>
     </template>

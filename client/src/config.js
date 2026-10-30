@@ -7,7 +7,7 @@
  *  npm run build    → 운영 모드: 실제 API. 화면을 열 때 사내 인사정보 URL 로 임직원인지 확인한다
  *                     (가짜 데이터·테스트 사번 코드는 빌드에 들어가지 않는다)
  */
-/* global __SASYSTEM_MOCK__, __SASYSTEM_DEV_API__ — vite.config.js 가 넣는 상수 (빌드에서는 둘 다 false) */
+/* global __SASYSTEM_MOCK__, __SASYSTEM_DEV_API__, __SASYSTEM_SSO_DEBUG__ — vite.config.js 가 넣는 상수 (빌드에서는 모두 false) */
 const runtime = (typeof window !== 'undefined' && window.SASYSTEM_CONFIG) || {};
 
 /** 가짜 데이터 모드 (npm run dev:mock) */
@@ -16,9 +16,11 @@ export const isMock = __SASYSTEM_MOCK__;
 export const isDevApi = __SASYSTEM_DEV_API__;
 /** 개발 화면(둘 중 하나) — 맨 위 '개발 모드' 띠를 보여준다 */
 export const isTestMode = isMock || isDevApi;
+/** 인사 확인 디버깅 모드 (npm run dev:sso) — 운영처럼 인사정보 2단계로 들어가고, 단계마다 콘솔에 기록을 남긴다 */
+export const isSsoDebug = __SASYSTEM_SSO_DEBUG__;
 export const SERVICE_MODE = isTestMode ? 'test' : 'open';
 /** 운영 화면에서 개발자 도구 단축키·오른쪽 클릭 막기 (servers.config.mjs 의 security.blockDevtools → sasystem.config.js) */
-export const BLOCK_DEVTOOLS = !isTestMode && runtime.security?.blockDevtools !== false;
+export const BLOCK_DEVTOOLS = !import.meta.env.DEV && runtime.security?.blockDevtools !== false;
 
 /**
  * API 서버 주소 — 화면은 Web 서버에서 열리고, 브라우저가 API 서버를 직접 부른다.

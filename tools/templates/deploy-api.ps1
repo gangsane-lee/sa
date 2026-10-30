@@ -86,13 +86,13 @@ if (-not (Test-Path "IIS:\AppPools\$Pool")) {
   New-WebAppPool -Name $Pool | Out-Null
   Good "앱 풀 $Pool 만듦"
 }
-# 데이터를 메모리에 두는 구조 — 서버 프로세스는 반드시 1개, 겹친 재활용·유휴 종료 끔
+# 데이터를 메모리에 두는 구조 — 서버 프로세스는 반드시 1개, 겹치는 재생 사용 안 함·유휴 종료 끔
 Set-ItemProperty "IIS:\AppPools\$Pool" -Name managedRuntimeVersion -Value ''
 Set-ItemProperty "IIS:\AppPools\$Pool" -Name processModel.idleTimeout -Value ([TimeSpan]::Zero)
 Set-ItemProperty "IIS:\AppPools\$Pool" -Name recycling.disallowOverlappingRotation -Value $true
 Set-ItemProperty "IIS:\AppPools\$Pool" -Name recycling.periodicRestart.time -Value ([TimeSpan]::Zero)
 Set-ItemProperty "IIS:\AppPools\$Pool" -Name processModel.maxProcesses -Value 1
-Good "앱 풀 $Pool — 관리 코드 없음 · 유휴 종료 끔 · 겹친 재활용 끔 · 프로세스 1개"
+Good "앱 풀 $Pool — 관리 코드 없음 · 유휴 종료 끔 · 겹치는 재생 사용 안 함 · 프로세스 1개"
 $site = Get-Website -Name $Site -ErrorAction SilentlyContinue
 if (-not $site) {
   New-Website -Name $Site -Port $Port -PhysicalPath $Target -ApplicationPool $Pool -Ssl:$Https | Out-Null

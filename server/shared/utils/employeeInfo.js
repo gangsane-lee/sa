@@ -63,10 +63,34 @@ export function locateUser(json, resultPath = '') {
   return { user: null, path: '' };
 }
 
-/** 사용자 정보 객체 → Profile (+ _from: 각 항목을 어느 필드에서 읽었는지, 점검용) */
-export function mapProfile(raw) {
+/** 사번·재직 상태는 사번이 든 객체에서만 읽는다 — 나머지(이름·팀 등)는 그 객체에 없으면 응답 전체에서 찾는다 */
+const OWN_ONLY = new Set(['empNo', 'status']);
+
+/**
+ * 응답 JSON 전체에서 field 값을 찾는다 (이름이 사번 객체 밖·안쪽 객체에 따로 있을 때)
+ * 여러 사람이 든 목록(길이 2 이상 배열)은 다른 사람 값일 수 있어 보지 않는다
+ */
+function findField(json, field) {
+  const queue = [json];
+  for (let i = 0; i < queue.length && i < 200; i++) {
+    const node = queue[i];
+    if (!node || typeof node !== 'object' || (Array.isArray(node) && node.length > 1)) continue;
+    const hit = Array.isArray(node) ? null : pick(node, field);
+    if (hit) return hit;
+    for (const v of Object.values(node)) if (v && typeof v === 'object') queue.push(v);
+  }
+  return null;
+}
+
+/**
+ * 사용자 정보 객체 → Profile (+ _from: 각 항목을 어느 필드에서 읽었는지, 점검용)
+ * @param {object} raw 사번이 든 객체
+ * @param {any[]} [extras] raw 에 없는 항목(이름·팀 등)을 더 찾아 볼 응답들 — 앞의 것이 우선
+ */
+export function mapProfile(raw, extras = []) {
   if (!raw || typeof raw !== 'object') return null;
-  const got = Object.fromEntries(Object.keys(FIELD).map((f) => [f, pick(raw, f)]));
+  const more = (f) => (OWN_ONLY.has(f) ? null : extras.reduce((hit, json) => hit ?? findField(json, f), null));
+  const got = Object.fromEntries(Object.keys(FIELD).map((f) => [f, pick(raw, f) ?? more(f)]));
   if (!got.empNo) return null;
   const g = (got.gender?.value ?? '').toUpperCase();
   const divName = got.division?.value ?? '';
@@ -83,8 +107,20 @@ export function mapProfile(raw) {
   };
 }
 
-/** 응답 JSON → { user, path, profile } — 한 번에 */
+/** 응답 JSON → { user, path, profile } — 한 번에 (이름·팀 등이 사번 객체 밖에 있으면 응답 전체에서 채운다) */
 export function readEmployee(json, resultPath = '') {
   const { user, path } = locateUser(json, resultPath);
-  return { user, path, profile: user ? mapProfile(user) : null };
+  return { user, path, profile: user ? mapProfile(user, [json]) : null };
+}
+
+/**
+ * 사번이 든 객체 + 읽은 Profile → API 서버로 넘길 사용자 정보
+ * 객체 밖에서 찾은 이름·팀 등을 표준 이름(name · team …)으로 붙여, 서버가 같은 규칙으로 읽어도 빠지지 않게 한다
+ */
+export function withProfile(user, profile) {
+  if (!user || !profile) return user;
+  const { _from = {}, active, ...p } = profile;
+  // 사번 객체 자체에서 읽은 항목은 서버도 그대로 읽는다 — 밖에서 찾은 항목만 붙인다
+  const found = Object.entries(p).filter(([k, v]) => v !== null && v !== '' && !(_from[k] && _from[k] in user));
+  return { ...user, ...Object.fromEntries(found) };
 }

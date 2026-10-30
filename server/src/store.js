@@ -6,7 +6,7 @@
  *  - 행 하나 = 신청서 하나 · 매칭 하나 · 쪽지 하나 … 전체 원본은 DATA_JSON, 앞쪽 열은 SSMS 에서 보기 좋게 꺼낸 값
  *  - 화면 개발 모드(mock)와 같은 업무 코드를 그대로 쓴다
  *  - 상태를 메모리에 두므로 이 DB 를 쓰는 서버 프로세스는 반드시 1개
- *    (iisnode nodeProcessCountPerApplication="1" · 앱 풀 겹친 재활용 끔 · 같은 DB 로 다른 서버를 띄우지 않는다)
+ *    (iisnode nodeProcessCountPerApplication="1" · 앱 풀 겹치는 재생 사용 안 함 · 같은 DB 로 다른 서버를 띄우지 않는다)
  *  - 이름·메일 등은 DATA_KEY 로 암호화해 저장한다
  *  - 예전 문서 표(SA_DOC 한 개)에 데이터가 있고 새 표가 비어 있으면, 처음 시작할 때 새 표로 옮긴다 (SA_DOC 은 백업으로 남긴다)
  */

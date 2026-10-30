@@ -6,7 +6,8 @@ import { reactive } from 'vue';
 import { api } from '@/api';
 import { ADMIN_IDLE_MS } from '@shared/constants/policy';
 import { isTestMode, isDevApi } from '@/config';
-import { fetchEmployee, clearEmployee } from '@/auth/employee';
+import { fetchEmployee, clearEmployee, trace } from '@/auth/employee';
+import { setEmployee, mergeEmployee, clearEmployeeInfo, withEmployee } from '@/stores/employee';
 
 export const session = reactive({
   user: null,
@@ -18,6 +19,17 @@ export const session = reactive({
     return this.adminExpiresAt > Date.now();
   },
 });
+
+/**
+ * 로그인 사용자 넣기 — session.user 는 모두 여기로 바꾼다
+ * 인사정보(stores/employee.js)와 같은 사람으로 맞추고, 서버 user 의 빈 항목(이름·팀 등)은 인사정보로 채운다
+ */
+function setUser(user, adminExpiresAt = 0) {
+  if (user) mergeEmployee(user);
+  else clearEmployeeInfo();
+  session.user = withEmployee(user ?? null);
+  session.adminExpiresAt = adminExpiresAt ?? 0;
+}
 
 /** 주소창의 값 — SSO 로그인 페이지에서 돌아올 때 붙은 ticket 등을 서버에 넘긴다 */
 const pageQuery = () => {
@@ -37,27 +49,28 @@ const pageQuery = () => {
 export async function employeeLogin({ reuse = false } = {}) {
   const r = await fetchEmployee();
   if (!r.ok) {
-    session.user = null;
+    setUser(null);
     session.ssoError = { code: r.code, message: r.message };
     return false;
   }
+  setEmployee(r.profile, r.user); // 사내 인사정보 → 화면 어디서든 import { employee } 로 쓴다
   if (reuse) {
     const me = await api.auth.me().catch(() => null);
     if (me?.user && me.user.empNo === r.profile.empNo) {
-      session.user = me.user;
-      session.adminExpiresAt = me.adminExpiresAt ?? 0;
+      setUser(me.user, me.adminExpiresAt);
       session.ssoError = null;
       return true;
     }
   }
   try {
     const s = await api.auth.sso({ employee: r.user, query: pageQuery() });
-    session.user = s.user;
-    session.adminExpiresAt = 0;
+    trace('3단계 사緣 API /auth/sso ✔ 로그인', s.user);
+    setUser(s.user);
     session.ssoError = null;
     return true;
   } catch (e) {
-    session.user = null;
+    setUser(null);
+    trace(`3단계 사緣 API /auth/sso ✖ ${e.status} ${e.code ?? ''}`, e.message, 'API 서버 iisnode 로그의 [sso] 줄도 확인하세요');
     // 코드 없는 404·5xx 는 API 서버가 꺼졌거나 Web 서버가 /api 를 넘기지 못한 것 — '임직원 아님'과 구분한다
     const down = e.status === 0 || e.status === 404 || e.status >= 500;
     session.ssoError = { code: e.code ?? (down ? 'NETWORK' : 'SSO_FAILED'), message: e.message };
@@ -87,8 +100,7 @@ async function devLogin() {
 /** 개발 모드(npm run dev): 테스트 사번으로 로그인 — 운영 API 가 개발 PC · 개발 키를 확인한다 */
 export async function devLoginAs(empNo) {
   const r = await api.auth.devLogin(empNo);
-  session.user = r.user;
-  session.adminExpiresAt = 0;
+  setUser(r.user);
   session.restored = true;
 }
 
@@ -99,8 +111,7 @@ export async function restoreSession() {
     if (isTestMode) {
       try {
         const r = await api.auth.me();
-        session.user = r.user;
-        session.adminExpiresAt = r.adminExpiresAt ?? 0;
+        setUser(r.user, r.adminExpiresAt);
       } catch {
         await devLogin().catch(() => null);
       }
@@ -120,8 +131,7 @@ export async function restoreSession() {
 export async function refreshUser() {
   try {
     const r = await api.auth.me();
-    session.user = r.user;
-    session.adminExpiresAt = r.adminExpiresAt ?? 0;
+    setUser(r.user, r.adminExpiresAt);
   } catch {
     /* 세션이 끝났으면 다음 화면 이동 때 로그인으로 보낸다 */
   }
@@ -130,8 +140,7 @@ export async function refreshUser() {
 /** 가짜 데이터 모드: 테스트 계정 로그인 (운영은 employeeLogin) */
 export async function login(account, password) {
   const r = await api.auth.login(account, password);
-  session.user = r.user;
-  session.adminExpiresAt = 0;
+  setUser(r.user);
   session.restored = true;
 }
 
@@ -139,8 +148,7 @@ export async function logout() {
   try {
     await api.auth.logout();
   } finally {
-    session.user = null;
-    session.adminExpiresAt = 0;
+    setUser(null);
     // 운영: 저장한 인사정보를 지우고, 바로 다시 들어가지 않고 안내 화면에서 '다시 들어가기'를 누르게 한다
     // 개발: 테스트 계정 고르기 화면으로 (다른 계정으로 시험)
     if (!isTestMode) clearEmployee();

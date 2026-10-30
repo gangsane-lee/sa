@@ -16,7 +16,7 @@ export function buildApiWebConfig(T) {
 <!--
   사緣 API 서버 (IIS + iisnode) — 환경 ${T.envName}
   · 이 폴더를 IIS 사이트(포트 ${T.api.port})의 실제 경로로 지정한다. 폴더째 복사하면 된다.
-  · 앱 풀: .NET CLR 버전 "관리 코드 없음", 유휴 시간 0, 겹친 재활용 끔 (서버 프로세스는 반드시 1개)
+  · 앱 풀: .NET CLR 버전 "관리 코드 없음", 유휴 시간 0, 겹치는 재생 사용 안 함 (서버 프로세스는 반드시 1개)
   · appSettings 를 고치면 iisnode 가 서버를 다시 띄운다. 비밀번호·키는 같은 폴더의 .env
   · 처음 만든 값: servers.config.mjs(${T.envName}) — npm run webconfig -- --env ${T.envName}
 -->

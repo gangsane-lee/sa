@@ -45,6 +45,7 @@
 |---|---|---|
 | `npm run dev` | **개발 모드 · 운영 데이터** | vite 프록시로 **운영 API 서버(같은 DB)** 를 부른다. 로그인 없이 `servers.config.mjs` 의 **테스트 사번**(`devLogin`)으로 바로 홈, 로그아웃하면 다른 테스트 사번을 고른다. 화면 위 '개발 모드 · 운영 데이터' 띠 |
 | `npm run dev:mock` | **가짜 데이터 모드** | 서버 없이 브라우저 안의 가짜 데이터. 만능 테스트 계정으로 바로 홈 |
+| `npm run dev:sso` | **인사 확인 디버깅** | 운영 API 를 부르고, 운영처럼 **인사정보 2단계**로 들어간다. 원본 코드에 중단점을 걸 수 있고, 단계마다 F12 → Console 에 `[인사 확인]` 기록. 인사 서버가 개발 화면 주소에 CORS 를 안 열었으면 `client.env.sso.local` 에 `SASYSTEM_HR_PROXY=true` (vite 가 대신 부름 — 인사 서버 도메인 SSO 쿠키는 안 감) |
 | `npm run build` | **운영 모드** | 화면을 열 때 인사정보 2단계 확인. 가짜 데이터·테스트 사번 코드는 빌드에 들어가지 않는다(들어가면 빌드가 멈춘다) |
 
 **테스트 사번 로그인 (npm run dev)** — 운영 API 가 아래 셋이 모두 맞을 때만 받는다. 아니면 없는 API 처럼 404
@@ -203,7 +204,7 @@ C:\sites\sasystem-api-dev\      ← 'sasystem-api-dev' (포트 8293, 개발) —
    ```powershell
    powershell -ExecutionPolicy Bypass -File C:\deploy\<빌드번호>-production\api\_deploy\deploy-api.ps1
    ```
-   앱 풀 `sasystem-api`(관리 코드 없음 · 유휴 종료 끔 · 겹친 재활용 끔 · 프로세스 1개)과 사이트 `sasystem-api`(포트 8292, 폴더 `C:\sites\sasystem-api`), 방화벽(→ 8292 인바운드 — 사용자 PC 브라우저가 직접 부른다)을 만들고 파일을 놓은 뒤, **`.env`·관리자 파일을 만들라는 안내와 함께 멈춘다**
+   앱 풀 `sasystem-api`(관리 코드 없음 · 유휴 종료 끔 · 겹치는 재생 사용 안 함 · 프로세스 1개)과 사이트 `sasystem-api`(포트 8292, 폴더 `C:\sites\sasystem-api`), 방화벽(→ 8292 인바운드 — 사용자 PC 브라우저가 직접 부른다)을 만들고 파일을 놓은 뒤, **`.env`·관리자 파일을 만들라는 안내와 함께 멈춘다**
 4. [ ] `C:\sites\sasystem-api\web.config` 의 `<appSettings>` 확인 — 패키지가 기준정보로 채워 둔다
 
    | 키 | 운영 | 개발 사이트 |

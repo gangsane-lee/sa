@@ -9,10 +9,25 @@
  *
  * 두 서버가 다른 주소라면 그 서버들이 이 화면 주소에 CORS 를 열어 줘야 브라우저가 응답을 읽을 수 있다.
  */
+/* global __SASYSTEM_SSO_DEBUG__ */
 import { EMPLOYEE_API as E, EMPLOYEE_CHECK as C, EMPLOYEE_STORAGE_KEY } from '@/config';
-import { readEmployee } from '@shared/utils/employeeInfo';
+import { readEmployee, mapProfile, withProfile } from '@shared/utils/employeeInfo';
 
-const fail = (code, message) => ({ ok: false, code, message, user: null, profile: null });
+/**
+ * 단계 기록 — npm run dev:sso 에서만 F12 → Console 에 '[인사 확인] …' 묶음으로 남긴다
+ * (운영 빌드에서는 상수 false 라 코드째 빠진다)
+ */
+export function trace(step, ...data) {
+  if (!__SASYSTEM_SSO_DEBUG__) return;
+  console.groupCollapsed(`%c[인사 확인] ${step}`, 'color:#1428a0;font-weight:700');
+  for (const d of data) console.log(d);
+  console.groupEnd();
+}
+
+const fail = (code, message) => {
+  trace(`✖ 실패 ${code}`, message);
+  return { ok: false, code, message, user: null, profile: null };
+};
 
 const lsGet = (k) => {
   try {
@@ -75,16 +90,19 @@ export function clearEmployee() {
  * URL 하나 호출 → { status, text, json } (연결 실패면 null)
  * @param {{ url, method, headers, body, withCredentials, timeoutMs }} cfg
  */
-async function callJson(cfg, user = null) {
+async function callJson(cfg, user = null, step = '') {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), cfg.timeoutMs);
+  const post = cfg.method === 'POST';
+  const url = fillText(cfg.url, true, user);
+  const body = post ? JSON.stringify(fillDeep(cfg.body ?? {}, user)) : undefined;
+  trace(`${step} 요청 ${cfg.method} ${url}`, { url, method: cfg.method, body: body ? JSON.parse(body) : null, withCredentials: cfg.withCredentials, timeoutMs: cfg.timeoutMs });
   try {
-    const post = cfg.method === 'POST';
-    const res = await fetch(fillText(cfg.url, true, user), {
+    const res = await fetch(url, {
       method: cfg.method,
       credentials: cfg.withCredentials ? 'include' : 'same-origin',
       headers: { Accept: 'application/json', ...(post && { 'Content-Type': 'application/json' }), ...cfg.headers },
-      body: post ? JSON.stringify(fillDeep(cfg.body ?? {}, user)) : undefined,
+      body,
       signal: ctrl.signal,
     });
     const text = await res.text().catch(() => '');
@@ -94,8 +112,10 @@ async function callJson(cfg, user = null) {
     } catch {
       json = undefined;
     }
+    trace(`${step} 응답 ${res.status}`, json ?? text.slice(0, 1000));
     return { status: res.status, ok: res.ok, text, json };
-  } catch {
+  } catch (e) {
+    trace(`${step} 호출 실패 (연결 · CORS · CSP · 인증서 · 시간 초과)`, e, '바로 위 빨간 오류 문구를 확인하세요');
     return null;
   } finally {
     clearTimeout(timer);
@@ -106,7 +126,8 @@ export async function fetchEmployee() {
   if (!E.url) return fail('SSO_NOT_CONFIGURED', '사내 인사정보 주소가 아직 정해지지 않았어요.');
 
   // 1) 사내 인사 데이터
-  const r1 = await callJson(E);
+  trace('0 설정', { 인사데이터: E, 임직원확인: C.url ? C : '(없음 — 1단계만으로 확인)' });
+  const r1 = await callJson(E, null, '1단계 인사 데이터');
   if (!r1) return fail('SSO_UNAVAILABLE', '사내 인사정보 서버에 연결하지 못했어요.');
   if (r1.status >= 500) return fail('SSO_UNAVAILABLE', `사내 인사정보 서버 오류 (${r1.status})`);
   if (!r1.ok) return fail('SSO_FAILED', `사내 인사정보에서 확인되지 않았어요 (${r1.status})`);
@@ -114,12 +135,17 @@ export async function fetchEmployee() {
   lsSet(EMPLOYEE_STORAGE_KEY, r1.text);
 
   const first = readEmployee(r1.json, E.resultPath);
+  trace('1단계 해석 — 사번이 든 객체 · 읽은 값', { 찾은위치: first.path || '(맨 바깥)', 사용자정보: first.user, 읽은값: first.profile });
   if (!first.profile) return fail('SSO_FAILED', '사내 인사정보에서 사번을 찾지 못했어요.');
   if (!first.profile.active) return { ...fail('NOT_ACTIVE_EMPLOYEE', '재직 중으로 확인되지 않았어요.'), profile: first.profile };
-  if (!C.url) return { ok: true, code: null, message: '', user: first.user, profile: first.profile };
+  if (!C.url) {
+    const user = withProfile(first.user, first.profile);
+    trace('✔ 인사 확인 통과 (2단계 없음) — API 서버로 넘길 정보', user);
+    return { ok: true, code: null, message: '', user, profile: first.profile };
+  }
 
   // 2) 임직원 확인 — 1)의 sabun · user_name 으로 POST
-  const r2 = await callJson(C, first.user);
+  const r2 = await callJson(C, first.user, '2단계 임직원 확인');
   if (!r2) return fail('SSO_UNAVAILABLE', '임직원 확인 서버에 연결하지 못했어요.');
   if (r2.status >= 500) return fail('SSO_UNAVAILABLE', `임직원 확인 서버 오류 (${r2.status})`);
   if (!r2.ok || r2.json === undefined) return fail('NOT_EMPLOYEE', `임직원으로 확인되지 않았어요${r2.ok ? '' : ` (${r2.status})`}`);
@@ -129,11 +155,17 @@ export async function fetchEmployee() {
   let ok;
   if (C.okPath) ok = C.okValues.includes(String(valueAt(r2.json, C.okPath) ?? '').toLowerCase());
   else ok = Boolean(second.profile && second.profile.empNo === first.profile.empNo && second.profile.active);
+  trace('2단계 판단', C.okPath
+    ? { okPath: C.okPath, 응답값: valueAt(r2.json, C.okPath), okValues: C.okValues, 임직원: ok }
+    : { 기준: '같은 사번 · 재직 상태', 응답사용자: second.profile, 임직원: ok });
   if (!ok) return { ...fail('NOT_EMPLOYEE', '임직원으로 확인되지 않았어요.'), profile: first.profile };
 
-  // 2)에 같은 사람 정보(성별·사업부 등)가 더 있으면 합친다
+  // 2)에 같은 사람 정보(이름·성별·사업부 등)가 더 있으면 합친다
+  //  같은 사번 객체면 통째로, 사번 없이 정보만 회신하면 빈 항목을 2) → 1) 응답 순으로 찾아 채운다
   const sameUser = second.profile && second.profile.empNo === first.profile.empNo;
-  const user = sameUser ? { ...first.user, ...second.user } : first.user;
-  const { profile } = readEmployee(user, '');
-  return { ok: true, code: null, message: '', user, profile: profile ?? first.profile };
+  const merged = sameUser ? { ...first.user, ...second.user } : first.user;
+  const profile = mapProfile(merged, [r2.json, r1.json]) ?? first.profile;
+  const user = withProfile(merged, profile);
+  trace('✔ 인사 확인 통과 — 읽은 값 · API 서버로 넘길 정보', { 읽은값: profile, 넘길정보: user });
+  return { ok: true, code: null, message: '', user, profile };
 }

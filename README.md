@@ -51,6 +51,7 @@ npm run sso:test -- --user 회사아이디   # AD 조회 → 사내 인사 API �
 | DB 계정·비밀번호, 세션·암호화 키, 인사 API 키 | API 서버 **`server/.env`** (설명: `server/.env.example`) |
 | 관리자 계정(사번·사내 계정 ID)과 관리자 비밀번호 | API 서버 **`server/config/admins.js`** (예시: `admins.example.js`) — 고치면 3초 안에 반영 |
 | 인사정보 응답 필드 이름, 사업부 이름 → 코드, 재직 아님 값 | `server/shared/utils/employeeInfo.js` 의 `FIELD`·`DIVISION_MAP`·`INACTIVE` (화면·서버 같이 씀) |
+| 화면에서 로그인한 사람의 인사정보 쓰기 | `import { employee } from '@/stores/employee'` → `employee.name` · `employee.team` … (`client/src/stores/employee.js` — `session.user` 의 빈 항목도 같은 값으로 채워진다) |
 | DB 준비 (DB 담당자가 직접 할 때) | `server/sql/setup.sql` |
 | 사업부·캠퍼스 등 기준정보·설정 | 관리자 화면 '기준정보' — 한 건씩 또는 **엑셀로 일괄 변경** (기본값: `server/shared/constants/defaultCodes.js`) |
 | API 서버 환경·포트·DB 서버 | API 서버 사이트 폴더의 `web.config` (`npm run webconfig` 로 다시 만들기) |
@@ -74,6 +75,7 @@ cd client
 npm ci
 npm run dev        # 운영 API · 운영 데이터 · 테스트 사번 (client/.env.development.local 에 SASYSTEM_DEV_KEY 필요 — .env.development.local.example)
 npm run dev:mock   # 서버 없이 가짜 데이터
+npm run dev:sso    # 운영 API · 인사정보 2단계 로그인 디버깅 (F12 Console 의 [인사 확인] 기록 · 중단점)
 ```
 
 `npm run dev:mock` 은 `http://localhost:5173` — 서버 없이 브라우저 안의 가짜 DB로 모든 기능이 동작하고, **만능 계정으로 바로 홈**이 열린다(맨 위 '개발 모드' 띠). 다른 계정은 로그아웃 → 계정 고르기.
