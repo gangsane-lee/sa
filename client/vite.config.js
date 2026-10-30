@@ -47,7 +47,12 @@ export default defineConfig(({ command, mode }) => {
   // dev:sso — 화면 설정(sasystem.config.js)을 servers.config.mjs 로 만들어 내려준다 (API 는 같은 주소의 /api → 아래 프록시)
   // SASYSTEM_HR_PROXY=true 면 인사 URL 두 개도 /__hr1 · /__hr2 로 바꿔 이 PC 의 vite 가 대신 부른다
   //  (인사 서버가 개발 화면 주소에 CORS 를 열어 주지 않았을 때 — 단, 인사 서버 도메인의 SSO 쿠키는 함께 가지 않는다)
-  const hrProxy = ssoDebug && /^(1|true|yes|y|on)$/i.test(String(env.SASYSTEM_HR_PROXY ?? ''));
+  const isOn = (v) => /^(1|true|yes|y|on)$/i.test(String(v ?? ''));
+  const hrProxy = ssoDebug && isOn(env.SASYSTEM_HR_PROXY);
+  // SASYSTEM_API_DIRECT=true 면 운영처럼 브라우저가 API 서버를 직접 부른다 (기본은 같은 주소의 /api → 이 PC 의 vite 프록시)
+  //  API 서버 .env 의 CORS_ORIGINS 에 개발 화면 주소(http://localhost:5173 · http://10.122.122.10:5173)가 있어야 한다
+  const apiDirect = ssoDebug && isOn(env.SASYSTEM_API_DIRECT);
+  const apiTarget = env.DEV_API_PROXY || T.apiUrl;
   const hrOf = (cfg, n) => {
     if (!cfg?.url) return undefined;
     if (!hrProxy) return cfg;
@@ -67,7 +72,7 @@ export default defineConfig(({ command, mode }) => {
       if (!ssoDebug) return;
       server.middlewares.use('/sasystem.config.js', (req, res) => {
         const runtime = {
-          apiBase: '',
+          apiBase: apiDirect ? apiTarget : '',
           adminPath: T.adminPath,
           employeeApi: hrOf(T.sso.employeeApi, 1),
           ...(T.sso.employeeCheck?.url && { employeeCheck: hrOf(T.sso.employeeCheck, 2) }),
@@ -80,7 +85,7 @@ export default defineConfig(({ command, mode }) => {
     },
   };
   if (ssoDebug) {
-    console.log(`\n  [dev:sso] 인사 확인 디버깅 · API ${env.DEV_API_PROXY || T.apiUrl} · 1단계 ${T.sso.employeeApi?.url || '(비어 있음)'} · 2단계 ${T.sso.employeeCheck?.url || '(없음)'}${hrProxy ? ' · 인사 URL 은 vite 가 대신 부름(SASYSTEM_HR_PROXY)' : ''}\n`);
+    console.log(`\n  [dev:sso] 인사 확인 디버깅 · API ${apiTarget} ${apiDirect ? '(브라우저가 직접 부름 — SASYSTEM_API_DIRECT)' : '(브라우저는 localhost/api → vite 가 넘김)'} · 1단계 ${T.sso.employeeApi?.url || '(비어 있음)'} · 2단계 ${T.sso.employeeCheck?.url || '(없음)'}${hrProxy ? ' · 인사 URL 은 vite 가 대신 부름(SASYSTEM_HR_PROXY)' : ''}\n`);
   }
 
   return {
@@ -108,7 +113,7 @@ export default defineConfig(({ command, mode }) => {
       proxy: {
         // API 서버가 사내 인증 기관 인증서(https)라 Node 가 모르므로 이 PC 의 프록시만 확인을 끈다
         '/api': {
-          target: env.DEV_API_PROXY || T.apiUrl,
+          target: apiTarget,
           changeOrigin: true,
           secure: false,
           headers: devKey && devApi ? { [DEV_KEY_HEADER]: devKey } : {},

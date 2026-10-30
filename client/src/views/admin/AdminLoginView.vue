@@ -137,7 +137,7 @@ async function fillTest() {
         <form v-else-if="step === 'admin'" class="card__form" novalidate @submit.prevent="submitAdmin">
           <h1 class="card__title">관리자 모드</h1>
           <p class="card__sub">
-            <b>{{ session.user.name }}</b>님({{ session.user.adId || session.user.empNo }}) · 관리자 비밀번호를 입력하면 관리 화면으로 들어가요.
+            <b>{{ session.user.user_name }}</b>님({{ session.user.adId || session.user.sabun }}) · 관리자 비밀번호를 입력하면 관리 화면으로 들어가요.
           </p>
           <label class="field" for="al-admin">관리자 비밀번호</label>
           <DxTextBox v-model:value="adminPassword" mode="password" :input-attr="{ id: 'al-admin', autocomplete: 'off' }" @enter-key="submitAdmin" />
@@ -150,7 +150,7 @@ async function fillTest() {
         <div v-else class="card__form">
           <h1 class="card__title">관리자 계정이 아니에요</h1>
           <p class="card__sub">
-            <b>{{ session.user.name }}</b>님 계정은 관리자로 등록되어 있지 않아요. 관리자 등록은 매칭 담당자에게 문의해 주세요.
+            <b>{{ session.user.user_name }}</b>님 계정은 관리자로 등록되어 있지 않아요. 관리자 등록은 매칭 담당자에게 문의해 주세요.
           </p>
           <DxButton v-if="isTestMode" text="다른 계정으로 로그인" type="default" width="100%" class="card__submit" :disabled="busy" @click="switchAccount" />
           <RouterLink :to="{ name: 'home' }" class="card__link">사용자 화면으로 가기</RouterLink>

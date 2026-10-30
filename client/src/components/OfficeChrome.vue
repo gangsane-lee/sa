@@ -45,7 +45,7 @@ const formula = computed(() => (isAdmin.value ? '=COUNTIFS(명단!F:F,"검토",�
           <i class="dx-icon-save" /><i class="dx-icon-undo" /><i class="dx-icon-redo" />
         </span>
         <span class="oc__doc">통합 문서1 - 저장됨</span>
-        <span class="oc__user">{{ session.user?.name ?? '' }}</span>
+        <span class="oc__user">{{ session.user?.user_name ?? '' }}</span>
       </div>
       <nav class="oc__ribbon-tabs">
         <span>파일</span><span class="is-on">홈</span><span>삽입</span><span>페이지 레이아웃</span><span>수식</span><span>데이터</span><span>검토</span><span>보기</span>

@@ -122,8 +122,8 @@ async function resetMock() {
         </nav>
         <div class="side__foot">
           <p class="side__me">
-            {{ session.user?.name }} · {{ session.user?.team }}<br />
-            <span class="mono">{{ session.user?.empNo }}</span>
+            {{ session.user?.user_name }} · {{ session.user?.team }}<br />
+            <span class="mono">{{ session.user?.sabun }}</span>
           </p>
           <button v-if="isMock" type="button" class="side__reset" @click="resetMock">가짜 데이터 초기화</button>
         </div>

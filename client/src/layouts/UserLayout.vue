@@ -45,7 +45,7 @@ async function doLogout() {
         </div>
         <div class="top__actions">
           <span class="top__who">
-            <b>{{ user?.name }}</b>님
+            <b>{{ user?.user_name }}</b>님
             <span class="top__dept">{{ ct('DIVISION', user?.division) }}</span>
             <!-- 서버가 알려준 신청 상태로 구분: 신청 전 / 매칭 대기 중 / 매칭 중 / 커플 성사 -->
             <span class="top__status" :class="`is-${statusKey}`">{{ statusText }}</span>

@@ -46,7 +46,7 @@ if (maps.length || bundle.includes('sourceMappingURL')) fail('운영 빌드에 �
 const ssoMode = T.sso.mode ?? 'browser';
 const employeeApi = T.sso.employeeApi ?? {};
 if (ssoMode === 'browser' && !String(employeeApi.url ?? '').trim()) {
-  console.warn('  ⚠ servers.config.mjs 의 sso.employeeApi.url 이 비어 있어요 — 모든 사용자가 "임직원만 이용할 수 있어요" 화면으로 가요');
+  console.warn('  ⚠ servers.config.mjs 의 sso.employeeApi.url 이 비어 있어요 — router 가 localStorage 에 sabun · user_name 을 넣어 주지 않으면 "임직원만 이용할 수 있어요" 화면으로 가요');
 }
 const licKey = (() => {
   try {

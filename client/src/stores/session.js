@@ -7,7 +7,7 @@ import { api } from '@/api';
 import { ADMIN_IDLE_MS } from '@shared/constants/policy';
 import { isTestMode, isDevApi } from '@/config';
 import { fetchEmployee, clearEmployee, trace } from '@/auth/employee';
-import { setEmployee, mergeEmployee, clearEmployeeInfo, withEmployee } from '@/stores/employee';
+import { employee, setEmployee, mergeEmployee, clearEmployeeInfo, withEmployee } from '@/stores/employee';
 
 export const session = reactive({
   user: null,
@@ -22,7 +22,8 @@ export const session = reactive({
 
 /**
  * 로그인 사용자 넣기 — session.user 는 모두 여기로 바꾼다
- * 인사정보(stores/employee.js)와 같은 사람으로 맞추고, 서버 user 의 빈 항목(이름·팀 등)은 인사정보로 채운다
+ * 인사정보(stores/employee.js)와 같은 사람으로 맞추고, session.user.sabun · session.user.user_name 을 붙인다
+ * (서버 user 의 빈 항목(이름·팀 등)은 인사정보로 채운다)
  */
 function setUser(user, adminExpiresAt = 0) {
   if (user) mergeEmployee(user);
@@ -53,10 +54,11 @@ export async function employeeLogin({ reuse = false } = {}) {
     session.ssoError = { code: r.code, message: r.message };
     return false;
   }
-  setEmployee(r.profile, r.user); // 사내 인사정보 → 화면 어디서든 import { employee } 로 쓴다
+  setEmployee(r.profile, r.user); // 로그인 값(sabun · user_name) → 화면 어디서든 import { employee } 로 쓴다
   if (reuse) {
     const me = await api.auth.me().catch(() => null);
-    if (me?.user && me.user.empNo === r.profile.empNo) {
+    // 서버 세션이 같은 사번이면 그대로 쓴다 (API 서버는 사번을 empNo 로 돌려준다)
+    if (me?.user && me.user.empNo === employee.sabun) {
       setUser(me.user, me.adminExpiresAt);
       session.ssoError = null;
       return true;
@@ -98,8 +100,8 @@ async function devLogin() {
 }
 
 /** 개발 모드(npm run dev): 테스트 사번으로 로그인 — 운영 API 가 개발 PC · 개발 키를 확인한다 */
-export async function devLoginAs(empNo) {
-  const r = await api.auth.devLogin(empNo);
+export async function devLoginAs(sabun) {
+  const r = await api.auth.devLogin(sabun);
   setUser(r.user);
   session.restored = true;
 }

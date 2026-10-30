@@ -8,10 +8,10 @@ import { PREF_ITEMS } from '../constants/codes.js';
 
 const MULTI_PREF_KEYS = PREF_ITEMS.filter((p) => p.kind === 'multi').map((p) => p.key);
 
-/** 새 신청서. 사내 로그인으로 받은 인사 정보(이름·성별·사업부·팀)로 미리 채운다 */
+/** 새 신청서. 사내 로그인으로 받은 인사 정보(이름·성별·사업부·팀)로 미리 채운다 — 화면은 user_name, 서버는 name */
 export function emptyForm(user = {}) {
   return {
-    name: user.name ?? '',
+    name: user.user_name ?? user.name ?? '',
     nickname: '',
     gender: user.gender ?? null,
     serious: null,

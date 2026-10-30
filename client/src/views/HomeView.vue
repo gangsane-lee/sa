@@ -40,7 +40,7 @@ const ELS = Object.values(ELEMENTS);
           <div class="hero__copy">
             <p class="hero__eyebrow">
               <span class="hero__stamp">親展</span>
-              {{ session.user?.name }}님에게만 보이는 페이지예요
+              {{ session.user?.user_name }}님에게만 보이는 페이지예요
             </p>
             <h1 class="hero__title">매일 스치던 그 사람이<br />오늘의 인연이 될지도 몰라요</h1>
             <p class="hero__lead">
