@@ -30,6 +30,10 @@
                                             프로세스가 2개 이상이면 서로 덮어써 데이터가 사라진다
       promoteServerVars="REMOTE_ADDR,HTTPS" ★ 필요 — REMOTE_ADDR: 사용자 IP (열람 기록 · 횟수 제한 · 개발 PC 확인)
                                             HTTPS: http 로 온 호출 거절. 그 앱이 이미 다른 값을 쓰면 쉼표로 이어 붙인다
+    그 앱의 web.config <system.webServer> 안
+      <httpErrors existingResponse="PassThrough" />   ★ 필요 — 없으면 IIS 가 사緣의 오류 안내(JSON)를 IIS 오류 페이지로 바꿔
+                                            화면에 '요청을 처리하지 못했어요 (오류 403)' 처럼 이유 없이 보이고,
+                                            사이트에 Windows 인증이 켜져 있으면 401 에 Windows 로그인 창까지 뜬다
     그 앱의 IIS 앱 풀: 고급 설정 → 재생 → "겹치는 재생 사용 안 함" = True  (영문 IIS: Recycling → Disable Overlapped Recycle)
       (재시작 순간 프로세스 2개 방지) — 화면에서 못 찾으면 관리자 PowerShell 에서:
         Import-Module WebAdministration

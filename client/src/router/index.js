@@ -80,8 +80,8 @@ router.beforeEach(async (to) => {
   // 관리자 주소로 들어왔으면 관리자 로그인으로, 아니면 사용자 로그인으로
   if (!session.user) return { name: adminArea ? 'admin-login' : 'login', query: back };
   await loadCodes().catch(() => null); // 기준정보(선택 목록) — 실패해도 화면은 열고, 각 화면이 오류를 보여준다
-  // 관리자 계정(서버가 판단한 isAdmin) + 관리자 비밀번호 확인(관리자 세션)이 둘 다 있어야 한다
-  if (adminArea && !(session.user.isAdmin && session.isAdmin)) return { name: 'admin-login', query: back };
+  // 관리자 화면은 관리자 비밀번호 확인(관리자 세션)이 있어야 한다 — 들어갈 수 있는 계정인지는 서버가 판단했다
+  if (adminArea && !session.isAdmin) return { name: 'admin-login', query: back };
   return true;
 });
 

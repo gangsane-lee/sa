@@ -2,8 +2,8 @@
 /**
  * 관리자 로그인 — 사용자 화면과 다른 주소(기본 /changeme/login)로만 들어온다.
  *  1) 사내 계정 확인 — 운영 모드: 사내 인사정보 확인(로그인 화면 없음) · 개발 모드: 테스트 사번 · 가짜 데이터 모드: 테스트 계정 ID
- *  2) 관리자 계정인지 서버가 판단 (운영: server/config/admins.js · test: api/mock/accounts.js)
- *  3) 관리자 비밀번호 확인 → 관리자 화면
+ *  2) 관리자 비밀번호 — 언제나 받는다. 들어갈 수 있는지는 서버가 판단
+ *     (운영: server/config/admins.js — accounts 가 비어 있으면 비밀번호만으로, 있으면 그 사번만 · test: api/mock/accounts.js)
  * 비밀번호 검증·실패 횟수 제한·잠금은 서버가 하고, 이 화면은 결과만 보여준다.
  */
 import { ref, computed, onMounted } from 'vue';
@@ -23,8 +23,8 @@ const adminPassword = ref('');
 const error = ref('');
 const busy = ref(false);
 
-/** account: 사내 계정 확인 전 · admin: 관리자 비밀번호 · denied: 관리자 계정이 아님 */
-const step = computed(() => (!session.user ? 'account' : session.user.isAdmin ? 'admin' : 'denied'));
+/** account: 사내 계정 확인 전 · admin: 관리자 비밀번호 (로그인했으면 언제나 비밀번호를 받는다) */
+const step = computed(() => (!session.user ? 'account' : 'admin'));
 
 function goInside() {
   const r = route.query.redirect;
@@ -33,7 +33,7 @@ function goInside() {
 
 onMounted(async () => {
   await restoreSession(); // 운영에서는 사내 SSO로 자동 확인
-  if (session.user?.isAdmin && session.isAdmin) return goInside();
+  if (session.user && session.isAdmin) return goInside();
   ready.value = true;
 });
 
@@ -70,7 +70,7 @@ const submitAdmin = () =>
 const retrySso = () =>
   run(async () => {
     if (!(await ssoLogin())) throw new Error(session.ssoError?.message ?? '사내 인사정보로 확인되지 않았어요.');
-    if (session.user?.isAdmin && session.isAdmin) goInside();
+    if (session.isAdmin) goInside();
   });
 
 const switchAccount = () =>
@@ -146,17 +146,8 @@ async function fillTest() {
           <button v-if="isTestMode" type="button" class="card__link" :disabled="busy" @click="switchAccount">다른 계정으로 로그인</button>
         </form>
 
-        <!-- 관리자 계정이 아님 -->
-        <div v-else class="card__form">
-          <h1 class="card__title">관리자 계정이 아니에요</h1>
-          <p class="card__sub">
-            <b>{{ session.user.user_name }}</b>님 계정은 관리자로 등록되어 있지 않아요. 관리자 등록은 매칭 담당자에게 문의해 주세요.
-          </p>
-          <DxButton v-if="isTestMode" text="다른 계정으로 로그인" type="default" width="100%" class="card__submit" :disabled="busy" @click="switchAccount" />
-          <RouterLink :to="{ name: 'home' }" class="card__link">사용자 화면으로 가기</RouterLink>
-        </div>
 
-        <button v-if="isMock && step !== 'denied'" type="button" class="card__dev" @click="fillTest">
+        <button v-if="isMock" type="button" class="card__dev" @click="fillTest">
           개발 모드 · {{ step === 'account' ? '관리자 계정 채우기' : '관리자 비밀번호 채우기' }}
         </button>
       </div>

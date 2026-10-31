@@ -4,7 +4,7 @@
 import { config, topology } from './config.js';
 import { openStore } from './store.js';
 import { directory } from './sso.js';
-import { initAdmins, isAdmin, verifyAdminPassword } from './admins.js';
+import { initAdmins, isAdmin, canEnterAdmin, adminPasswordSet, verifyAdminPassword } from './admins.js';
 import { createApp } from './app.js';
 
 if (config.session.secretMissing) {
@@ -32,7 +32,7 @@ const app = await createApp({
   config,
   store,
   directory,
-  admin: { isAdmin, verify: verifyAdminPassword },
+  admin: { isAdmin, canEnter: canEnterAdmin, passwordSet: adminPasswordSet, verify: verifyAdminPassword },
 });
 
 // iisnode 로 돌면 iisnode 가 넘겨 준 파이프(PORT)로, 아니면 포트로 연다

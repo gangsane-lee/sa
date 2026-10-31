@@ -95,12 +95,14 @@ const webConfig = `<?xml version="1.0" encoding="UTF-8"?>
     <rewrite>
       <!-- 보안: 응답의 Server 헤더(IIS 버전)를 비운다 -->
       <outboundRules>
+        <remove name="sasystem-hide-server" />
         <rule name="sasystem-hide-server">
           <match serverVariable="RESPONSE_SERVER" pattern=".+" />
           <action type="Rewrite" value="" />
         </rule>
       </outboundRules>
       <rules>
+        <remove name="sasystem-spa" />
         <!-- 화면 주소(/saju, /messages …)를 새로 고쳐도 index.html 로 -->
         <rule name="sasystem-spa" stopProcessing="true">
           <match url=".*" />
@@ -114,18 +116,27 @@ const webConfig = `<?xml version="1.0" encoding="UTF-8"?>
     </rewrite>
     <security>
       <requestFiltering>
+        <!-- ★ 모든 <add> 앞에 같은 이름의 <remove> — IIS(applicationHost · 사이트)에 이미 있는 항목을 또 add 하면
+             '중복 항목' 설정 오류(500.19)로 모든 요청이 500 이 된다 (예: .config 는 IIS 기본 차단 목록에 있다) -->
         <hiddenSegments>
+          <remove segment="_deploy" />
           <add segment="_deploy" />
         </hiddenSegments>
         <!-- 원본 코드 지도·설정 파일은 내려주지 않는다 -->
         <fileExtensions allowUnlisted="true">
+          <remove fileExtension=".map" />
           <add fileExtension=".map" allowed="false" />
+          <remove fileExtension=".config" />
           <add fileExtension=".config" allowed="false" />
+          <remove fileExtension=".ps1" />
           <add fileExtension=".ps1" allowed="false" />
+          <remove fileExtension=".json" />
           <add fileExtension=".json" allowed="false" />
         </fileExtensions>
         <verbs allowUnlisted="false">
+          <remove verb="GET" />
           <add verb="GET" allowed="true" />
+          <remove verb="HEAD" />
           <add verb="HEAD" allowed="true" />
         </verbs>
       </requestFiltering>
@@ -141,11 +152,17 @@ const webConfig = `<?xml version="1.0" encoding="UTF-8"?>
     <httpProtocol>
       <customHeaders>
         <remove name="X-Powered-By" />
+        <remove name="X-Content-Type-Options" />
         <add name="X-Content-Type-Options" value="nosniff" />
+        <remove name="X-Frame-Options" />
         <add name="X-Frame-Options" value="DENY" />
+        <remove name="Referrer-Policy" />
         <add name="Referrer-Policy" value="no-referrer" />
+        <remove name="Permissions-Policy" />
         <add name="Permissions-Policy" value="camera=(), microphone=(), geolocation=(), payment=(), usb=()" />
+        <remove name="Cross-Origin-Opener-Policy" />
         <add name="Cross-Origin-Opener-Policy" value="same-origin" />
+        <remove name="Content-Security-Policy" />
         <add name="Content-Security-Policy" value="${xmlAttr(csp)}" />
       </customHeaders>
     </httpProtocol>

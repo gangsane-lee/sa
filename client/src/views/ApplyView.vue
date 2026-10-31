@@ -12,7 +12,7 @@ import { DxButton } from 'devextreme-vue/button';
 import { DxLoadPanel } from 'devextreme-vue/load-panel';
 import { DxPopup } from 'devextreme-vue/popup';
 import notify from 'devextreme/ui/notify';
-import { confirm } from 'devextreme/ui/dialog';
+import { confirm, custom } from 'devextreme/ui/dialog';
 import { api } from '@/api';
 import { session, flash, refreshUser } from '@/stores/session';
 import {
@@ -34,7 +34,7 @@ function takeSaju() {
     return null;
   }
 }
-/** { to: 하트 받을 사람 닉네임, birthYear } — 사주 화면이 넘겨준 값 */
+/** { to: 하트 받을 사람 닉네임, birthYear, gender } — 사주 화면이 넘겨준 값 */
 const saju = ref(null);
 
 const formComp = ref();
@@ -79,6 +79,7 @@ onMounted(async () => {
     saju.value = !mine && fromSaju ? takeSaju() : null;
     // 사주에서 입력한 생년월일의 연도만 미리 채운다 (월·일은 저장하지 않는다)
     if (saju.value?.birthYear) base.birthYear = saju.value.birthYear;
+    if (saju.value?.gender) base.gender = saju.value.gender; // 사주 화면에서 직접 고른 성별
     form.value = reactive(mine ? toFormModel(mine) : base);
     originalGender = mine?.gender ?? null;
     nudged = new Set(matchReadiness(form.value).filledKeys); // 이미 채운 항목은 다시 칭찬하지 않는다
@@ -132,12 +133,33 @@ async function toTop() {
   window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
 }
 
+/**
+ * 기본 정보(첫 페이지)를 채우고 처음 넘어갈 때 한 번 — 사실과 다른 정보에 대한 안내.
+ * '다시 확인할게요'면 그 페이지에 머문다
+ */
+let truthNoticed = false;
+async function confirmTruth() {
+  if (truthNoticed) return true;
+  const ok = await custom({
+    title: '정보 확인',
+    messageHtml:
+      '입력한 기본 정보(성별 · 출생연도 · 사업부 · 팀 등)가 사실과 다르면<br><b>사緣 이용이 제한될 수 있어요.</b><br><br>입력한 내용이 맞는지 한 번 더 확인해 주세요.',
+    buttons: [
+      { text: '다시 확인할게요', stylingMode: 'outlined', onClick: () => false },
+      { text: '맞아요, 다음으로', type: 'default', onClick: () => true },
+    ],
+  }).show();
+  if (ok) truthNoticed = true;
+  return ok;
+}
+
 /** 다른 페이지로 — 앞으로 갈 때는 지금 페이지를 먼저 검사한다 (뒤로는 그냥) */
-function goPage(i) {
+async function goPage(i) {
   if (i === page.value || i < 0 || i > lastPage) return;
   if (i > page.value) {
     if (i > reached.value + 1 && i > page.value + 1) return; // 아직 안 가 본 페이지를 건너뛰지 않는다
     if (!checkPage()) return;
+    if (page.value === 0 && !(await confirmTruth())) return;
   }
   page.value = i;
   reached.value = Math.max(reached.value, i);

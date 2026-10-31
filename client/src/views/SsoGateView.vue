@@ -58,6 +58,23 @@ const STATES = {
 };
 STATES.SSO_DISABLED = STATES.SSO_NOT_CONFIGURED;
 
+/**
+ * 점검용 한 줄 — 사緣 API 호출이 실패했을 때 (운영 화면은 개발자 도구를 막아 두므로)
+ *  응답 없음: DNS · 방화벽 · 인증서 · CORS(화면 주소 허용) · CSP / 404: API 경로(basePath)·끼워 넣기 / 503: API 시작 실패(DB 등)
+ */
+const HINT = {
+  0: '응답 없음 — DNS · 방화벽 · 인증서 · CORS(화면 주소 허용) 확인',
+  403: '거절 — https 로 접속했는지 · 화면 주소 허용(CORS) 확인',
+  404: 'API 경로 없음 — API 서버의 사緣 끼워 넣기(app.use 경로) 확인',
+  503: 'API 시작 실패 — API 서버 iisnode 로그의 [sasystem] 줄 확인',
+};
+const diag = computed(() => {
+  const e = session.ssoError;
+  if (!e?.api) return '';
+  const hint = HINT[e.status] ?? (e.status >= 500 ? 'API 서버 오류 — iisnode 로그 확인' : '');
+  return `점검: ${e.code} · 응답 ${e.status || '없음'} · ${e.api}${hint ? `\n${hint}` : ''}`;
+});
+
 const state = computed(() => {
   const code = session.ssoError?.code;
   if (code === 'NETWORK') return { ...STATES.SSO_UNAVAILABLE, title: '사緣 서버에 연결하지 못했어요' };
@@ -114,6 +131,7 @@ onMounted(() => {
             <li v-for="t in state.tips" :key="t">{{ t }}</li>
           </ul>
           <p v-if="state.note" class="card__note mono">{{ state.note }}</p>
+          <p v-if="diag" class="card__note mono card__diag">{{ diag }}</p>
 
           <DxButton class="card__submit" :text="busy ? '확인하는 중…' : state.retry" type="default" width="100%" :disabled="busy" @click="retry" />
           <a v-if="ssoLoginHref" class="card__sso" :href="ssoLoginHref">사내 SSO 로그인하러 가기</a>
@@ -214,6 +232,10 @@ onMounted(() => {
   background: var(--c-surface);
   color: var(--c-mute);
   font-size: 12px;
+}
+.card__diag {
+  white-space: pre-line;
+  word-break: break-all;
 }
 .card__submit {
   margin-top: 22px;

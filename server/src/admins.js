@@ -56,6 +56,18 @@ export function isAdmin(emp) {
   );
 }
 
+/**
+ * 관리자 모드에 들어가 볼 수 있는 계정인가 — 관리자 화면은 언제나 관리자 비밀번호를 받는다
+ *  accounts 가 비어 있으면: 로그인한 누구나 비밀번호를 넣어 볼 수 있다 (비밀번호만으로 관리자)
+ *  accounts 가 있으면: 그 사번 · 사내 계정 ID 만
+ */
+export function canEnterAdmin(emp) {
+  return Boolean(emp) && (!current.accounts.length || isAdmin(emp));
+}
+
+/** 관리자 비밀번호가 정해져 있는가 (config/admins.js 의 password · passwordHash) */
+export const adminPasswordSet = () => Boolean(current.password || current.passwordHash);
+
 /** 관리자 비밀번호 확인 */
 export async function verifyAdminPassword(password) {
   if (current.passwordHash) return bcrypt.compare(password, current.passwordHash);

@@ -19,7 +19,7 @@ import {
   APPLY_STATUS, APPLY_STATUS_MAP, MANUAL_APPLY_STATUS, MATCH_STATUS, ACTIVE_MATCH_STATUS, BUSY_MATCH_STATUS, PENDING_MATCH_STATUS, CODE_GROUP_MAP, PREF_ITEMS, RECOMMENDABLE_STATUS,
   DAILY_CARD_LIMIT, DAILY_HEART_LIMIT, RESHOW_AFTER_DAYS, textOf,
   DEFAULT_SETTINGS, REVIEW_OUTCOMES, REVIEW_RATINGS, REVIEWABLE_MATCH_STATUS, REVIEW_WINDOW_DAYS,
-  VOC_CATEGORIES, VOC_STATUS, SETTING_ITEMS, REFERENCE_KIND, toBool,
+  VOC_CATEGORIES, VOC_STATUS, SETTING_ITEMS, REFERENCE_KIND, toBool, GENDERS,
 } from '../../constants/codes.js';
 import { ADMIN_IDLE_MS, ADMIN_LOCK_MS, ADMIN_MAX_FAILS, ADMIN_LOCK_MINUTES } from '../../constants/policy.js';
 import { TABLES, TABLE_BY_COLL, rowsOf, cellOf, keyColsOf } from '../../db/tables.js';
@@ -121,6 +121,8 @@ const setSession = (s) => A.session.set(s);
 /** 블랙리스트 — 담당자가 등록한 사번은 신청·사주 하트를 할 수 없고, 이미 낸 신청서도 매칭에서 빠진다 */
 const isBlacklisted = (empNo) => db.blacklist.some((b) => b.empNo === empNo);
 const isAdminAccount = (e) => Boolean(e && A.admin.isAdmin(e, db));
+/** 관리자 비밀번호를 넣어 볼 수 있는 계정 — 등록된 관리자가 없으면 누구나 (비밀번호만으로 관리자) */
+const canEnterAdmin = (e) => Boolean(e && (A.admin.canEnter ?? A.admin.isAdmin)(e, db));
 
 /**
  * 로그인 사용자 정보 — 화면은 이 값으로 관리자·신청자·미신청자를 나눈다
@@ -175,7 +177,7 @@ function requireUser() {
 function requireAdmin() {
   const user = requireUser();
   const s = getSession();
-  if (!(s.adminExpiresAt > Date.now()) || !isAdminAccount(user)) {
+  if (!(s.adminExpiresAt > Date.now()) || !canEnterAdmin(user)) {
     throw new ApiError(403, '관리자 모드가 종료됐어요. 다시 인증해 주세요.', 'ADMIN_REQUIRED');
   }
   setSession({ ...s, adminExpiresAt: Date.now() + ADMIN_IDLE_MS }); // 활동할 때마다 연장
@@ -831,7 +833,7 @@ export const api = {
       await wait();
       const user = requireUser();
       const s = getSession();
-      return { user: publicUser(user), adminExpiresAt: s.adminExpiresAt > Date.now() && isAdminAccount(user) ? s.adminExpiresAt : 0 };
+      return { user: publicUser(user), adminExpiresAt: s.adminExpiresAt > Date.now() && canEnterAdmin(user) ? s.adminExpiresAt : 0 };
     },
 
     async logout() {
@@ -853,7 +855,11 @@ export const api = {
       await wait();
       const user = requireUser();
       const s = getSession();
-      if (!isAdminAccount(user)) {
+      // 비밀번호가 아직 없으면 '틀렸다'로 잠그지 않고 설정이 필요하다고 알린다
+      if (A.admin.passwordSet && !A.admin.passwordSet()) {
+        throw new ApiError(503, '관리자 비밀번호가 아직 설정되지 않았어요. API 서버의 config/admins.js 를 확인해 주세요.', 'ADMIN_NOT_CONFIGURED');
+      }
+      if (!canEnterAdmin(user)) {
         audit(user, 'ADMIN_ENTER_FAIL', '', '관리자 계정 아님');
         commit();
         throw new ApiError(403, '관리자로 등록된 계정이 아니에요. 매칭 담당자에게 문의해 주세요.', 'NOT_ADMIN');
@@ -1260,7 +1266,7 @@ export const api = {
    *  - 신청 후: 바로 하트(heart) — 오늘의 하트 1개를 쓰고, 답이 올 때까지 신청서 수정·새 후보가 잠긴다
    */
   saju: {
-    async pick({ birthDate, birthTime = null }) {
+    async pick({ birthDate, birthTime = null, gender: picked = null }) {
       await wait();
       const user = requireUser();
       if (isBlacklisted(user.empNo)) return { blocked: true, card: null };
@@ -1275,8 +1281,9 @@ export const api = {
         if (heartsSentToday(mine) >= DAILY_HEART_LIMIT) return { applied: true, state: 'HEART_LIMIT', card: null };
       }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate ?? '')) throw new ApiError(400, '생년월일을 확인해 주세요.', 'VALIDATION');
-      const gender = mine?.gender ?? user.gender;
-      // 성별을 모르면 같은 성별을 추천할 수 있으므로 찾지 않는다 (인사정보에 성별이 없는 경우)
+      // 신청서의 성별 → (신청 전) 사주 화면에서 고른 성별 → 인사정보 성별
+      const gender = mine?.gender ?? (GENDERS.some((g) => g.value === picked) ? picked : null) ?? user.gender;
+      // 성별을 모르면 같은 성별을 추천할 수 있으므로 찾지 않는다
       if (!gender) return { applied: Boolean(mine), state: 'NEED_GENDER', card: null };
       const me = { birthDate, birthTime, hobbies: [], gender, division: user.division, team: user.team };
       const busy = busyIds(db.matches);

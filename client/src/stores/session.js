@@ -5,7 +5,7 @@
 import { reactive } from 'vue';
 import { api } from '@/api';
 import { ADMIN_IDLE_MS } from '@shared/constants/policy';
-import { isTestMode, isDevApi } from '@/config';
+import { isTestMode, isDevApi, API_BASE } from '@/config';
 import { fetchEmployee, clearEmployee, trace } from '@/auth/employee';
 import { employee, setEmployee, mergeEmployee, clearEmployeeInfo, withEmployee } from '@/stores/employee';
 
@@ -75,7 +75,8 @@ export async function employeeLogin({ reuse = false } = {}) {
     trace(`3단계 사緣 API /auth/sso ✖ ${e.status} ${e.code ?? ''}`, e.message, 'API 서버 iisnode 로그의 [sso] 줄도 확인하세요');
     // 코드 없는 404·5xx 는 API 서버가 꺼졌거나 Web 서버가 /api 를 넘기지 못한 것 — '임직원 아님'과 구분한다
     const down = e.status === 0 || e.status === 404 || e.status >= 500;
-    session.ssoError = { code: e.code ?? (down ? 'NETWORK' : 'SSO_FAILED'), message: e.message };
+    // status · api: 안내 화면의 점검용 한 줄 (개발자 도구 없이 어디서 막혔는지 보게)
+    session.ssoError = { code: e.code ?? (down ? 'NETWORK' : 'SSO_FAILED'), message: e.message, status: e.status, api: API_BASE };
     return false;
   }
 }

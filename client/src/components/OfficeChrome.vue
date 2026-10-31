@@ -5,7 +5,6 @@
  */
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { setOffice } from '@/stores/office';
 import { session, unread } from '@/stores/session';
 
 const route = useRoute();
@@ -91,7 +90,6 @@ const formula = computed(() => (isAdmin.value ? '=COUNTIFS(명단!F:F,"검토",�
       <div class="oc__status">
         <span>준비</span>
         <span class="oc__sum">평균: 0 &nbsp; 개수: 3 &nbsp; 합계: 0</span>
-        <button type="button" class="oc__exit" title="보통 화면 (Ctrl+Shift+E)" @click="setOffice(false)">▦ 기본 보기</button>
         <span>100%</span>
       </div>
     </footer>
@@ -115,7 +113,7 @@ const formula = computed(() => (isAdmin.value ? '=COUNTIFS(명단!F:F,"검토",�
   align-items: center;
   justify-content: space-between;
   height: 30px;
-  padding: 0 10px;
+  padding: 0 120px 0 10px; /* 오른쪽 끝은 '기본 보기' 버튼 자리 (App.vue) */
   background: #217346;
   color: #fff;
 }
@@ -305,18 +303,6 @@ const formula = computed(() => (isAdmin.value ? '=COUNTIFS(명단!F:F,"검토",�
 }
 .oc__sum {
   margin-left: auto;
-}
-.oc__exit {
-  border: 0;
-  background: transparent;
-  color: #fff;
-  font: inherit;
-  cursor: pointer;
-  opacity: 0.85;
-}
-.oc__exit:hover {
-  opacity: 1;
-  text-decoration: underline;
 }
 @media (max-width: 700px) {
   .oc__hide-sm {

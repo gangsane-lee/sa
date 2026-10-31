@@ -13,18 +13,21 @@ import { DxDateBox } from 'devextreme-vue/date-box';
 import { DxTextBox } from 'devextreme-vue/text-box';
 import { DxCheckBox } from 'devextreme-vue/check-box';
 import { DxButton } from 'devextreme-vue/button';
+import { DxRadioGroup } from 'devextreme-vue/radio-group';
 import notify from 'devextreme/ui/notify';
 import { confirm } from 'devextreme/ui/dialog';
 import { session, refreshUser } from '@/stores/session';
 import { api } from '@/api';
 import { ELEMENTS, readSaju } from '@shared/utils/saju';
+import { GENDERS } from '@shared/constants/codes';
 import { DxPopup } from 'devextreme-vue/popup';
 import ProfileCard from '@/components/ProfileCard.vue';
 import GunghapPanel from '@/components/GunghapPanel.vue';
 import SaLogo from '@/components/SaLogo.vue';
 
 const router = useRouter();
-const input = reactive({ birthDate: null, birthTime: '', unknown: true });
+// gender: 신청 전에는 직접 고른다 (필수 — 다른 성별의 인연을 찾는다). 신청 후에는 신청서의 성별을 쓴다
+const input = reactive({ birthDate: null, birthTime: '', unknown: true, gender: null });
 const result = ref(null);
 const applied = ref(null);
 const resultEl = ref();
@@ -36,14 +39,21 @@ const sending = ref(false);
 const sentPopup = ref(false);
 const sentInfo = ref({ nickname: '', to: '', matched: false, created: false });
 
-const birthInput = () => ({ birthDate: input.birthDate, birthTime: input.unknown ? null : input.birthTime });
+const birthInput = () => ({ birthDate: input.birthDate, birthTime: input.unknown ? null : input.birthTime, ...(!applied.value && { gender: input.gender }) });
+/** 신청 전이면 성별을 직접 골라야 한다 */
+const needGender = computed(() => applied.value === false);
+function checkGender() {
+  if (!needGender.value || input.gender) return true;
+  notify({ message: '성별을 골라 주세요.', type: 'warning', displayTime: 2000 });
+  return false;
+}
 
 const PICK_STATE = {
   MATCHING: '지금은 매칭이 진행 중이라 새 인연을 찾지 않아요. 지금의 인연에 집중해 주세요.',
   COUPLED: '커플 완료 상태예요. 두 분의 인연을 응원할게요.',
   HEART_PENDING: '보낸 하트에 답을 기다리는 중이에요. 답이 오거나 72시간이 지나면 다시 찾을 수 있어요.',
   HEART_LIMIT: '오늘의 하트를 이미 썼어요. 내일 다시 사주 인연을 찾아보세요.',
-  NEED_GENDER: '인사정보에 성별이 없어 사주 인연을 찾을 수 없어요. 신청서에서 성별을 알려주시면 찾아드릴게요.',
+  NEED_GENDER: '성별을 알 수 없어 사주 인연을 찾을 수 없어요. 위에서 성별을 골라 주세요.',
   GATHERING: '오픈 준비 중이라 사주 인연 찾기는 잠시 쉬어요. 매칭이 시작되면 가장 먼저 알려드릴게요. 내 사주 풀이는 지금도 볼 수 있어요.',
   PAUSED: '지금은 새 인연을 준비 중이에요. 조금만 기다려 주세요.',
 };
@@ -54,6 +64,7 @@ async function findPick() {
     notify({ message: '생년월일을 먼저 입력해 주세요.', type: 'warning', displayTime: 2000 });
     return;
   }
+  if (!checkGender()) return;
   picking.value = true;
   pickNote.value = '';
   try {
@@ -89,7 +100,7 @@ const SAJU_KEY = 'sasystem.sajuApply';
 async function heart() {
   if (!applied.value) {
     try {
-      sessionStorage.setItem(SAJU_KEY, JSON.stringify({ to: pick.value.card.nickname, birthYear: Number(String(input.birthDate).slice(0, 4)) || null }));
+      sessionStorage.setItem(SAJU_KEY, JSON.stringify({ to: pick.value.card.nickname, birthYear: Number(String(input.birthDate).slice(0, 4)) || null, gender: input.gender }));
     } catch {
       /* 저장소를 못 쓰면 빈 신청서로 시작 */
     }
@@ -129,6 +140,7 @@ async function read() {
     notify({ message: '생년월일을 입력해 주세요.', type: 'warning', displayTime: 2000 });
     return;
   }
+  if (!checkGender()) return;
   if (!timeOk.value) {
     notify({ message: "태어난 시간을 00:00 형식으로 적거나 '몰라요'를 체크해 주세요.", type: 'warning', displayTime: 2500 });
     return;
@@ -189,6 +201,12 @@ const elName = (el) => `${ELEMENTS[el].name}(${ELEMENTS[el].hanja})`;
               />
             </label>
             <DxCheckBox v-model:value="input.unknown" text="시간 몰라요" class="form__unknown" />
+          </div>
+          <div v-if="needGender" class="form__row">
+            <div class="form__field form__field--gender">
+              <span>성별 <b class="form__req">필수</b></span>
+              <DxRadioGroup v-model:value="input.gender" :items="GENDERS" value-expr="value" display-expr="text" layout="horizontal" :input-attr="{ 'aria-label': '성별' }" />
+            </div>
           </div>
           <p class="form__hint">🔒 입력한 생년월일·시간은 저장하지 않고 이 화면 안에서만 계산해요. 사주 인연으로 신청해도 <b>출생연도만 저장</b>되고 <b>월·일 정보는 저장되지 않아요.</b></p>
           <DxButton text="내 인연 사주 보기" type="default" :use-submit-behavior="true" class="form__go" />
@@ -404,6 +422,15 @@ const elName = (el) => `${ELEMENTS[el].name}(${ELEMENTS[el].hanja})`;
 }
 .form__unknown {
   padding-bottom: 10px;
+}
+.form__field--gender {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+}
+.form__req {
+  margin-left: 4px;
+  color: var(--c-crimson-deep);
+  font-size: 11px;
 }
 .form__hint {
   margin-top: 10px;

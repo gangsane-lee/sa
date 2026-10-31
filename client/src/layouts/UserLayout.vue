@@ -1,28 +1,21 @@
 <script setup>
 import { computed } from 'vue';
-import { useRouter } from 'vue-router';
 import { DxButton } from 'devextreme-vue/button';
 import { watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { session, logout, unread, refreshUnread } from '@/stores/session';
+import { session, unread, refreshUnread } from '@/stores/session';
 import GatheringPopup from '@/components/GatheringPopup.vue';
 import { setOffice } from '@/stores/office';
 import { ct } from '@/stores/codes';
 import { USER_STATUS_MAP } from '@shared/constants/codes';
 import SaLogo from '@/components/SaLogo.vue';
 
-const router = useRouter();
 const route = useRoute();
 // 화면을 옮길 때마다 안 읽은 쪽지 수를 다시 센다
 watch(() => route.fullPath, refreshUnread, { immediate: true });
 const user = computed(() => session.user);
 const statusKey = computed(() => user.value?.applicant?.userStatus ?? 'GUEST');
 const statusText = computed(() => (statusKey.value === 'GUEST' ? '신청 전' : USER_STATUS_MAP[statusKey.value]?.text ?? ''));
-
-async function doLogout() {
-  await logout();
-  router.replace({ name: 'login' });
-}
 </script>
 
 <template>
@@ -58,7 +51,6 @@ async function doLogout() {
             hint="스프레드시트처럼 보이는 화면으로 바꿔요 (Ctrl+Shift+E)"
             @click="setOffice(true)"
           />
-          <DxButton class="top__btn" styling-mode="text" text="로그아웃" @click="doLogout" />
         </div>
       </div>
     </header>

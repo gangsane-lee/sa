@@ -42,7 +42,7 @@ export async function createApp({ config, store, directory, admin }) {
     },
     clientIp: () => currentReq()?.clientIp ?? '-',
     directory,
-    admin: { isAdmin: (emp) => admin.isAdmin(emp), verify: (password) => admin.verify(password) },
+    admin: { isAdmin: (emp) => admin.isAdmin(emp), canEnter: (emp) => (admin.canEnter ?? admin.isAdmin)(emp), passwordSet: () => admin.passwordSet?.() ?? true, verify: (password) => admin.verify(password) },
     allowDev: false,
     // 개발 화면 테스트 사번 — 개발 PC · 개발 키 확인은 routes/auth.js 가 먼저 한다
     devAccounts: () => config.devLogin.accounts,

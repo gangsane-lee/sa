@@ -13,7 +13,7 @@
 import { config, topology } from './config.js';
 import { openStore } from './store.js';
 import { directory } from './sso.js';
-import { initAdmins, isAdmin, verifyAdminPassword } from './admins.js';
+import { initAdmins, isAdmin, canEnterAdmin, adminPasswordSet, verifyAdminPassword } from './admins.js';
 import { createApp } from './app.js';
 
 const RETRY_MS = 30_000;
@@ -57,7 +57,7 @@ async function start() {
   applyHostDb(hostOptions);
   const store = await openStore(config);
   await initAdmins();
-  const app = await createApp({ config, store, directory, admin: { isAdmin, verify: verifyAdminPassword } });
+  const app = await createApp({ config, store, directory, admin: { isAdmin, canEnter: canEnterAdmin, passwordSet: adminPasswordSet, verify: verifyAdminPassword } });
   log(`시작 · 경로 ${topology.api.basePath || '/'} · 저장소 ${store.kind}${store.kind === 'mssql' ? ` (${config.db.server}/${config.db.database}${hostOptions.db ? ' · 그 앱 DB 계정' : ''})` : ''} · 사용자 접속 주소 ${config.publicUrl}`);
   return app;
 }
